@@ -91,6 +91,20 @@ const config: Config = {
           label: 'GitHub',
           position: 'right',
         },
+        {
+            type: 'dropdown',
+            label: 'ASF',
+            position: 'right',
+            items: [
+              {label: 'Foundation', to: 'https://www.apache.org/'},
+              {label: 'License', to: 'https://www.apache.org/licenses/'},
+              {label: 'Events', to: 'https://www.apache.org/events/current-event.html'},
+              {label: 'Security', to: 'https://www.apache.org/security/'},
+              {label: 'Sponsorship', to: 'https://www.apache.org/foundation/sponsorship.html'},
+              {label: 'Privacy', to: 'https://privacy.apache.org/policies/privacy-policy-public.html'},
+              {label: 'Thanks', to: 'https://www.apache.org/foundation/thanks.html'}
+            ],
+        },
       ],
     },
     footer: {
