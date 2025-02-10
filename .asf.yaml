@@ -16,6 +16,6 @@ publish:
 
 notifications:
   commits: commits@iggy.apache.org
-  issues: dev@iggy.apache.org
-  pullrequests: dev@iggy.apache.org
+  issues: commits@iggy.apache.org
+  pullrequests: commits@iggy.apache.org
   discussions: dev@iggy.apache.org
