@@ -4,56 +4,65 @@
         <title>Hyper-Efficient Message Streaming at Laser Speed. Blog</title>
         <link>https://iggy.apache.org/blogs</link>
         <description>Hyper-Efficient Message Streaming at Laser Speed. Blog</description>
-        <lastBuildDate>Wed, 12 Feb 2025 00:00:00 GMT</lastBuildDate>
+        <lastBuildDate>Mon, 10 Feb 2025 00:00:00 GMT</lastBuildDate>
         <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
         <generator>https://github.com/jpmonette/feed</generator>
         <language>en</language>
-        <item>
-            <title><![CDATA[Iggy and the Transparent Benchmarks]]></title>
-            <link>https://iggy.apache.org/blogs/2025/02/12/transparent-benchmarks</link>
-            <guid>https://iggy.apache.org/blogs/2025/02/12/transparent-benchmarks</guid>
-            <pubDate>Wed, 12 Feb 2025 00:00:00 GMT</pubDate>
-            <description><![CDATA[Benchmarks should be the first-class citizen]]></description>
-            <content:encoded><![CDATA[<h2 class="anchor anchorWithStickyNavbar_LWe7" id="benchmarks-should-be-the-first-class-citizen">Benchmarks should be the first-class citizen<a href="https://iggy.apache.org/blogs/2025/02/12/transparent-benchmarks#benchmarks-should-be-the-first-class-citizen" class="hash-link" aria-label="Direct link to Benchmarks should be the first-class citizen" title="Direct link to Benchmarks should be the first-class citizen">​</a></h2>
-<p>In the world of software development, <strong>benchmarks are often treated as a second-class citizen</strong>. They're more of an addition to the codebase, rather than a crucial part of it, which should be the other way around, especially when it comes to the performance-critical systems or infrastructure tools.</p>
-<p>Sometimes, the benchmarking results are nothing more than just a <strong>cherry-picking of the best-case scenarios</strong>, which are not representative of real-world usage. In such a case, they simply serve a sole purpose of either making the project look better than it is or how well it does outperform the competition, under the extremely optimized conditions when comparing with its counterparts.</p>
-<p><strong>Trying to reproduce the benchmarks is often a nightmare</strong>, as the environment setup is not documented, the code is unavailable, or the instructions are not clear enough. This makes it close to impossible to verify the results, which are then taken for granted.</p>
-<p>Or even worse, the <strong>benchmarking tool might be so complex, that it's hard to understand how it works</strong>, and what are the assumptions behind it. ALl of these, does result in hard to extend or modify the existing benchmarks, which are not covering the particular use case you're interested in. It's just here to tell everyone that we do have benchmarks, but how we do it, and what they measure, is a mystery.</p>
-<p><strong>Which is why at <a href="https://github.com/iggy-rs/iggy/" target="_blank" rel="noopener noreferrer">Iggy</a>, we've decided to make the benchmarks a first-class citizen</strong>.</p>
-<p>Our <code>iggy-bench</code> tool, which is used to run the benchmarks and is part of the core open source repository (can be found under the <code>bench</code> directory), has come a long way and has been serving us well.</p>
-<p><img decoding="async" loading="lazy" alt="image" src="https://iggy.apache.org/assets/images/iggy_bench_cli-32946d97899e6925f99469dad967ca7e.png" width="2742" height="1930" class="img_ev3q"></p>
-<p>We use it to do quick performance checks, regression testing, and to see how the changes we introduce affect the performance. <strong>We run it on our localhost, as well as on the Virtual Machines in the cloud, to see how it behaves under a variety of environments.</strong></p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="iggy-benchmarking-dashboard">Iggy benchmarking dashboard<a href="https://iggy.apache.org/blogs/2025/02/12/transparent-benchmarks#iggy-benchmarking-dashboard" class="hash-link" aria-label="Direct link to Iggy benchmarking dashboard" title="Direct link to Iggy benchmarking dashboard">​</a></h2>
-<p><strong>And today, we're proud to present <a href="https://benchmarks.iggy.rs/" target="_blank" rel="noopener noreferrer">benchmarks.iggy.rs</a></strong> - a benchmarking dashboard, which is available to everyone. It's a website where you can see how Iggy performs under the different conditions, and how it scales with the number of clients, messages, and topics.</p>
-<p>This is our community-driven effort, where everyone can contribute, and add their own benchmarks. Simply run the <code>iggy-bench</code> tool, and submit the results to our <a href="https://github.com/iggy-rs/iggy-bench-dashboard/" target="_blank" rel="noopener noreferrer">iggy-bench-dashboard</a>, which is of course, an open-source project as well.
-Please check the current readme for the instructions on how to submit the results.</p>
-<p><img decoding="async" loading="lazy" alt="image" src="https://iggy.apache.org/assets/images/iggy_bench_dashboard-3f67adf8dfda89c5280aa2e90842b5ff.png" width="4090" height="2354" class="img_ev3q"></p>
-<p><strong>And this is just the beginning</strong>, as we plan to extend the dashboard, and add more benchmarks, which are covering the different use cases.</p>
-<p>Our main goal is to make the benchmarking process (and its results) <strong>transparent, reproducible, and easy to understand</strong>. We want to make them a first-class citizen, and a crucial part of the Iggy project. We want to make them a tool, which will help us to improve the performance, and to make Iggy the best streaming server out there. We're looking forward to your feedback, and we hope you'll enjoy the benchmarks.</p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="towards-the-microsecond-latency">Towards the microsecond latency<a href="https://iggy.apache.org/blogs/2025/02/12/transparent-benchmarks#towards-the-microsecond-latency" class="hash-link" aria-label="Direct link to Towards the microsecond latency" title="Direct link to Towards the microsecond latency">​</a></h2>
-<p><strong>And as a cherry on top, we've recently managed to achieve the sub-millisecond write latency</strong>. This is a huge milestone for us, as it's a proof that Iggy can be used in low-latency applications, where speed is crucial. Lately, we've been experimenting a lot with <a href="https://github.com/rkyv/rkyv" target="_blank" rel="noopener noreferrer">rkyv</a> - zero-copy deserialization framework, which has yielded some great results. Keep in mind that streaming the data within the range of microseconds latency depends on the several factors, such as message size, network conditions, or the hardware you're running on.</p>
-<p>And the best part is that we're just getting started. We're looking forward to pushing the limits even further, and to see how far we can go. There's still tons of optimizations coming, including switching the runtime to the <a href="https://github.com/bytedance/monoio" target="_blank" rel="noopener noreferrer">monoio</a> which does support <strong>io_uring</strong>, and we've experienced superb results with this one on our experimental branch. Then, there's the whole concept of shared-nothing &amp; thread-per-core design, and many more. Stay tuned!</p>]]></content:encoded>
-        </item>
         <item>
             <title><![CDATA[Iggy joins the Apache Incubator]]></title>
             <link>https://iggy.apache.org/blogs/2025/02/10/apache-incubator</link>
             <guid>https://iggy.apache.org/blogs/2025/02/10/apache-incubator</guid>
             <pubDate>Mon, 10 Feb 2025 00:00:00 GMT</pubDate>
-            <description><![CDATA[Apache Incubation]]></description>
-            <content:encoded><![CDATA[<h2 class="anchor anchorWithStickyNavbar_LWe7" id="apache-incubation">Apache Incubation<a href="https://iggy.apache.org/blogs/2025/02/10/apache-incubator#apache-incubation" class="hash-link" aria-label="Direct link to Apache Incubation" title="Direct link to Apache Incubation">​</a></h2>
-<p>We're extremely excited to announce that Iggy has been accepted into the <a href="https://incubator.apache.org/" target="_blank" rel="noopener noreferrer">Apache Incubator</a> program! Since the very first day, <strong>Iggy was always meant to be a truly FOSS project</strong>, and we're thrilled to see it being recognized by the Apache Software Foundation (ASF). This is a huge milestone for us, and we're looking forward to the journey ahead.</p>
-<p>Here you can find the <a href="https://cwiki.apache.org/confluence/display/INCUBATOR/Iggy+Proposal" target="_blank" rel="noopener noreferrer">official proposal</a>, along with the <a href="https://lists.apache.org/thread/q9whr3q9qd6wqm89f0vc1f6vkkvzc8xf" target="_blank" rel="noopener noreferrer">discussion</a> and the <a href="https://lists.apache.org/thread/6zfgdjwrzs92h4z4x6b25v1r23g3f5yg" target="_blank" rel="noopener noreferrer">voting results</a>.</p>
-<p>It's been almost 2 years now since the very first line of code was written, and we've come a long way since the initial release. We've managed to build an amazing community around Iggy, and we're grateful for all the contributions and feedback we've received. We're confident that this move will help us grow even further and make Iggy even better.</p>
-<p>What's also worth mentioning is that it's not just about the core Iggy repository anymore, but also about the <a href="https://github.com/iggy-rs/" target="_blank" rel="noopener noreferrer">ecosystem</a> around it such as SDKs, CLIs, Web UIs, and more - we're already close to 20 repositories in total, and we want to ensure that all of them are following the ASF guidelines.</p>
-<p>We'll do our best to make Iggy the TLP (Top-Level Project) in the future, as we already have a lot of ideas on how to improve the project and the community around it.</p>
-<p><strong>The future of message streaming is with Iggy, and we want to make sure that everyone can benefit from it as Free and Open Source Software, that will stay this way forever.</strong></p>
-<h2 class="anchor anchorWithStickyNavbar_LWe7" id="codebase-transition">Codebase transition<a href="https://iggy.apache.org/blogs/2025/02/10/apache-incubator#codebase-transition" class="hash-link" aria-label="Direct link to Codebase transition" title="Direct link to Codebase transition">​</a></h2>
+            <description><![CDATA[+++]]></description>
+            <content:encoded><![CDATA[<p>+++
+title = "Iggy joins the Apache Incubator"
+date = "2025-02-10"
+author = "Piotr Gankiewicz"
++++</p>
+<p>We are thrilled to announce that <strong>Iggy</strong> has officially joined the <strong><a href="https://incubator.apache.org/" target="_blank" rel="noopener noreferrer">Apache Incubator</a></strong>! This marks a major milestone in our journey to redefine message streaming — one that is <strong>blazingly fast, hyper-efficient, and built for the future</strong>. Since the very first day, <strong>Iggy was always meant to be a truly FOSS project</strong> — not just open-source in name, but deeply rooted in the values of transparency, collaboration, and community-driven innovation.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="-a-journey-two-years-in-the-making">🚀 A Journey Two Years in the Making<a href="https://iggy.apache.org/blogs/2025/02/10/apache-incubator#-a-journey-two-years-in-the-making" class="hash-link" aria-label="Direct link to 🚀 A Journey Two Years in the Making" title="Direct link to 🚀 A Journey Two Years in the Making">​</a></h2>
+<p>It’s been almost two years since the very first line of code was written, and we’ve come a long way since the initial release. What started as a bold idea has grown into a high-performance, cost-efficient message streaming solution with a thriving community of contributors, users, and advocates. We’ve received invaluable feedback, contributions, and support, and we’re more excited than ever to take Iggy to the next level.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="-beyond-just-iggy--a-growing-ecosystem">🔥 Beyond Just Iggy – A Growing Ecosystem<a href="https://iggy.apache.org/blogs/2025/02/10/apache-incubator#-beyond-just-iggy--a-growing-ecosystem" class="hash-link" aria-label="Direct link to 🔥 Beyond Just Iggy – A Growing Ecosystem" title="Direct link to 🔥 Beyond Just Iggy – A Growing Ecosystem">​</a></h2>
+<p>Iggy is no longer just about the core repository. Over time, we’ve built an entire ecosystem around it, including:</p>
+<ul>
+<li>✅ SDKs for seamless developer integrations</li>
+<li>✅ CLIs for powerful command-line control</li>
+<li>✅ Web UIs for intuitive management</li>
+<li>✅ And many more…</li>
+</ul>
+<p>We’re already approaching 20 repositories under the Iggy organization (<a href="https://github.com/iggy-rs/" target="_blank" rel="noopener noreferrer">see them here</a>), and as we enter the Apache Incubator, we are committed to ensuring that all of them follow ASF guidelines while maintaining our core values of speed, efficiency, and simplicity.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="-why-apache">🔗 Why Apache?<a href="https://iggy.apache.org/blogs/2025/02/10/apache-incubator#-why-apache" class="hash-link" aria-label="Direct link to 🔗 Why Apache?" title="Direct link to 🔗 Why Apache?">​</a></h2>
+<p>The Apache Software Foundation has nurtured some of the <strong>most transformative open-source projects in history</strong> — Hadoop, Spark, Lucene, Solr, Cassandra, Kafka, Flink, and Airflow — technologies that have <strong>shaped big data, search, and real-time processing</strong>. By joining Apache Incubator, we align with this legacy and <strong>gain access to a larger community, better governance, and long-term sustainability</strong>.</p>
+<p>🔗 Dive into the Apache Incubator Details</p>
+<ul>
+<li><a href="https://cwiki.apache.org/confluence/display/INCUBATOR/Iggy+Proposal" target="_blank" rel="noopener noreferrer">Official Proposal</a></li>
+<li><a href="https://lists.apache.org/thread/q9whr3q9qd6wqm89f0vc1f6vkkvzc8xf" target="_blank" rel="noopener noreferrer">Discussion Thread</a></li>
+<li><a href="https://lists.apache.org/thread/6zfgdjwrzs92h4z4x6b25v1r23g3f5yg" target="_blank" rel="noopener noreferrer">Voting Results</a></li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="-whats-next">📈 What’s Next?<a href="https://iggy.apache.org/blogs/2025/02/10/apache-incubator#-whats-next" class="hash-link" aria-label="Direct link to 📈 What’s Next?" title="Direct link to 📈 What’s Next?">​</a></h2>
+<p><strong>Our vision is clear: Iggy as a future Apache Top-Level Project (TLP)</strong>. We already have ambitious ideas on how to improve both the project and the community around it:</p>
+<ul>
+<li><strong>Scaling performance benchmarks</strong> to push the limits of ultra-low-latency streaming</li>
+<li><strong>Expanding integrations</strong> with modern data infrastructure</li>
+<li><strong>Building a vibrant developer ecosystem</strong> that makes message streaming frictionless</li>
+</ul>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="-codebase-transition">🦀 Codebase transition<a href="https://iggy.apache.org/blogs/2025/02/10/apache-incubator#-codebase-transition" class="hash-link" aria-label="Direct link to 🦀 Codebase transition" title="Direct link to 🦀 Codebase transition">​</a></h2>
 <p>After the recent <a href="https://lists.apache.org/thread/zrn96nlg23r9353lr5tp2by2ggx4zxqc" target="_blank" rel="noopener noreferrer">discussion</a>, we plan to stick to the <strong>monorepo approach</strong>, under which, we will have a single repository for all the Iggy-related projects. This will make it easier for the contributors to navigate through the codebase, and to see how the changes in one project affect the others. This should also help us to keep the consistency across the projects, especially, once we release the Rust bindings to be used within the other languages SDKs.</p>
 <p>All the repositories under <a href="https://github.com/iggy-rs" target="_blank" rel="noopener noreferrer">iggy-rs</a> will be eventually moved to the <a href="https://github.com/apache/iggy" target="_blank" rel="noopener noreferrer">apache/iggy</a> repository, and we will make sure that all the existing links and references are updated accordingly.</p>
 <p>We'll also host our website under the <a href="https://iggy.apache.org/" target="_blank" rel="noopener noreferrer">iggy.apache.org</a> domain, including the documentation, blog, and the upcoming benchmarks. We've also updated our social media handles to contain the Apache prefix.</p>
 <p>There will be most likely some changes related to hosting the Docker images, as well as the other tools we're using, but we'll make sure to keep you updated on that.</p>
-<p><strong>Last but not least, we've got a new logo</strong>! Our lovely Italian Greyhound is now a part of the Apache family, and we're proud to have it as our mascot. As you can see, it's so fast, that even the light travelling through the optical can't keep up with it :)</p>
-<p><img decoding="async" loading="lazy" alt="image" src="https://iggy.apache.org/assets/images/iggy_logo-f0e83b91b22303a5545dfb6d49756d18.png" width="1800" height="1000" class="img_ev3q"></p>]]></content:encoded>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="-join-the-movement">💡 Join the Movement<a href="https://iggy.apache.org/blogs/2025/02/10/apache-incubator#-join-the-movement" class="hash-link" aria-label="Direct link to 💡 Join the Movement" title="Direct link to 💡 Join the Movement">​</a></h2>
+<p>If you believe in a future where message streaming is lightning-fast, hyper-efficient, and accessible to all, we invite you to be part of this journey. Whether you're a developer, architect, or enterprise innovator, your contributions, feedback, and ideas will shape what comes next.</p>
+<p>And this is just the beginning. <strong>Welcome to the era of Hyper-Efficient Message Streaming at Laser Speed.</strong></p>
+<p><strong>Last but not least, we've got a new logo</strong>! Our lovely Italian Greyhound is now a part of the Apache family, and we're proud to have it as our mascot. As you can see, it's so fast, that even the light travelling through the optical fiber can't keep up with it :)</p>
+<p><img decoding="async" loading="lazy" alt="image" src="https://iggy.apache.org/assets/images/iggy_logo-f0e83b91b22303a5545dfb6d49756d18.png" width="1800" height="1000" class="img_ev3q"></p>
+<p>👉 Follow us, contribute, and help to build the future of the message streaming!</p>
+<ul>
+<li><a href="https://iggy.rs/discord" target="_blank" rel="noopener noreferrer">Discord</a></li>
+<li><a href="https://x.com/ApacheIggy" target="_blank" rel="noopener noreferrer">X (Twitter)</a></li>
+<li><a href="https://bsky.app/profile/iggy.rs" target="_blank" rel="noopener noreferrer">Bluesky</a></li>
+<li><a href="https://www.linkedin.com/company/apache-iggy/" target="_blank" rel="noopener noreferrer">LinkedIn</a></li>
+</ul>]]></content:encoded>
         </item>
         <item>
             <title><![CDATA[Iggy.rs - Technology Radar & current goals]]></title>
