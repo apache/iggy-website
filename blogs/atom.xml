@@ -2,11 +2,48 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://iggy.apache.org/blogs</id>
     <title>Hyper-Efficient Message Streaming at Laser Speed. Blog</title>
-    <updated>2025-02-10T00:00:00.000Z</updated>
+    <updated>2025-02-17T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://iggy.apache.org/blogs"/>
     <subtitle>Hyper-Efficient Message Streaming at Laser Speed. Blog</subtitle>
     <icon>https://iggy.apache.org/img/favicon.ico</icon>
+    <entry>
+        <title type="html"><![CDATA[Transparent Benchmarking with Apache Iggy]]></title>
+        <id>https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks</id>
+        <link href="https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks"/>
+        <updated>2025-02-17T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[Benchmarks should be the first-class citizen]]></summary>
+        <content type="html"><![CDATA[<h2 class="anchor anchorWithStickyNavbar_LWe7" id="benchmarks-should-be-the-first-class-citizen">Benchmarks should be the first-class citizen<a href="https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks#benchmarks-should-be-the-first-class-citizen" class="hash-link" aria-label="Direct link to Benchmarks should be the first-class citizen" title="Direct link to Benchmarks should be the first-class citizen">​</a></h2>
+<p>In the world of software development, <strong>benchmarks are often treated as a second-class citizen</strong>. They're more of an addition to the codebase, rather than a crucial part of it, which should be the other way around, especially when it comes to the performance-critical systems or infrastructure tools.</p>
+<p>Sometimes, the benchmarking results are nothing more than just a <strong>cherry-picking of the best-case scenarios</strong>, which are not representative of real-world usage. In such a case, they simply serve a sole purpose of either making the project look better than it is or how well it does outperform the competition, under the extremely optimized conditions when comparing with its counterparts.</p>
+<p><strong>Trying to reproduce the benchmarks is often a nightmare</strong>, as the environment setup is not documented, the code is unavailable, or the instructions are not clear enough. This makes it close to impossible to verify the results, which are then taken for granted.</p>
+<p>Or even worse, the <strong>benchmarking tool might be so complex, that it's hard to understand how it works</strong>, and what are the assumptions behind it. ALl of these, does result in hard to extend or modify the existing benchmarks, which are not covering the particular use case you're interested in. It's just here to tell everyone that we do have benchmarks, but how we do it, and what they measure, is a mystery.</p>
+<p><strong>Which is why at <a href="https://github.com/iggy-rs/iggy/" target="_blank" rel="noopener noreferrer">Iggy</a>, we've decided to make the benchmarks a first-class citizen</strong>.</p>
+<p>Our <code>iggy-bench</code> tool, which is used to run the benchmarks and is part of the core open source repository (can be found under the <code>bench</code> directory), has come a long way and has been serving us well.</p>
+<p><img decoding="async" loading="lazy" alt="image" src="https://iggy.apache.org/assets/images/iggy_bench_cli-32946d97899e6925f99469dad967ca7e.png" width="2742" height="1930" class="img_ev3q"></p>
+<p>We use it to do quick performance checks, regression testing, and to see how the changes we introduce affect the performance. <strong>We run it on our localhost, as well as on the Virtual Machines in the cloud, to see how it behaves under a variety of environments.</strong></p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="iggy-benchmarking-dashboard">Iggy benchmarking dashboard<a href="https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks#iggy-benchmarking-dashboard" class="hash-link" aria-label="Direct link to Iggy benchmarking dashboard" title="Direct link to Iggy benchmarking dashboard">​</a></h2>
+<p><strong>And today, we're proud to present <a href="https://benchmarks.iggy.rs/" target="_blank" rel="noopener noreferrer">benchmarks.iggy.rs</a></strong> - a benchmarking dashboard, which is available to everyone. It's a website where you can see how Iggy performs under the different conditions, and how it scales with the number of clients, messages, and topics.</p>
+<p>This is our community-driven effort, where everyone can contribute, and add their own benchmarks. For all the information on how to run the benchmarks, render them on the dashboard, upload your results or contribute to the project, please check the <a href="https://github.com/iggy-rs/iggy-bench-dashboard" target="_blank" rel="noopener noreferrer">iggy-bench-dashboard</a> repository. In general, it's as simple as:</p>
+<ul>
+<li>Building the <a href="https://github.com/iggy-rs/iggy" target="_blank" rel="noopener noreferrer">Iggy</a> in the release mode with <code>cargo build --release</code></li>
+<li>Starting your Iggy server with <code>cargo r --bin iggy-server -r</code> (feel free to adjust the configuration in <code>server.toml</code> or via environment variables)</li>
+<li>Running the <code>iggy-bench</code> tool with the desired parameters, e.g. <code>cargo r --bin iggy-bench -r pinned-producer tcp</code></li>
+<li>Extending your benchmark with the output (HTML charts, JSON sampling etc.) <code>cargo r --bin iggy-bench -r pinned-producer tcp output -o performance_results --identifier spetz</code></li>
+<li>Navigating to the specific benchmark directory to browse the charts and/or uploading them to the dashboard.</li>
+<li>And there's always <code>help</code> command e.g. <code>pinned-producer --help</code> to make your life easier :)</li>
+</ul>
+<p><img decoding="async" loading="lazy" alt="image" src="https://iggy.apache.org/assets/images/iggy_bench_dashboard-20dc5e120f14f0c4618f23227cd08ac9.png" width="2555" height="1327" class="img_ev3q"></p>
+<p><strong>And this is just the beginning</strong>, as we plan to extend the dashboard, and add more benchmarks, which are covering the different use cases.</p>
+<p>Our main goal is to make the benchmarking process (and its results) <strong>transparent, reproducible, and easy to understand</strong>. We want to make them a first-class citizen, and a crucial part of the Iggy project. We want to make them a tool, which will help us to improve the performance, and to make Iggy the best streaming server out there. We're looking forward to your feedback, and we hope you'll enjoy the benchmarks.</p>
+<h2 class="anchor anchorWithStickyNavbar_LWe7" id="towards-the-microsecond-latency">Towards the microsecond latency<a href="https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks#towards-the-microsecond-latency" class="hash-link" aria-label="Direct link to Towards the microsecond latency" title="Direct link to Towards the microsecond latency">​</a></h2>
+<p><strong>And as a cherry on top, we've recently managed to achieve the sub-millisecond write latency</strong>. This is a huge milestone for us, as it's a proof that Iggy can be used in low-latency applications, where speed is crucial. Lately, we've been experimenting a lot with <a href="https://github.com/rkyv/rkyv" target="_blank" rel="noopener noreferrer">rkyv</a> - zero-copy deserialization framework, which has yielded some great results. Keep in mind that streaming the data within the range of microseconds latency depends on the several factors, such as message size, network conditions, or the hardware you're running on.</p>
+<p>And the best part is that we're just getting started. We're looking forward to pushing the limits even further, and to see how far we can go. There's still tons of optimizations coming, including switching the runtime to the <a href="https://github.com/bytedance/monoio" target="_blank" rel="noopener noreferrer">monoio</a> which does support <strong>io_uring</strong>, and we've experienced superb results with this one on our experimental branch. Then, there's the whole concept of shared-nothing &amp; thread-per-core design, and many more. Stay tuned!</p>]]></content>
+        <author>
+            <name>Piotr Gankiewicz</name>
+            <uri>https://github.com/spetz</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Iggy joins the Apache Incubator]]></title>
         <id>https://iggy.apache.org/blogs/2025/02/10/apache-incubator</id>
