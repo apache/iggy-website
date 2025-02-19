@@ -16,10 +16,8 @@ you typically encounter one or more of the following scenarios:
 5) Add producers dynamically at runtime.
 
 The stream builder provides a convenient way to create the iggy client, producer and consumer for these use cases.
-All source code examples are located in the [**examples folder
-**](https://github.com/iggy-rs/iggy/tree/master/examples/src/stream-builder) of the iggy repository. Also,
-if you encounter a problem with any of the examples below, please ask in the [**community discord
-**](https://iggy.rs/discord).
+All source code examples are located in the [**examples folder**](https://github.com/iggy-rs/iggy/tree/master/examples/src/stream-builder) of the iggy repository. Also,
+if you encounter a problem with any of the examples below, please ask in the [**community discord**](https://iggy.rs/discord).
 
 ## IggyStream Builder
 
@@ -135,13 +133,25 @@ repository.
 ### Producer configuration
 
 The IggyProducerConfig gives you a way to configure the producer in sufficient detail. Please note, if you have
-questions about any of those settings, please ask in the community discord. Also note, when your requirements exceed
-this configuration, you can still use the [**underlying low level SDK
-** ](https://github.com/iggy-rs/iggy/blob/master/examples/src/basic/producer/main.rs) for fine grained control over the
-every
-detail of the producer.
+questions about any of those settings, please ask in the community discord. For basic customization, the `from_stream_topic` constructor 
+lets you set a custom stream and topic name as well as the maximum batch size and message send interval.
 
-See below a commented configuration example:
+```rust
+use iggy::stream_builder::{IggyProducerConfig};
+use iggy::utils::duration::IggyDuration;
+use std::str::FromStr;
+
+let res = IggyProducerConfig::from_stream_topic(
+            "test_stream",
+            "test_topic",
+            100,
+            IggyDuration::from_str("5ms").unwrap(),
+         ).unwrap();
+```
+
+The remaining configuration fields are set to default values applicable to the most common use case. This should be sufficient for a simple application, or proof of concept without getting lost in details. 
+However, for more complex applications, you might want to configure more
+details and for that, see below a commented example of the full producer configuration:
 
 ```rust
 use iggy::error::IggyError;
@@ -159,10 +169,10 @@ async fn main() -> Result<(), IggyError> {
     // The builder simplifies the IggyProducer configuration.
     let config = IggyProducerConfig::builder()
         // Set the stream identifier and name.
-        .stream_id(Identifier::from_str_value(stream)?)
+        .stream_id(stream.try_into()?)
         .stream_name(stream)
         // Set the topic identifier and name
-        .topic_id(Identifier::from_str_value(topic)?)
+        .topic_id(topic.try_into()?)
         .topic_name(topic)
         // Sets the number of partitions to create for the topic.
         // The more clients are reading concurrently, 
@@ -205,6 +215,9 @@ async fn main() -> Result<(), IggyError> {
     Ok(())
 }
 ```
+
+Note, when your requirements exceed this configuration, you can still 
+use the [**underlying low level SDK**](https://github.com/iggy-rs/iggy/blob/master/examples/src/basic/producer/main.rs) for fine grained control over every detail of the producer.
 
 ## IggyStreamConsumer Builder
 
@@ -257,7 +270,7 @@ In the event that you have an existing iggy client, you can use the `IggyStreamC
 consumer. To do so, just replace the `with_client_from_url` with the following:
 
 ```rust
-    let consumer= IggyStreamConsumer::build(&client, &config).await?;
+ let consumer= IggyStreamConsumer::build(&client, &config).await?;
 ```
 
 Notice, you find some utils to build a customized iggy client in
@@ -289,10 +302,10 @@ async fn main() -> Result<(), IggyError> {
 
   let config = IggyConsumerConfig::builder()
     // Set the stream identifier and name.
-    .stream_id(Identifier::from_str_value(stream)?)
+    .stream_id(stream.try_into()?)
     .stream_name(stream)
     // Set the topic identifier and name
-    .topic_id(Identifier::from_str_value(topic)?)
+    .topic_id(topic.try_into()?)
     .topic_name(topic)
     // The auto-commit configuration for storing the message offset.
     // See: https://github.com/iggy-rs/iggy/blob/master/sdk/src/clients/consumer.rs
@@ -365,7 +378,8 @@ to ensure the consumer creates them and starts correctly. Other than that, you j
 
 ```rust
     let config = get_my_custom_iggy_consumer_config();
-    let (client, consumer) = IggyStreamConsumer::with_client_from_url(IGGY_URL, &config).await?;
+    let (client, consumer) = 
+    IggyStreamConsumer::with_client_from_url(IGGY_URL, &config).await?;
 ```
 
 Where `get_my_custom_iggy_consumer_config` refers to a function that returns an `IggyConsumerConfig`
@@ -386,7 +400,8 @@ a new configuration from just the stream, topic, batch size and send interval. S
             IggyDuration::from_str("5ms").unwrap(),
         ).unwrap();
         
-    let (client, consumer) = IggyStreamConsumer::with_client_from_url(IGGY_URL, &config).await?;
+    let (client, consumer) = 
+    IggyStreamConsumer::with_client_from_url(IGGY_URL, &config).await?;
 ```
 
 If you encounter a problem with any of the examples show on this page,
