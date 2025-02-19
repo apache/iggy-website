@@ -7,3 +7,7 @@
 # Ignore system files
 .DS_Store
 Thumbs.db
+
+# ignore idea files
+/.idea
+/.code
