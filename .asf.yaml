@@ -1,6 +1,13 @@
 github:
   description: "Apache Iggy (Incubating) Website"
   homepage: https://iggy.apache.org/
+  features:
+    # Enable wiki for documentation
+    wiki: true
+    # Enable issue management
+    issues: true
+    # Enable discussions
+    discussions: true
   labels:
     - rust
     - message-streaming
