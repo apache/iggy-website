@@ -42,7 +42,7 @@ We would like to send back <strong>only a slice of the cached data</strong> (10 
 <p>In case if we’d need to have <code>IggyMessage</code> deserialized, we can do it just in time, rather than eagerly, for example when client processes a fetched batch from the server.</p>
 <p>This approach allows us to combine the flexibility of solution with length prefixes using rkyv as well as having the freedom of not depending on a 3rd party crate, in fact this solution looks fairly similar to serde partial zero copy deserialization.</p>
 <h2 class="anchor anchorWithStickyNavbar_LWe7" id="benchmarks">Benchmarks<a href="https://iggy.apache.org/blogs/2025/05/08/zero-copy-deserialization#benchmarks" class="hash-link" aria-label="Direct link to Benchmarks" title="Direct link to Benchmarks">​</a></h2>
-<p>Now the part that all of you are probably most interested in - benchmarks.</p>
+<p>Now the part that all of you are probably most interested in - le benchmarks.</p>
 <p>Those results come from an <strong>AWS i3en.3xlarge</strong> instance</p>
 <p><strong>Before</strong></p>
 <p><img decoding="async" loading="lazy" alt="image" src="https://iggy.apache.org/assets/images/no_zero_copy_producer-ffed3643f7efa9c5ac43a3ce4cba746c.png" width="3188" height="2264" class="img_ev3q">
