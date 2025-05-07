@@ -53,13 +53,17 @@ We would like to send back <strong>only a slice of the cached data</strong> (10 
 <p><strong>Almost 2 times higher throughput for reads (2,1GBps vs 4GBps), 40% higher throughput for writes (2,4GBps vs 1,7GBps), 2x better p99 latencies for reads (2.93ms vs 1,46 ms) and 63% better p99 latencies for writes (4.23ms vs 2.59ms).</strong></p>
 <p>You can find more detailed comparisons on our <strong><a href="https://benchmarks.iggy.rs/" target="_blank" rel="noopener noreferrer">benchmarking website</a></strong>.</p>
 <h2 class="anchor anchorWithStickyNavbar_LWe7" id="concluding">Concluding<a href="https://iggy.apache.org/blogs/2025/05/08/zero-copy-deserialization#concluding" class="hash-link" aria-label="Direct link to Concluding" title="Direct link to Concluding">​</a></h2>
-<p><strong>It was a lot of fun exploring the entire design space for our zero copy schema</strong>. Depending on the constraints one might end up with a completely different solution, in fact zero copy isn't always the optimal approach, for example, if you'd like to read more about challenges that folks in embedded development have to overcome, check out **<a href="https://bsky.app/profile/jamesmunns.com/post/3lnqo5ykawc2r" target="_blank" rel="noopener noreferrer">this Bluesky post from James Munns</a>, or more broadly his project <strong><a href="https://github.com/jamesmunns/postcard-rpc" target="_blank" rel="noopener noreferrer">postcard-rpc</a></strong>.</p>
+<p><strong>It was a lot of fun exploring the entire design space for our zero copy schema</strong>. Depending on the constraints one might end up with a completely different solution, in fact zero copy isn't always the optimal approach, for example, if you'd like to read more about challenges that folks in embedded development have to overcome, check out <strong><a href="https://bsky.app/profile/jamesmunns.com/post/3lnqo5ykawc2r" target="_blank" rel="noopener noreferrer">this Bluesky post from James Munns</a></strong>, or more broadly his project <strong><a href="https://github.com/jamesmunns/postcard-rpc" target="_blank" rel="noopener noreferrer">postcard-rpc</a></strong>.</p>
 <h2 class="anchor anchorWithStickyNavbar_LWe7" id="whats-next-for-iggy">What’s next for Iggy<a href="https://iggy.apache.org/blogs/2025/05/08/zero-copy-deserialization#whats-next-for-iggy" class="hash-link" aria-label="Direct link to What’s next for Iggy" title="Direct link to What’s next for Iggy">​</a></h2>
 <p>Implementing zero-copy was a major milestone for us, but the train doesn’t slow down. Next in line is <strong>io_uring</strong> and <strong>thread per core shared nothing</strong> architecture. <strong><a href="https://www.reddit.com/r/rust/comments/1d35fsb/comment/l65wgnt/" target="_blank" rel="noopener noreferrer">We’ve already promised</a></strong> that we will publish more details about it once we have the results from our benchmark tests, so expect a highly technical blog post in near future.</p>
 <p>For now <strong><a href="https://github.com/apache/iggy/tree/io_uring_monoio_runtime" target="_blank" rel="noopener noreferrer">we did a proof of concept long time ago</a></strong>, but realised a few things along the way that we would like to do differently. So we will. Iggy moves onward and upward! 🚀</p>]]></content>
         <author>
             <name>Grzegorz Koszyk</name>
             <uri>https://github.com/numinnex</uri>
+        </author>
+        <author>
+            <name>Hubert Gruszecki</name>
+            <uri>https://github.com/hubcio</uri>
         </author>
     </entry>
     <entry>
