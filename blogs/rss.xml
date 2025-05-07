@@ -9,7 +9,7 @@
         <generator>https://github.com/jpmonette/feed</generator>
         <language>en</language>
         <item>
-            <title><![CDATA[Zero-copy (de)deserialization]]></title>
+            <title><![CDATA[Zero-copy (de)serialization]]></title>
             <link>https://iggy.apache.org/blogs/2025/05/08/zero-copy-deserialization</link>
             <guid>https://iggy.apache.org/blogs/2025/05/08/zero-copy-deserialization</guid>
             <pubDate>Thu, 08 May 2025 00:00:00 GMT</pubDate>
