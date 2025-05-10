@@ -7,7 +7,7 @@ sidebar_position: 3
 
 ## What we will build
 
-Once you're familiar with the [architecture](/introduction/architecture), it's high time to build the first application, or actually the set of applications - so-called **producer** (the one that will be publishing the messages to the stream) and **consumer** (yes, you got that right - it will handle the incoming messages stream).
+Once you're familiar with the [architecture](/docs/introduction/architecture), it's high time to build the first application, or actually the set of applications - so-called **producer** (the one that will be publishing the messages to the stream) and **consumer** (yes, you got that right - it will handle the incoming messages stream).
 
 In the typical scenario, e.g. when working with the microservices architecture or any other kind of the distributed system, each application can be both at the same time (producer and consumer), as the particular service might publish its own messages (typically in a form of the events - facts, that have already happened) while at the same time be interested in the notifications coming from the other service(s).
 
@@ -15,7 +15,7 @@ The completed sample can be found in [repository](https://github.com/apache/iggy
 
 Also, please do keep in mind that we'll be using the default implementation of `IggyClient` which provides a wrapper on top of the low-level, transport-specific `Client` trait (which you can always use, if you want to have more control over the communication with the server).
 
-On the other hand, if you're looking for a **more developer-friendly client builder API** providing additional features and extensions, please check the next article under [High-level SDK](/introduction/high-level-sdk) section (this is typically how you'd use Iggy SDK in the real-world applications).
+On the other hand, if you're looking for a **more developer-friendly client builder API** providing additional features and extensions, please check the next article under [High-level SDK](/docs/introduction/high-level-sdk) section (this is typically how you'd use Iggy SDK in the real-world applications).
 
 Nevertheless, let's start with the basic scenario, and build the producer and consumer applications using the default `IggyClient` implementation, so you can get a better understanding of how to work with the streaming server.
 
@@ -95,7 +95,7 @@ The default server address being `127.0.0.1:8090` is configured on the server si
 
 We could make use of more advanced components such as [`ClientProvider`](https://github.com/apache/iggy/blob/master/sdk/src/client_provider.rs), pass the custom configuration built via console args to choose between the different protocols as all the available clients implement the same [Client](https://github.com/apache/iggy/blob/master/sdk/src/client.rs) trait and so on.
 
-If you're eager to find out how to build more advanced (and configurable) applications, check the Rust [examples](/sdk/rust/examples). Nevertheless, let's focus on implementing our producer side :)
+If you're eager to find out how to build more advanced (and configurable) applications, check the Rust [examples](/docs/sdk/rust/examples). Nevertheless, let's focus on implementing our producer side :)
 
 Next, we need to authenticate the user, as all the available actions (except the `ping` and `login`) require the user to be authenticated and have the appropriate permissions e.g. you might be able to send or poll the messages, but you won't be able to create the stream or topic. For the sake of simplicity, we will use the default credentials for the root user (username: `iggy`, password: `iggy`), that can do anything and cannot be deleted. You can easily create more users and assign the specific permissions to them, however, this is out of scope for this tutorial.
 
@@ -131,7 +131,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 From that point on, when starting the application, you should be able to see at least the basic logs, for example regarding the connection status. Keep in mind, that you can change the default log level by setting `RUST_LOG` environment variable, e.g. `export RUST_LOG=trace` (or other command depending on OS).
 
-So far, so good, however, before we will be able to publish any messages to our streaming server, at first, we need to create the stream, topic and partition(s) - if you're unfamiliar with these concepts, please refer to [architecture](/introduction/architecture) where all these concepts are described in-depth.
+So far, so good, however, before we will be able to publish any messages to our streaming server, at first, we need to create the stream, topic and partition(s) - if you're unfamiliar with these concepts, please refer to [architecture](/docs/introduction/architecture) where all these concepts are described in-depth.
 
 Since our `IggyClient` implements the common [Client](https://github.com/apache/iggy/blob/master/sdk/src/client.rs) trait, you can find lots of the different methods to interact with the server, also from the administrative point of view, e.g. creating the streams, topics etc.
 
