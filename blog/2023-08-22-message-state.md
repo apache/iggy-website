@@ -20,7 +20,7 @@ Starting with the commit [#b07f23d](https://github.com/apache/iggy/commit/b07f23
 
 ## Introduction
 
-The `state` is an additional field added to the `message` struct stored on the server-side, as well as polled by the client, which describes the current state of the message. By default, the message state is set to `available` (`code = 1``, see the possible codes below), meaning that the message is availabe to be consumed by the client.
+The `state` is an additional field added to the `message` struct stored on the server-side, as well as polled by the client, which describes the current state of the message. By default, the message state is set to `available` (`code = 1``, see the possible codes below), meaning that the message is available to be consumed by the client.
 
 However, the state might have a different value, for example `marked_for_deletion` (to be used by the upcoming retention policy feature), `poisoned` (to be used by the upcoming dead-letter queue feature) etc. In the future releases, the server will also provide a way to change the state of the message (for example to mark it as `poisoned` by the client), as well as filtering the messages by the state.
 

@@ -13,7 +13,7 @@ The releases are published to GitHub and can be found [here](https://github.com/
 
 Keep in mind, that if you were to compile the source code in release mode, the longer compilation time is due to [LTO](https://doc.rust-lang.org/rustc/linker-plugin-lto.html) enabled in [profile](https://github.com/apache/iggy/blob/master/Cargo.toml#L2).
 
-The HTTP API endpoints can be found in [server.http](https://github.com/apache/iggy/blob/master/server/server.http) file, which can be used with [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension for VS Code.
+The HTTP API endpoints can be found in [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http) file, which can be used with [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension for VS Code.
 
 In order to see the detailed logs from the server, run it with `RUST_LOG=trace` environment variable.
 

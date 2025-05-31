@@ -11,7 +11,7 @@ We've also built the **[benchmarking platform](https://benchmarks.iggy.rs)** whe
 
 ![Benchmarking Platform](/img/bench_platform.png)
 
-Iggy comes with a built-in benchmarking tool `iggy-bench` that allows you to measure the performance of the server. It is written in Rust and uses the `tokio` runtime for asynchronous I/O operations mimicking the example client applications.  The tool is designed to be as close to real-world scenarios as possible, so you can use it to estimate the performance of the server in your environment. It is part of the [core repository](https://github.com/apache/iggy/tree/master/bench) and can be found in the `bench` directory.
+Iggy comes with a built-in benchmarking tool `iggy-bench` that allows you to measure the performance of the server. It is written in Rust and uses the `tokio` runtime for asynchronous I/O operations mimicking the example client applications.  The tool is designed to be as close to real-world scenarios as possible, so you can use it to estimate the performance of the server in your environment. It is part of the [core repository](https://github.com/apache/iggy/tree/master/core/bench) and can be found in the `bench` directory.
 
 ![Bench CLI](/img/bench_cli.png)
 

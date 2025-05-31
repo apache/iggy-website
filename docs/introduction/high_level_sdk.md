@@ -8,7 +8,7 @@ sidebar_position: 4
 If you've read through the [getting started](/introduction/getting-started) guide, you might have noticed that it's quite verbose and requires a lot of boilerplate code to get started. This is where the High-level SDK comes in, as it does provide a more user-friendly interface to interact with the Iggy API for both, producer and consumer. Let's consider the following features:
 
 - Automatically creating & joining the consumer groups
-- Commiting the offset depending on the particular mode (e.g. in the background based on some interval, after polling N messages etc.)
+- Committing the offset depending on the particular mode (e.g. in the background based on some interval, after polling N messages etc.)
 - Batching the messages, whether it's about producing or consuming
 - Processing the messages as if the stream was an async iterator
 - Reusing the same client for both, producing and consuming on the same topic without repeating the configuration

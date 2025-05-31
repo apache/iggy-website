@@ -11,7 +11,7 @@ Once you're familiar with the [architecture](/docs/introduction/architecture), i
 
 In the typical scenario, e.g. when working with the microservices architecture or any other kind of the distributed system, each application can be both at the same time (producer and consumer), as the particular service might publish its own messages (typically in a form of the events - facts, that have already happened) while at the same time be interested in the notifications coming from the other service(s).
 
-The completed sample can be found in [repository](https://github.com/apache/iggy/tree/master/examples/src/getting-started), however, we will go through the implementation step by step, so that you can get a better understanding of how to build the applications from scratch.
+The completed sample can be found in [repository](https://github.com/apache/iggy/tree/master/core/examples/src/getting-started), however, we will go through the implementation step by step, so that you can get a better understanding of how to build the applications from scratch.
 
 Also, please do keep in mind that we'll be using the default implementation of `IggyClient` which provides a wrapper on top of the low-level, transport-specific `Client` trait (which you can always use, if you want to have more control over the communication with the server).
 
@@ -93,7 +93,7 @@ client.connect().await?;
 
 The default server address being `127.0.0.1:8090` is configured on the server side, and can be easily adjusted by updating the `server.toml` (the default configuration) or `server.json` file in `configs` directory.
 
-We could make use of more advanced components such as [`ClientProvider`](https://github.com/apache/iggy/blob/master/sdk/src/client_provider.rs), pass the custom configuration built via console args to choose between the different protocols as all the available clients implement the same [Client](https://github.com/apache/iggy/blob/master/sdk/src/client.rs) trait and so on.
+We could make use of more advanced components such as [`ClientProvider`](https://github.com/apache/iggy/blob/master/core/sdk/src/client_provider.rs), pass the custom configuration built via console args to choose between the different protocols as all the available clients implement the same [Client](https://github.com/apache/iggy/blob/master/core/sdk/src/clients/client.rs) trait and so on.
 
 If you're eager to find out how to build more advanced (and configurable) applications, check the Rust [examples](/docs/sdk/rust/examples). Nevertheless, let's focus on implementing our producer side :)
 
@@ -133,7 +133,7 @@ From that point on, when starting the application, you should be able to see at 
 
 So far, so good, however, before we will be able to publish any messages to our streaming server, at first, we need to create the stream, topic and partition(s) - if you're unfamiliar with these concepts, please refer to [architecture](/docs/introduction/architecture) where all these concepts are described in-depth.
 
-Since our `IggyClient` implements the common [Client](https://github.com/apache/iggy/blob/master/sdk/src/client.rs) trait, you can find lots of the different methods to interact with the server, also from the administrative point of view, e.g. creating the streams, topics etc.
+Since our `IggyClient` implements the common [Client](https://github.com/apache/iggy/blob/master/core/sdk/src/clients/client.rs) trait, you can find lots of the different methods to interact with the server, also from the administrative point of view, e.g. creating the streams, topics etc.
 
 One thing worth mentioning is that, these methods are not idempotent - for example, if you were to try creating the stream with the same ID which already exists on the server, you would receive the specific error. In such a case, you can simply check for an error and move on. Let's do this then :)
 
@@ -192,7 +192,7 @@ async fn init_system(client: &IggyClient) {
 
 Finally, let's send some messages into our stream. We will implement the basic loop with an interval between each iteration to simulate publishing the batch of messages. Since the streaming server works directly with the binary data, and couldn't care less about the (de)serialization format for the message payload, it's really up to you, how to efficiently stream the messages for your use case.
 
-In our example, we will simply use the string payload, and pass it via `from_str` trait to construct the [Message](https://github.com/apache/iggy/blob/master/sdk/src/messages/send_messages.rs#L423).
+In our example, we will simply use the string payload, and pass it via `from_str` trait to construct the [Message](https://github.com/apache/iggy/blob/master/core/common/src/commands/messages/send_messages.rs#L423).
 
 ```rust
 let payload = "hello world";
@@ -537,4 +537,4 @@ Start the Iggy server, and then producer and consumer applications respectively 
 
 ## Summary
 
-What we've just achieved is merely the tip of an iceberg, however, it should give you a good understanding of what Iggy is all about, and hopefully, it wasn't too difficult to follow and get things up and running for the first time. Feel free to take a look at the more advanced [examples](https://github.com/apache/iggy/tree/master/examples), how to make use of `IggyClient` wrapper on top of the existing implementations of the `Client` trait, what happens when you start multiple producers and consumers and so on. Happy tweaking! :)
+What we've just achieved is merely the tip of an iceberg, however, it should give you a good understanding of what Iggy is all about, and hopefully, it wasn't too difficult to follow and get things up and running for the first time. Feel free to take a look at the more advanced [examples](https://github.com/apache/iggy/tree/master/core/examples), how to make use of `IggyClient` wrapper on top of the existing implementations of the `Client` trait, what happens when you start multiple producers and consumers and so on. Happy tweaking! :)

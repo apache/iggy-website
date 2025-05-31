@@ -9,7 +9,7 @@ Since the Iggy server supports a variety of transport protocols, it is important
 
 Currently, there are 2 ways of data representation: JSON (text) and binary - any serialization format that you prefer such as bincode, SBE, flatbuffers, protobuf or even your custom one, as the server simply expects the raw bytes as the message payload.
 
-The binary format is more compact and efficient, but it is not human-readable - it's being used by TCP and QUIC transports. The JSON format is used by HTTP transport - all the existing endpoints are available in the [server.http](https://github.com/apache/iggy/blob/master/server/server.http).
+The binary format is more compact and efficient, but it is not human-readable - it's being used by TCP and QUIC transports. The JSON format is used by HTTP transport - all the existing endpoints are available in the [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http).
 
 ## Request schema
 

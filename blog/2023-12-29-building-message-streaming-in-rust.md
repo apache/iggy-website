@@ -50,7 +50,7 @@ let polled_messages = client.poll_messages(&PollMessages {
 }).await?;
 ```
 
-After running some benchmarks (yes, we have a dedicated app for the **[benchmarking purposes](https://github.com/apache/iggy/tree/master/bench)**) and seeing the promising numbers (**range of 2-6 GB/s for both, writes & reads when processing millions of messages**), I eventually decided to give it a long-term shot. Being fully aware that there's still lots to be done (speaking of many months, or even years), I couldn't be more happy to find out that there's also someone else out there, who would like to contribute to the project and become a part of the team.
+After running some benchmarks (yes, we have a dedicated app for the **[benchmarking purposes](https://github.com/apache/iggy/tree/master/core/bench)**) and seeing the promising numbers (**range of 2-6 GB/s for both, writes & reads when processing millions of messages**), I eventually decided to give it a long-term shot. Being fully aware that there's still lots to be done (speaking of many months, or even years), I couldn't be more happy to find out that there's also someone else out there, who would like to contribute to the project and become a part of the team.
 
 ![image](/building-message-streaming/iggy_bench.jpeg)
 
@@ -133,7 +133,7 @@ After gaining some traction a few months ago (mostly due to landing on the GitHu
 
 ![image](/building-message-streaming/gh_trending.jpeg)
 
-Considering what's already there, being worked on or planned for the future releases, such as interactive CLI, modern Web UI, optional data compression and archivization, plugin support or multiple SDKs, there are at least three additonal challenges to overcome:
+Considering what's already there, being worked on or planned for the future releases, such as interactive CLI, modern Web UI, optional data compression and archivization, plugin support or multiple SDKs, there are at least three additional challenges to overcome:
 
 **Clustering** - the possibility of having a **highly available and fault tolerant** distributed message streaming platform in a production environment, is typically one of the most important aspects when considering the particular tool. While it wouldn't be too difficult to implement the extension (think of a simple proxy/load balancer), allowing to monitor and deliver the data either to the primary or secondary replica (treated as a fallback server) and switch between them when one of the nodes goes down, such a solution would still result in SPOF and wouldn't really scale. Instead, we've started experimenting with [Raft](https://raft.github.io/) consensus mechanism (de facto the industry standard) in a dedicated [repository](https://github.com/iggy-rs/iggy-cluster-sandbox), which should allow us in delivering the truly fault tolerant, distributed infrastructure with an additional data replication at the partition level (so-called unit of parallelization).
 
