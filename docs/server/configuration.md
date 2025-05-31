@@ -495,7 +495,7 @@ recreate_missing_state = true
 
 An optional transport layer, which can be used to connect to the server with any tool or application that supports HTTP. It is enabled by default, but you can disable it by setting `enabled` to `false`. The `address` option specifies the address and port to listen on. The `cors` section allows you to configure the CORS policy, which internally uses [Tower middleware](https://docs.rs/tower-http/latest/tower_http/cors/index.html).
 
-HTTP API is built on top of [Axum](https://github.com/tokio-rs/axum) and you can find all the available endpoints in [server.http](https://github.com/apache/iggy/blob/master/server/server.http) file, which can be used with [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension for VS Code.
+HTTP API is built on top of [Axum](https://github.com/tokio-rs/axum) and you can find all the available endpoints in [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http) file, which can be used with [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension for VS Code.
 
 To consume the HTTP API from Iggy SDK, you need to make use of the available `HttpClient` component.
 

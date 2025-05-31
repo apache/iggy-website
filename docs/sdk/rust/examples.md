@@ -5,7 +5,7 @@ title: Examples
 sidebar_position: 2
 ---
 
-In the core repository, you can find the following [examples](https://github.com/apache/iggy/tree/master/examples/src) using the Rust SDK:
+In the core repository, you can find the following [examples](https://github.com/apache/iggy/tree/master/core/examples/src) using the Rust SDK:
 
 - **Getting started** - the basic example which is discussed in the [getting started](/introduction/getting-started) guide.
 - **Message envelope** - the example of how to send a message with a custom envelope e.g. to differentiate between different types of messages.

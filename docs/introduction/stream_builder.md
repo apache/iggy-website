@@ -16,7 +16,7 @@ you typically encounter one or more of the following scenarios:
 5) Add producers dynamically at runtime.
 
 The stream builder provides a convenient way to create the iggy client, producer and consumer for these use cases.
-All source code examples are located in the [**examples folder**](https://github.com/apache/iggy/tree/master/examples/src/stream-builder) of the iggy repository. Also,
+All source code examples are located in the [**examples folder**](https://github.com/apache/iggy/tree/master/core/examples/src/stream-builder) of the iggy repository. Also,
 if you encounter a problem with any of the examples below, please ask in the [**community discord**](https://discord.gg/C5Sux5NcRa).
 
 ## IggyStream Builder
@@ -127,7 +127,7 @@ constructor with the following:
 ```
 
 You find sample utils to build a customized iggy client in
-the [**examples folder**](https://github.com/apache/iggy/blob/master/examples/src/shared/client.rs) of the iggy
+the [**examples folder**](https://github.com/apache/iggy/blob/master/core/examples/src/shared/client.rs) of the iggy
 repository.
 
 ### Producer configuration
@@ -217,7 +217,7 @@ async fn main() -> Result<(), IggyError> {
 ```
 
 Note, when your requirements exceed this configuration, you can still
-use the [**underlying low level SDK**](https://github.com/apache/iggy/blob/master/examples/src/basic/producer/main.rs) for fine grained control over every detail of the producer.
+use the [**underlying low level SDK**](https://github.com/apache/iggy/blob/master/core/examples/src/basic/producer/main.rs) for fine grained control over every detail of the producer.
 
 ## IggyStreamConsumer Builder
 
@@ -274,7 +274,7 @@ consumer. To do so, just replace the `with_client_from_url` with the following:
 ```
 
 Notice, you find some utils to build a customized iggy client in
-the [**examples folder**](https://github.com/apache/iggy/blob/master/examples/src/shared/client.rs) of the iggy
+the [**examples folder**](https://github.com/apache/iggy/blob/master/core/examples/src/shared/client.rs) of the iggy
 repository.
 
 ### Consumer configuration
@@ -308,7 +308,7 @@ async fn main() -> Result<(), IggyError> {
     .topic_id(topic.try_into()?)
     .topic_name(topic)
     // The auto-commit configuration for storing the message offset.
-    // See: https://github.com/apache/iggy/blob/master/sdk/src/clients/consumer.rs
+    // See: https://github.com/apache/iggy/blob/master/core/sdk/src/clients/consumer.rs
     .auto_commit(AutoCommit::When(AutoCommitWhen::PollingMessages))
     // The max number of messages to send in a batch.
     // The greater the batch size, the higher the bulk throughput.

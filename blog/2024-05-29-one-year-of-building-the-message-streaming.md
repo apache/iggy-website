@@ -59,7 +59,7 @@ And at the same time, we've been experimenting a lot with some fancy stuff, whic
 
 The core message streaming server and multiple SDKs might sound as the most important parts of the whole ecosystem, but let's not forget about the **management tools**. How to quickly connect to the the server, create new topics, validate if the messages are being sent correctly, change the user permissions or check the node statistics?
 
-This is where our **[CLI](https://github.com/apache/iggy/tree/master/cli) and [Web UI](https://github.com/iggy-rs/iggy-web-ui) come in handy**. If you're a fan of working with the terminal and used to the great developer experience, you'll find our CLI a joy to work with.
+This is where our **[CLI](https://github.com/apache/iggy/tree/master/core/cli) and [Web UI](https://github.com/iggy-rs/iggy-web-ui) come in handy**. If you're a fan of working with the terminal and used to the great developer experience, you'll find our CLI a joy to work with.
 
 ![image](/one-year-of-building-the-message-streaming/iggy_cli.png)
 
@@ -67,7 +67,7 @@ On the other hand, if you prefer a graphical interface accessible via your brows
 
 ![image](/one-year-of-building-the-message-streaming/iggy_web.png)
 
-Last but not least, in order to run the benchmarks, we have our own [bench](https://github.com/apache/iggy/tree/master/bench) available as a part of the core repository — you can easily configure the number of producers, consumers, streams, etc. and get an overview of the possible streaming performance on your machine.
+Last but not least, in order to run the benchmarks, we have our own [bench](https://github.com/apache/iggy/tree/master/core/bench) available as a part of the core repository — you can easily configure the number of producers, consumers, streams, etc. and get an overview of the possible streaming performance on your machine.
 
 ![image](/one-year-of-building-the-message-streaming/iggy_bench.png)
 

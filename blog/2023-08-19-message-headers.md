@@ -26,7 +26,7 @@ Since the headers are optional, you can send a message without any headers at al
 
 For now, there are no reserved headers, so you can use any key you want. However, in the future, we might introduce some reserved headers used by the streaming server for the specific purposes such as the message compression, distributed tracing and so no.
 
-The **sample applications** using the message headers can be found [here](https://github.com/apache/iggy/tree/master/examples/src/message-headers).
+The **sample applications** using the message headers can be found [here](https://github.com/apache/iggy/tree/master/core/examples/src/message-headers).
 
 ## Implementation
 
