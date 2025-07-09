@@ -93,11 +93,7 @@ const config: Config = {
           label: "Docs",
         },
         { to: "/blogs", label: "Blogs", position: "left" },
-        
-        { href: "https://github.com/apache/iggy/releases", 
-        label: "Downloads", 
-        position: "left" 
-        },
+        { to: "/downloads", label: "Downloads", position: "left" },
         {
           href: "https://benchmarks.iggy.rs",
           label: "Benchmarks",
