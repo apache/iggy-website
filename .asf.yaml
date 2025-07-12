@@ -1,0 +1,37 @@
+github:
+  description: "Apache Iggy (Incubating) Website"
+  homepage: https://iggy.apache.org/
+  features:
+    # Enable wiki for documentation
+    wiki: true
+    # Enable issue management
+    issues: true
+    # Enable discussions
+    discussions: true
+  labels:
+    - rust
+    - message-streaming
+    - iggy
+    - apache
+  enabled_merge_buttons:
+    squash:  true
+    merge:   false
+    rebase:  false
+
+collaborators:
+  - username: landingpro
+    permission: write
+  
+# Staging and publishing profile:
+staging:
+  profile: ~
+  whoami: asf-staged-site
+
+publish:
+  whoami: asf-site
+
+notifications:
+  commits: commits@iggy.apache.org
+  issues: commits@iggy.apache.org
+  pullrequests: commits@iggy.apache.org
+  discussions: dev@iggy.apache.org
