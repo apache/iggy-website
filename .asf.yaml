@@ -18,6 +18,15 @@ github:
     merge:   false
     rebase:  false
 
+collaborators:
+  - username: landingpro
+    permission: write
+  
+# Staging and publishing profile:
+staging:
+  profile: ~
+  whoami: asf-staged-site
+
 publish:
   whoami: asf-site
 
