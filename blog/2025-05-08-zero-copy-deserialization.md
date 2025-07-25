@@ -132,7 +132,7 @@ Those results come from an **AWS i3en.3xlarge** instance
 
 **Almost 2 times higher throughput for reads (2,1GBps vs 4GBps), 40% higher throughput for writes (2,4GBps vs 1,7GBps), 2x better p99 latencies for reads (2.93ms vs 1,46 ms) and 63% better p99 latencies for writes (4.23ms vs 2.59ms).**
 
-You can find more detailed comparisons on our **[benchmarking website](https://benchmarks.iggy.rs)**.
+You can find more detailed comparisons on our **[benchmarking website](https://benchmarks.iggy.apache.org)**.
 
 ## Concluding
 

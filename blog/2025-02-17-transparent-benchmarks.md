@@ -31,7 +31,7 @@ We use it to do quick performance checks, regression testing, and to see how the
 
 ## Iggy benchmarking dashboard
 
-**And today, we're proud to present [benchmarks.iggy.rs](https://benchmarks.iggy.rs/)** - a benchmarking dashboard, which is available to everyone. It's a website where you can see how Iggy performs under the different conditions, and how it scales with the number of clients, messages, and topics.
+**And today, we're proud to present [benchmarks.iggy.apache.org](https://benchmarks.iggy.apache.org/)** - a benchmarking dashboard, which is available to everyone. It's a website where you can see how Iggy performs under the different conditions, and how it scales with the number of clients, messages, and topics.
 
 This is our community-driven effort, where everyone can contribute, and add their own benchmarks. For all the information on how to run the benchmarks, render them on the dashboard, upload your results or contribute to the project, please check the [iggy-bench-dashboard](https://github.com/iggy-rs/iggy-bench-dashboard) repository. In general, it's as simple as:
 

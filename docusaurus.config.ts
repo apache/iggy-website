@@ -73,8 +73,8 @@ const config: Config = {
   themeConfig: {
     // Replace with your project's social card
     colorMode: {
-      disableSwitch: true,       // 👈 hides the toggle UI
-      defaultMode: 'light',      // or 'dark', depending on your choice
+      disableSwitch: true, // 👈 hides the toggle UI
+      defaultMode: "light", // or 'dark', depending on your choice
       respectPrefersColorScheme: false,
     },
     image: "img//apache-iggy-light-bg0.5x.png",
@@ -95,7 +95,7 @@ const config: Config = {
         { to: "/blogs", label: "Blogs", position: "left" },
         { to: "/downloads", label: "Downloads", position: "left" },
         {
-          href: "https://benchmarks.iggy.rs",
+          href: "https://benchmarks.iggy.apache.org",
           label: "Benchmarks",
           position: "left",
         },
@@ -187,7 +187,7 @@ const config: Config = {
               href: "https://github.com/apache/iggy",
             },
             {
-              href: "https://benchmarks.iggy.rs",
+              href: "https://benchmarks.iggy.apache.org",
               label: "Benchmarks",
             },
           ],
