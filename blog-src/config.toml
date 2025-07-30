@@ -1,0 +1,51 @@
+#  main zola config 
+base_url = "/blog"
+title    = "Apache Iggy Blog"
+description = "Apache Iggy Blog"
+default_language = "en"
+theme    = "apollo"
+
+compile_sass       = true        # Apollo kompiluje SCSS → CSS
+build_search_index = true
+
+taxonomies = [
+  { name = "tags", feed = true },
+]
+
+#  markdown settings
+[markdown]
+highlight_code  = true
+highlight_theme = "base16-ocean-dark"   # dowolny motyw z listy Zoli
+
+#  apollo theme data
+
+[extra]
+theme   = "dark"    # 'light' | 'dark' | 'auto'
+logo	= "/img/logo-darkbg.svg"
+socials = []
+menu    = []
+stylesheets = ["custom.css"]
+
+[extra.authors.piotr]
+name      = "Piotr Gankiewicz"
+title     = "Apache Iggy founder"
+url       = "https://github.com/spetz"
+image_url = "https://github.com/spetz.png"
+
+logo = "/img/logo.svg"
+stylesheets = []               
+extra_head = """
+<link rel="stylesheet" href="/custom.css">
+"""
+
+[extra.authors.grzegorz]
+name      = "Grzegorz Koszyk"
+title     = "Apache Iggy PPMC Member"
+url       = "https://github.com/numinnex"
+image_url = "https://github.com/numinnex.png"
+
+[extra.authors.hubert]
+name      = "Hubert Gruszecki"
+title     = "Apache Iggy PPMC Member"
+url       = "https://github.com/hubcio"
+image_url = "https://github.com/hubcio.png"

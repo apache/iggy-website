@@ -1,0 +1,2 @@
+
+taxonomies = [{ name = "tags", feed = true }]

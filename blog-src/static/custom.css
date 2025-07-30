@@ -1,0 +1,216 @@
+/* Font: Manrope 300/400/500/700 */
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap");
+
+/* Global variables */
+:root {
+  --primary-color:       #ff9103 !important;
+  --primary-color-light: color-mix(in srgb, #ff9103 70%, white) !important;
+  --primary-color-dark:  color-mix(in srgb, #ff9103 80%, black) !important;
+  --font-sans:           "Manrope", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Logo: 4 rem height overrides Tailwind h-8/h-10 */
+header img,
+.navbar img,
+img.logo,
+img[alt~="logo"] {
+  height: 4rem !important;
+  width: auto !important;
+  max-height: none !important;
+}
+
+/* Base background */
+html,
+body {
+  background-color: #070c17 !important;
+}
+
+/* Disable native selection highlight */
+html::selection,
+body::selection,
+html::-moz-selection,
+body::-moz-selection {
+  background-color: #070c17;
+  color: #070c17;
+}
+
+/* Header halo */
+header {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+header > * { position: relative; z-index: 1; }
+
+header::after {
+  content: "";
+  position: absolute;
+  inset: -110px -48px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 500px at 0% 0%,   #273555d9 0%, transparent 70%),
+    radial-gradient(880px 460px at 105% -5%, #384b73cc 0%, transparent 70%),
+    radial-gradient(700px 520px at 50% 15%,  #131e3680 0%, transparent 75%);
+  filter: blur(70px);
+  opacity: .9;
+}
+@media (max-width: 640px) {
+  header::after { inset: -80px -32px; filter: blur(50px); }
+}
+
+/* Search button: base size */
+header button.search,
+header button.search-toggle,
+header button[data-search-toggle] {
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+header button.search svg,
+header button.search-toggle svg,
+header button[data-search-toggle] svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Search button (current markup) */
+header button.search-button {
+  width: 2rem !important;
+  height: 2rem !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 !important;
+  position: relative;
+  border-radius: 50%;
+  isolation: isolate;
+  transition: all .25s ease;
+}
+header button.search-button img.search-icon,
+header img[src$="search.svg"] {
+  width: 100% !important;
+  height: 100% !important;
+  filter: brightness(0) invert(1) !important; /* white icon */
+}
+
+/* Search button glow */
+header button.search-button::before,
+header #search-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #ffffff;
+  opacity: 0;
+  filter: blur(4px);
+  z-index: -1;
+  transition: opacity .25s ease;
+}
+header button.search-button:hover::before,
+header button.search-button:focus-visible::before,
+header #search-button:hover::before,
+header #search-button:focus-visible::before {
+  opacity: .12;
+}
+header button.search-button:hover img,
+header #search-button:hover img {
+  transform: none;
+}
+
+/* Page header weight */
+.page-header { font-weight: 600 !important; }
+
+/* Hover color override for both themes */
+:root.dark  { --hover-color: #070c17; }
+:root.light { --hover-color: #070c17; }
+
+/* Content stacking context reset */
+main,
+.content,
+article {
+  position: relative;
+  z-index: auto;
+}
+
+/* Bottom halo (fixed to viewport) */
+body::after {
+  content: "";
+  position: fixed;
+  left: -25%;
+  bottom: -140px;
+  width: 150%;
+  height: 420px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 520px at 50% 100%, #273555c2 0%, transparent 70%),
+    radial-gradient(780px 460px at 50% 110%, #384b73a0 0%, transparent 75%),
+    radial-gradient(580px 480px at 50% 120%, #131e3666 0%, transparent 80%);
+  filter: blur(80px);
+  opacity: .55;
+  mix-blend-mode: screen;
+}
+@media (max-width: 640px) {
+  body::after {
+    bottom: -100px;
+    height: 300px;
+    filter: blur(60px);
+    opacity: .45;
+  }
+}
+
+/* Article typography */
+article p,
+article li,
+article blockquote,
+article code {
+  font-weight: 300;
+  color: #ababab;
+  letter-spacing: -0.01em;
+}
+article li::marker { font-weight: 300; color: #ababab; }
+article blockquote {
+  border-left: 2px solid #384b73;
+  padding-left: 1rem;
+  font-style: italic;
+  opacity: .9;
+}
+article strong,
+article b {
+  font-weight: 700;
+  color: #d5d5d5;
+}
+
+/* Bottom spacing inside article */
+article { padding-bottom: 4rem; }
+
+/* Search modal: always on top */
+dialog[open],
+#search-modal,
+.search-modal,
+.search-overlay,
+[role="dialog"][aria-label="Search"],
+dialog[open][id="search"],
+dialog[open].search-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
+}
+
+/* Reset any z-index applied inside article */
+article * {
+  position: relative;
+  z-index: auto !important;
+}
+
+/* Inline images in article */
+article img {
+  border: 0 !important;
+  max-width: 100%;
+  margin: 4rem 0;
+  display: block;
+}
