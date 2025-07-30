@@ -1,0 +1,68 @@
+<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 106 106" width="200" height="200">
+	<title>Rust_programming_language_black_logo</title>
+	<defs>
+		<clipPath clipPathUnits="userSpaceOnUse" id="cp1">
+			<path d="m-7-7h120v120h-120zm63 20c0-1.66-1.34-3-3-3-1.66 0-3 1.34-3 3 0 1.66 1.34 3 3 3 1.66 0 3-1.34 3-3zm35.97 30.49c1.58-0.51 2.44-2.2 1.93-3.78-0.52-1.58-2.21-2.44-3.78-1.92-1.58 0.51-2.44 2.2-1.93 3.78 0.51 1.57 2.2 2.44 3.78 1.92zm-17.89 43.63c0.98 1.35 2.85 1.64 4.19 0.67 1.35-0.98 1.64-2.85 0.67-4.19-0.98-1.34-2.85-1.64-4.19-0.67-1.34 0.98-1.64 2.85-0.67 4.19zm-47.02-3.52c-0.97 1.34-0.68 3.21 0.67 4.19 1.34 0.97 3.21 0.68 4.19-0.67 0.97-1.34 0.67-3.21-0.67-4.19-1.34-0.97-3.21-0.67-4.19 0.67zm-11.18-45.81c-1.57-0.52-3.26 0.34-3.78 1.92-0.51 1.58 0.35 3.27 1.93 3.78 1.58 0.52 3.27-0.35 3.78-1.92 0.51-1.58-0.35-3.27-1.93-3.78z"/>
+		</clipPath>
+	</defs>
+	<style>
+		.s0 { fill: #d34516;stroke: #000000;stroke-linejoin: round } 
+		.s1 { fill: none;stroke: #000000;stroke-width: 9 } 
+		.s2 { fill: #000000;stroke: #000000;stroke-linejoin: round;stroke-width: 3 } 
+		.s3 { fill: #000000;stroke: #000000;stroke-linejoin: round;stroke-width: 6 } 
+	</style>
+	<g id="logo">
+		<path id="r" class="s0" d="m13.5 75.5h40v-11h-9v-8h10c11 0 5 19 14 19h25v-19h-6v2c0 8-9 7-10 2-1-5-5-9-6-9 15-8 6-24-6-24h-47v11h10v26h-15zm31-37h13c8 0 8 8 0 8h-13z"/>
+		<g id="Clip-Path: gear" clip-path="url(#cp1)">
+			<filter id="f0">
+				<feFlood flood-color="#d34516" flood-opacity="1" />
+				<feBlend mode="normal" in2="SourceGraphic"/>
+				<feComposite in2="SourceAlpha" operator="in" />
+			</filter>
+			<g id="gear" filter="url(#f0)">
+				<path fill-rule="evenodd" class="s1" d="m53 96c-23.8 0-43-19.2-43-43 0-23.8 19.2-43 43-43 23.8 0 43 19.2 43 43 0 23.8-19.2 43-43 43z"/>
+				<g id="cogs">
+					<path id="cog" fill-rule="evenodd" class="s2" d="m99 56l5-3-5-3z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m97.5 64.9l5.5-2-4.3-3.9z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m94.4 73.4l5.7-0.9-3.5-4.7z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m89.6 81.1l5.8 0.2-2.5-5.2z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m83.4 87.6l5.7 1.5-1.5-5.7z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m76.1 92.9l5.2 2.5-0.2-5.8z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m67.8 96.6l4.7 3.5 0.9-5.7z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m59 98.7l3.9 4.3 2-5.5z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m50 99l3 5 3-5z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m41.1 97.5l2 5.5 3.9-4.3z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m32.6 94.4l0.9 5.7 4.7-3.5z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m24.9 89.6l-0.2 5.8 5.2-2.5z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m18.4 83.4l-1.5 5.7 5.7-1.5z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m13.1 76.1l-2.5 5.2 5.8-0.2z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m9.4 67.8l-3.5 4.7 5.7 0.9z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m7.3 59l-4.3 3.9 5.5 2z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m7 50l-5 3 5 3z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m8.5 41.1l-5.5 2 4.3 3.9z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m11.6 32.6l-5.7 0.9 3.5 4.7z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m16.4 24.9l-5.8-0.2 2.5 5.2z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m22.6 18.4l-5.7-1.5 1.5 5.7z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m29.9 13.1l-5.2-2.5 0.2 5.8z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m38.2 9.4l-4.7-3.5-0.9 5.7z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m47 7.3l-3.9-4.3-2 5.5z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m56 7l-3-5-3 5z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m64.9 8.5l-2-5.5-3.9 4.3z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m73.4 11.6l-0.9-5.7-4.7 3.5z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m81.1 16.4l0.2-5.8-5.2 2.5z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m87.6 22.6l1.5-5.7-5.7 1.5z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m92.9 29.9l2.5-5.2-5.8 0.2z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m96.6 38.2l3.5-4.7-5.7-0.9z"/>
+					<path id="cog" fill-rule="evenodd" class="s2" d="m98.7 47l4.3-3.9-5.5-2z"/>
+				</g>
+				<g id="mounts">
+					<path id="mount" fill-rule="evenodd" class="s3" d="m46 11l7 7 7-7z"/>
+					<path id="mount" fill-rule="evenodd" class="s3" d="m90.8 33.4l-4.5 8.8 8.8 4.5z"/>
+					<path id="mount" fill-rule="evenodd" class="s3" d="m83.4 82.9l-9.8-1.6-1.6 9.8z"/>
+					<path id="mount" fill-rule="evenodd" class="s3" d="m34 91.1l-1.6-9.8-9.8 1.6z"/>
+					<path id="mount" fill-rule="evenodd" class="s3" d="m10.9 46.7l8.8-4.5-4.5-8.8z"/>
+				</g>
+			</g>
+		</g>
+	</g>
+</svg>
