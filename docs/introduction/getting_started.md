@@ -5,6 +5,10 @@ title: Getting started
 sidebar_position: 3
 ---
 
+## Before we start
+
+This is a **Rust based implementation**, to look for examples in the other programming languages, please check the [SDK](/docs/sdk/introduction)
+
 ## What we will build
 
 Once you're familiar with the [architecture](/docs/introduction/architecture), it's high time to build the first application, or actually the set of applications - so-called **producer** (the one that will be publishing the messages to the stream) and **consumer** (yes, you got that right - it will handle the incoming messages stream).
@@ -15,7 +19,7 @@ The completed sample can be found in [repository](https://github.com/apache/iggy
 
 Also, please do keep in mind that we'll be using the default implementation of `IggyClient` which provides a wrapper on top of the low-level, transport-specific `Client` trait (which you can always use, if you want to have more control over the communication with the server).
 
-On the other hand, if you're looking for a **more developer-friendly client builder API** providing additional features and extensions, please check the next article under [High-level SDK](/docs/introduction/high-level-sdk) section (this is typically how you'd use Iggy SDK in the real-world applications).
+On the other hand, if you're looking for a **more developer-friendly client builder API** providing additional features and extensions, please check the next article under [High-level SDK](/docs/sdk/rust/high-level-sdk) section (this is typically how you'd use Iggy SDK in the real-world applications).
 
 Nevertheless, let's start with the basic scenario, and build the producer and consumer applications using the default `IggyClient` implementation, so you can get a better understanding of how to work with the streaming server.
 
@@ -196,14 +200,14 @@ In our example, we will simply use the string payload, and pass it via `from_str
 
 ```rust
 let payload = "hello world";
-let message = Message::from_str(&payload)?;
+let message = IggyMessage::from_str(&payload)?;
 ```
 
 Next, we need to call the appropriate method to send the messages to the server:
 
 ```rust
 let payload = "hello world";
-let message = Message::from_str(&payload)?;
+let message = IggyMessage::from_str(&payload)?;
 let messages = vec![message];
 let partitioning = Partitioning::partition_id(PARTITION_ID);
 
@@ -267,7 +271,7 @@ async fn produce_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
         for _ in 0..messages_per_batch {
             current_id += 1;
             let payload = format!("message-{current_id}");
-            let message = Message::from_str(&payload)?;
+            let message = IggyMessage::from_str(&payload)?;
             messages.push(message);
         }
         client
@@ -361,7 +365,7 @@ async fn produce_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
         for _ in 0..messages_per_batch {
             current_id += 1;
             let payload = format!("message-{current_id}");
-            let message = Message::from_str(&payload)?;
+            let message = IggyMessage::from_str(&payload)?;
             messages.push(message);
         }
         client

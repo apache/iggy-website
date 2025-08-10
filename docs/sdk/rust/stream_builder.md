@@ -1,8 +1,8 @@
 ---
-id: introduction-stream-builder
-slug: /introduction/stream-builder
+id: sdk-rust-stream-builder
+slug: /sdk/rust/stream-builder
 title: Stream Builder
-sidebar_position: 5
+sidebar_position: 4
 ---
 
 In the previous section, the high level SDK introduced the connection string to simplify the client configuration and
@@ -50,7 +50,7 @@ async fn main() -> Result<(), IggyError> {
         }
     });
 
-    producer.send_one(Message::from_str("Hello World")?).await?;
+    producer.send_one(IggyMessage::from_str("Hello World")?).await?;
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     sender.send(()).expect("Failed to send shutdown signal");
@@ -108,7 +108,7 @@ async fn main() -> Result<(), IggyError> {
     let (client, producer) =
     IggyStreamProducer::with_client_from_url(IGGY_URL, &config).await?;
 
-    producer.send_one(Message::from_str("Hola Iggy")?).await?;
+    producer.send_one(IggyMessage::from_str("Hola Iggy")?).await?;
 
     // Wait a bit for all messages to arrive.
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;

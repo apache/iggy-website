@@ -1,11 +1,11 @@
 ---
-id: introduction-high-level-sdk
-slug: /introduction/high-level-sdk
+id: sdk-rust-high-level-sdk
+slug: /sdk/rust/high-level-sdk
 title: High-level SDK
-sidebar_position: 4
+sidebar_position: 3
 ---
 
-If you've read through the [getting started](/introduction/getting-started) guide, you might have noticed that it's quite verbose and requires a lot of boilerplate code to get started. This is where the High-level SDK comes in, as it does provide a more user-friendly interface to interact with the Iggy API for both, producer and consumer. Let's consider the following features:
+If you've read through the [getting started](/docs/introduction/getting-started) guide, you might have noticed that it's quite verbose and requires a lot of boilerplate code to get started. This is where the High-level SDK comes in, as it does provide a more user-friendly interface to interact with the Iggy API for both, producer and consumer. Let's consider the following features:
 
 - Automatically creating & joining the consumer groups
 - Committing the offset depending on the particular mode (e.g. in the background based on some interval, after polling N messages etc.)
@@ -54,19 +54,23 @@ The producer is a high-level abstraction that allows you to send messages to the
 ```rust
 let mut producer = client
     .producer("my-stream", "my-topic")?
-    .batch_size(1000)
-    .send_interval(IggyDuration::from_str("5ms")?)
+    .direct(
+        DirectConfig::builder()
+            .batch_length(1000)
+            .linger_time(IggyDuration::from_str("5ms")?)
+            .build(),
+    )
     .partitioning(Partitioning::balanced())
     .build();
 producer.init().await?;
 ```
 
-The code above will result in creating the producer that will try to send the messages in batches of 1000 every 5 milliseconds. The partitioning is set to `balanced` which means that the producer will try to distribute the messages evenly across all the partitions. The `init()` method is used to ensure that the producer is ready to send the messages by validating the existence of the stream, topic etc.
+The code above will result in creating the producer that will try to send the messages in batches of 1000 every 5 milliseconds. You can choose between the `direct` (an instant producer) or the `background` (which will send the messages in the background by buffering them). The partitioning is set to `balanced` which means that the producer will try to distribute the messages evenly across all the partitions. The `init()` method is used to ensure that the producer is ready to send the messages by validating the existence of the stream, topic etc.
 
 Finally, you can use the `send()` method to send the messages to the topic. The producer doesn't need to be a mutable reference, as it's only required during the initialization phase. Here's how you can send the messages:
 
 ```rust
-let messages = vec![Message::from_str("hello")?, Message::from_str("world")?];
+let messages = vec![IggyMessage::from_str("hello")?, IggyMessage::from_str("world")?];
 producer.send(messages).await?
 ```
 
@@ -87,7 +91,7 @@ let mut consumer = client
     .auto_join_consumer_group()
     .polling_strategy(PollingStrategy::next())
     .poll_interval(IggyDuration::from_str("1ms")?)
-    .batch_size(1000)
+    .batch_length(1000)
     .build();
 ```
 
