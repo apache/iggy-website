@@ -1,0 +1,12 @@
+[build]
+  command = """
+    # install Zola into a writable dir
+    mkdir -p $HOME/bin &&
+    curl -sL https://github.com/getzola/zola/releases/download/v0.18.0/zola-v0.18.0-x86_64-unknown-linux-gnu.tar.gz \
+      | tar -xz -C $HOME/bin && \
+    export PATH=$HOME/bin:$PATH && \
+    # build blog: change into source dir, output one level up
+    cd blog-src && \
+    zola build --output-dir ../blog
+  """
+  publish = "."
