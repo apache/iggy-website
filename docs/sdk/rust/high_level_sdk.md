@@ -28,16 +28,41 @@ Which can be used to create the client like this:
 let client = IggyClient::from_connection_string("iggy://iggy:secret@localhost:3050")?;
 ```
 
-And here's the full example with its all optional parts:
-
+By default, the connection string will use TCP transport protocol, but you can also specify the other one by including `+{protocol}` to the initial `iggy` part, for example:
 ```bash
-iggy://iggy:secret@localhost:3050?tls=true&tls_domain=test.com&reconnection_retries=5&reconnection_interval=5s&reestablish_after=10s&heartbeat_interval=3s
+iggy+tcp://iggy:secret@localhost:3050
+iggy+quic://iggy:secret@localhost:3050
+iggy+http://iggy:secret@localhost:3050
 ```
 
-By default, the connection string is parsed with the following options:
+And here's the full example of TCP connection string with its all optional parts:
+
+```bash
+iggy://iggy:secret@localhost:3050?tls=true&tls_domain=test.com&reconnection_retries=5&reconnection_interval=5s&reestablish_after=10s&heartbeat_interval=3s&nodelay=true
+```
+
+By default, the **TCP** connection string is parsed with the following options:
 
 - `tls` - whether to use the TLS connection or not (default: `false`)
 - `tls_domain` - the domain to use for the TLS connection (default: `None`)
+- `tls_ca_file` - the path to the CA file to use for the TLS connection (default: `None`)
+- `reconnection_retries` - the number of retries to establish the connection (default: `unlimited`)
+- `reconnection_interval` - the interval between the reconnection attempts (default: `1s`)
+- `reestablish_after` - the time to wait before reestablishing the connection (default: `5s`)
+- `heartbeat_interval` - the interval between the heartbeat messages (default: `5s`)
+- `nodelay` - whether to use the TCP_NODELAY option or not (default: `false`)
+
+For **QUIC**, the connection string is parsed with the following options:
+
+- `response_buffer_size` - the size of the response buffer (default: `10_000_000`)
+- `max_concurrent_bidi_streams` - the maximum number of concurrent bidirectional streams (default: `10000`)
+- `datagram_send_buffer_size` - the size of the datagram send buffer (default: `100_000`)
+- `initial_mtu` - the initial MTU size (default: `1200`)
+- `send_window` - the size of the send window (default: `100_000`)
+- `receive_window` - the size of the receive window (default: `100_000`)
+- `keep_alive_interval` - the interval between the keep-alive messages (default: `5000`)
+- `max_idle_timeout` - the maximum idle timeout (default: `10000`)
+- `validate_certificate` - whether to validate the server certificate or not (default: `false`)
 - `reconnection_retries` - the number of retries to establish the connection (default: `unlimited`)
 - `reconnection_interval` - the interval between the reconnection attempts (default: `1s`)
 - `reestablish_after` - the time to wait before reestablishing the connection (default: `5s`)
@@ -97,7 +122,7 @@ let mut consumer = client
 
 The code above will result in creating the consumer that will try to consume the messages in batches of 1000 every 1 millisecond. The auto-commit is set to commit the offset every second or when all the messages are consumed (fetched). The polling strategy is set to `next` which means that the consumer will try to consume the next available message from the partition currently assigned to the consumer group (you can also invoke a regular `consumer()` builder if you do not plan to use the consumer groups). The `build()` method is used to create the consumer.
 
-Finally, you can use the `next()` method to receive the messages from the topic. The consumer doesn't need to be a mutable reference, as it's only required during the initialization phase. Here's how you can consume the messages:
+Finally, you can use the `next()` method to receive the messages from the topic. The consumer doesn't need to be a mutable reference, as it's only required during the initialization phase. The `init()` is used to ensure that the consumer is ready to receive the messages by validating the existence of the stream, topic, consumer group etc.  Here's how you can consume the messages:
 
 ```rust
 consumer.init().await?;

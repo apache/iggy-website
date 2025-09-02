@@ -44,8 +44,8 @@ The name is an abbreviation for the Italian Greyhound - small yet extremely fast
 - Additional features such as **server side message deduplication**
 - **Multi-tenant** support via abstraction of **streams** which group **topics**
 - **TLS** support for all transport protocols (TCP, QUIC, HTTPS)
-- **[Connectors](/docs/connectors/introduction)** - sinks, sources and data transformations based on the **custom Rust plugins**
-- **[Model Context Protocol](/docs/ai/mcp)** - provide context to LLM with **MCP server**
+- **[Connectors](https://github.com/apache/iggy/tree/master/core/connectors)** - sinks, sources and data transformations based on the **custom Rust plugins**
+- **[Model Context Protocol](https://github.com/apache/iggy/tree/master/core/ai/mcp)** - provide context to LLM with **MCP server**
 - Optional server-side as well as client-side **data encryption** using AES-256-GCM
 - Optional metadata support in the form of **message headers**
 - Optional **data backups and archiving** to disk or **S3** compatible cloud storage (e.g. AWS S3)
@@ -59,7 +59,7 @@ The name is an abbreviation for the Italian Greyhound - small yet extremely fast
 
 - [Rust](https://crates.io/crates/iggy)
 - [C#](https://www.nuget.org/packages/Apache.Iggy/)
-- Java
+- [Java](https://mvnrepository.com/artifact/org.apache.iggy/iggy-java-sdk)
 - [Python](https://pypi.org/project/apache-iggy/)
 - [Node.js (TypeScript)](https://www.npmjs.com/package/apache-iggy)
 - [Go](https://pkg.go.dev/github.com/apache/iggy/foreign/go)
@@ -68,21 +68,24 @@ C++ and Elixir are work in progress.
 
 ## CLI
 
-The brand new, rich, interactive CLI is implemented under the `cli` project, to provide the best developer experience. This is a great addition to the Web UI, especially for all the developers who prefer using the console tools.
+The interactive CLI is implemented under the `cli` project, to provide the best developer experience. This is a great addition to the Web UI, especially for all the developers who prefer using the console tools.
 
 Iggy CLI can be installed with `cargo install iggy-cli` and then simply accessed by typing `iggy` in your terminal.
 
 ### Web UI
 
-There's a dedicated Web UI for the server, which allows managing the streams, topics, partitions, browsing the messages and so on. This is an ongoing effort to build a comprehensive dashboard for administrative purposes of the Iggy server. Check the Web UI in the `/web` directory. The [docker image for Web UI](https://hub.docker.com/r/iggyrs/iggy-web-ui) is available, and can be fetched via `docker pull iggyrs/iggy-web-ui`.
+There's a dedicated Web UI for the server, which allows managing the streams, topics, partitions, browsing the messages and so on. This is an ongoing effort to build a comprehensive dashboard for administrative purposes of the Iggy server. Check the Web UI in the `/web` directory.
+The [docker image](https://hub.docker.com/r/apache/iggy-web-ui) is available, and can be fetched via `docker pull apache/iggy-web-ui`.
 
 ## Connectors
 
 The highly performant and modular **[runtime](/docs/connectors/runtime)** for statically typed, yet dynamically loaded connectors. Ingest the data from the external sources and push it further to the Iggy streams, or fetch the data from the Iggy streams and push it further to the external sources. **Create your own Rust plugins** by simply implementing either the `Source` or `Sink` trait and **build custom pipelines for the data processing**.
+The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, and can be fetched via `docker pull apache/iggy-connect`.
 
 ## Model Context Protocol
 
 The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open protocol that standardizes how applications provide context to LLMs. The **[Iggy MCP Server](/docs/ai/mcp)** is an implementation of the MCP protocol for the message streaming infrastructure. It can be used to provide context to LLMs in real-time, allowing for more accurate and relevant responses.
+The [docker image](https://hub.docker.com/r/apache/iggy-mcp) is available, and can be fetched via `docker pull apache/iggy-mcp`.
 
 ### Docker
 
