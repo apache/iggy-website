@@ -100,7 +100,7 @@ const config: Config = {
           position: "left",
         },
         {
-          href: "https://discord.gg/dnJQd3cHCC",
+          href: "https://discord.gg/apache-iggy",
           label: "Discord",
           position: "left",
         },
@@ -163,7 +163,7 @@ const config: Config = {
             },
             {
               label: "Discord",
-              href: "https://discord.gg/dnJQd3cHCC",
+              href: "https://discord.gg/apache-iggy",
             },
             {
               label: "X",

@@ -66,7 +66,7 @@ And this is just the beginning. **Welcome to the era of Hyper-Efficient Message 
 
 👉 Follow us, contribute, and help to build the future of the message streaming!
 
-- [Discord](https://discord.gg/C5Sux5NcRa)
+- [Discord](https://discord.gg/apache-iggy)
 - [X (Twitter)](https://x.com/ApacheIggy)
 - [Bluesky](https://bsky.app/profile/iggy.rs)
 - [LinkedIn](https://www.linkedin.com/company/apache-iggy/)

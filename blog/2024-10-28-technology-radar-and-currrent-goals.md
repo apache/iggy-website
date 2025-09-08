@@ -23,7 +23,7 @@ As you can see, we were put right into the **assess** bucket (next to such renow
 
 Besides gaining an additional amount of trust & recognition, it has led us to another conclusion - someone out there we don't know yet about (maybe even one of their customers) is using/experimenting with Iggy :)
 
-And if you are (or will be) one of such persons, please hop onto our [Discord](https://discord.gg/C5Sux5NcRa) and share your invaluable feedback with us!
+And if you are (or will be) one of such persons, please hop onto our [Discord](https://discord.gg/apache-iggy) and share your invaluable feedback with us!
 
 Now, given the recent publication and increased activity within our [OSS community](https://github.com/iggy-rs/) building the core streaming server & SDKs in multiple programming languages, it's worth mentioning what are the current goals for Iggy.
 
@@ -118,7 +118,7 @@ transport = "grpc"
 endpoint = "http://localhost:7281/v1/traces"
 ```
 
-**And just like with S3 storage, it's merely a beginning** - one of the members on our [Discord](https://discord.gg/C5Sux5NcRa) had already thought of extending this implementation by **propagating the trace context** (via existing message headers metadata) between the clients & server in order to get full understanding of the distributed systems and its dependencies, which could be further visualized by tools like [Zipkin](https://zipkin.io/) or [Jaeger](https://www.jaegertracing.io/).
+**And just like with S3 storage, it's merely a beginning** - one of the members on our [Discord](https://discord.gg/apache-iggy) had already thought of extending this implementation by **propagating the trace context** (via existing message headers metadata) between the clients & server in order to get full understanding of the distributed systems and its dependencies, which could be further visualized by tools like [Zipkin](https://zipkin.io/) or [Jaeger](https://www.jaegertracing.io/).
 
 ### Optimizations
 

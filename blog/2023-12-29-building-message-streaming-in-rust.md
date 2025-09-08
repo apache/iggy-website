@@ -147,7 +147,7 @@ Considering what's already there, being worked on or planned for the future rele
 
 **Why building another message streaming then?** A few months ago, I would probably answer - strictly for fun. Yet, after exploring more in-depth the status quo, what we would like to achieve is sort of twofold - on one hand, it'd be great to deliver the general-purpose tool, such as Kafka. On the other hand, why not to try and really push hard the OS and hardware to its limits when speaking of the performance, reliability, throughput and latency, something what e.g. Aeron does? And what if we could **put this all together** into the easy-to-use, unified platform, supporting the most popular programming languages, with the addition of modern CLI and Web UI for managing it?
 
-Only the time will tell, but **we're already excited enough to challenge ourselves**. We'd love to hear your thoughts, ideas and **feedback** - anything that will help us in building the best message streaming platform in Rust that you will enjoy using! Feel free to join our [Discord](https://discord.gg/C5Sux5NcRa) community and let us know what do you think :)
+Only the time will tell, but **we're already excited enough to challenge ourselves**. We'd love to hear your thoughts, ideas and **feedback** - anything that will help us in building the best message streaming platform in Rust that you will enjoy using! Feel free to join our [Discord](https://discord.gg/apache-iggy) community and let us know what do you think :)
 
 P.S.
 

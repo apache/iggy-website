@@ -17,7 +17,7 @@ you typically encounter one or more of the following scenarios:
 
 The stream builder provides a convenient way to create the iggy client, producer and consumer for these use cases.
 All source code examples are located in the [**examples folder**](https://github.com/apache/iggy/tree/master/core/examples/src/stream-builder) of the iggy repository. Also,
-if you encounter a problem with any of the examples below, please ask in the [**community discord**](https://discord.gg/C5Sux5NcRa).
+if you encounter a problem with any of the examples below, please ask in the [**community discord**](https://discord.gg/apache-iggy).
 
 ## IggyStream Builder
 
@@ -283,7 +283,7 @@ The default configuration only exists to get you started quickly i.e. to test ou
 similar. In practice, you often want fine grained control over the configuration. The IggyConsumerConfig gives you a way
 to configure the consumer in sufficient detail without distracting with low level details.
 Please note, if you have questions about any of those settings, please ask in
-the [community discord](https://discord.gg/C5Sux5NcRa). See below a commented configuration example:
+the [community discord](https://discord.gg/apache-iggy). See below a commented configuration example:
 
 ```rust
 use iggy::clients::consumer::{AutoCommit, AutoCommitWhen};
@@ -405,4 +405,4 @@ a new configuration from just the stream, topic, batch size and send interval. S
 ```
 
 If you encounter a problem with any of the examples show on this page,
-please ask in the [**community discord**](https://discord.gg/C5Sux5NcRa).
+please ask in the [**community discord**](https://discord.gg/apache-iggy).

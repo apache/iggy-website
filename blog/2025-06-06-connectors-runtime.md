@@ -110,4 +110,4 @@ It's also worth mentioning that the runtime uses one of the existing network pro
 
 Finally, we would love to hear your feedback and suggestions on how to improve the runtime and connectors. Please feel free to open an **[issue](https://github.com/apache/iggy/issues)**, **[pull request](https://github.com/apache/iggy/pulls)** or start a **[discussion](https://github.com/apache/iggy/discussions)**.
 
-As always, you are more than welcome to join our **[Discord community](https://discord.gg/C5Sux5NcRa)**!
+As always, you are more than welcome to join our **[Discord community](https://discord.gg/apache-iggy)**!

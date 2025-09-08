@@ -16,7 +16,7 @@ date: 2024-05-29
 
 <!--truncate-->
 
-This **particular article** turned out to be a sort of **catalyst**, as it received a really nice traction on [Reddit](https://www.reddit.com/r/rust/comments/18tgubd/iggyrs_building_message_streaming_in_rust/), and was also mentioned on the main site of [Hacker News](https://news.ycombinator.com/item?id=38868115), which I do believe were the two main reasons for the growing interest & community since then. At this point, I'd like to **thank you all very much** for such a kind feedback — honestly, during the very first weeks of 2024, there were so many things happening on our [Discord](https://discord.gg/C5Sux5NcRa), that with the rest of the team, we sometimes had a feeling as if we were providing enterprise premium support — really cool stuff!
+This **particular article** turned out to be a sort of **catalyst**, as it received a really nice traction on [Reddit](https://www.reddit.com/r/rust/comments/18tgubd/iggyrs_building_message_streaming_in_rust/), and was also mentioned on the main site of [Hacker News](https://news.ycombinator.com/item?id=38868115), which I do believe were the two main reasons for the growing interest & community since then. At this point, I'd like to **thank you all very much** for such a kind feedback — honestly, during the very first weeks of 2024, there were so many things happening on our [Discord](https://discord.gg/apache-iggy), that with the rest of the team, we sometimes had a feeling as if we were providing enterprise premium support — really cool stuff!
 
 And although it may seem as if the project development has recently slowed down a bit, I'd say it's quite the opposite — let me quickly summary, what we've achieved so far during the last few months and what we're focusing on now, as the future looks bright :)
 
@@ -24,7 +24,7 @@ And although it may seem as if the project development has recently slowed down 
 
 ## Community
 
-First and foremost, if it weren't for the community, we wouldn't have seen such an enormous growth of the Iggy's ecosystem — we've received the dozens of pull requests and there's ~250 members on our [Discord](https://discord.gg/C5Sux5NcRa). Whether we talk about bug fixes, improvements, new features, or just sharing the experiences and discussing potential ideas — it's all equally important.
+First and foremost, if it weren't for the community, we wouldn't have seen such an enormous growth of the Iggy's ecosystem — we've received the dozens of pull requests and there's ~250 members on our [Discord](https://discord.gg/apache-iggy). Whether we talk about bug fixes, improvements, new features, or just sharing the experiences and discussing potential ideas — it's all equally important.
 
 And it's been even more than that — we've seen our community members take on **building the new SDKs** in their favorite programming languages, fully on their own. Today, you can find the following list of supported SDKs for Iggy.rs — some of them could be lagging behind, but it's expected, as the project is still evolving, and it's not an easy task, to come up with a great development experience from the very beginning.
 
@@ -126,7 +126,7 @@ As mentioned before, **some of our users already experiment with Iggy** — and 
 
 We can't guarantee that it will always be like this, but at least for now, we do not see anything that would dramatically impact the existing solution. One of such things could be the **redesigned storage, I/O, and clustering feature** (as described in the previous paragraph), but even then, we'll do our best to make it as seamless upgrade as possible — and once we achieve that, it means, we're getting very close to the version 1.0.
 
-For the time being, if you're fine with a **single-node solution that delivers a really good message streaming performance**, give Iggy a try, or at least run the benchmarks to see what are its possibilities and please share your results and thoughts on our [Discord](https://discord.gg/C5Sux5NcRa) — **your opinion is really important to us and we respect it no matter what**.
+For the time being, if you're fine with a **single-node solution that delivers a really good message streaming performance**, give Iggy a try, or at least run the benchmarks to see what are its possibilities and please share your results and thoughts on our [Discord](https://discord.gg/apache-iggy) — **your opinion is really important to us and we respect it no matter what**.
 
 It's been a very productive year for our core team (we've been and still are doing this in our free time), and once again, huge thanks to all our supporters and contributors!
 
