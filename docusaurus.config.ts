@@ -24,6 +24,11 @@ const config: Config = {
   onBrokenLinks: "warn",
   onBrokenMarkdownLinks: "warn",
 
+  plugins: [
+    "docusaurus-plugin-sass",
+    'docusaurus-plugin-matomo',
+  ],
+
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
   // may want to replace "en" with "zh-Hans".
@@ -202,6 +207,12 @@ Apache®, the names of Apache projects, and the feather logo are either register
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
+    },
+    matomo: {
+      matomoUrl: 'https://analytics.apache.org/',
+      siteId: '80',
+      phpLoader: 'matomo.php',
+      jsLoader: 'matomo.js',
     },
   } satisfies Preset.ThemeConfig,
 };
