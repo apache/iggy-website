@@ -2,16 +2,16 @@ piotr:
   name: Piotr Gankiewicz
   title: Apache Iggy founder
   url: https://github.com/spetz
-  image_url: https://github.com/spetz.png
+  image_url: /img/authors/piotr.png
 
 grzegorz:
   name: Grzegorz Koszyk
   title: Apache Iggy PPMC Member
   url: https://github.com/numinnex
-  image_url: https://github.com/numinnex.png
+  image_url: /img/authors/grzegorz.png
 
 hubert:
   name: Hubert Gruszecki
   title: Apache Iggy PPMC Member
   url: https://github.com/hubcio
-  image_url: https://github.com/hubcio.png
+  image_url: /img/authors/hubert.png
