@@ -1,11 +1,7 @@
 ---
 title: Updated schemas
 slug: updated-schemas
-authors:
-  - name: Piotr Gankiewicz
-    title: Apache Iggy founder
-    url: https://github.com/spetz
-    # image_url: https://github.com/spetz.png
+authors: [piotr]
 tags: [update, schema]
 hide_table_of_contents: false
 ---

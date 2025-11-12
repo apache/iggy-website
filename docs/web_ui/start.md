@@ -9,7 +9,7 @@ Iggy Web UI provides a comprehensive dashboard for Iggy server. It allows you to
 
 ![Web UI](/img/iggy_web_ui.png)
 
-Here's the full example of the `docker-compose.yml` file that starts the Iggy server, initializes it with the `my-stream` stream and `my-topic` topic with the help of [Iggy CLI](/cli/iggy-cli), and eventually starts the Iggy Web UI:
+Here's the full example of the `docker-compose.yml` file that starts the Iggy server, initializes it with the `my-stream` stream and `my-topic` topic with the help of [Iggy CLI](../cli/start.md), and eventually starts the Iggy Web UI:
 
 ```yaml
 iggy:

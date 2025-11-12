@@ -1,0 +1,17 @@
+piotr:
+  name: Piotr Gankiewicz
+  title: Apache Iggy founder
+  url: https://github.com/spetz
+  image_url: https://github.com/spetz.png
+
+grzegorz:
+  name: Grzegorz Koszyk
+  title: Apache Iggy PPMC Member
+  url: https://github.com/numinnex
+  image_url: https://github.com/numinnex.png
+
+hubert:
+  name: Hubert Gruszecki
+  title: Apache Iggy PPMC Member
+  url: https://github.com/hubcio
+  image_url: https://github.com/hubcio.png

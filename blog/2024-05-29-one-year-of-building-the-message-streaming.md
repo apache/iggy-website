@@ -1,10 +1,6 @@
 ---
 title: Iggy.rs — one year of building the message streaming
-authors:
-  - name: Piotr Gankiewicz
-    title: Apache Iggy founder
-    url: https://github.com/spetz
-    # image_url: https://github.com/spetz.png
+authors: [piotr]
 tags: []
 hide_table_of_contents: false
 date: 2024-05-29

@@ -14,6 +14,10 @@ iggy:
   image: iggyrs/iggy:latest
   container_name: iggy
   restart: unless-stopped
+  cap_add:
+    - SYS_NICE
+  security_opt:
+    - seccomp:unconfined
   environment:
     - IGGY_ROOT_USERNAME=iggy
     - IGGY_ROOT_PASSWORD=Secret123!

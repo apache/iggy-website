@@ -1,14 +1,6 @@
 ---
 title: Zero-copy (de)serialization
-authors:
-  - name: Grzegorz Koszyk
-    title: Apache Iggy PPMC Member
-    url: https://github.com/numinnex
-   #  image_url: https://github.com/numinnex.png
-  - name: Hubert Gruszecki
-    title: Apache Iggy PPMC Member
-    url: https://github.com/hubcio
-   #  image_url: https://github.com/hubcio.png
+authors: [grzegorz, hubert]
 tags: []
 hide_table_of_contents: false
 date: 2025-05-08

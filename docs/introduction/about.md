@@ -5,13 +5,13 @@ title: About
 sidebar_position: 1
 ---
 
-**Iggy** is a persistent message streaming platform written in Rust, supporting [QUIC](https://www.chromium.org/quic/), TCP (custom binary protocol) and HTTP (regular REST API) transport protocols, **capable of processing millions of messages per second with low latency**.
+**Iggy** is a persistent message streaming platform written in Rust, supporting QUIC, TCP (custom binary specification) and HTTP (regular REST API) transport protocols, **capable of processing millions of messages per second at ultra-low latency**.
 
 Iggy provides **exceptionally high throughput and performance** while utilizing minimal computing resources.
 
-This is **not yet another extension** running on top of the existing infrastructure, such as Kafka or an SQL database.
+This is **not yet another extension** running on top of existing infrastructure, such as Kafka or SQL database.
 
-Iggy is a persistent message streaming log **built from the ground up** using low level I/O for speed and efficiency.
+Iggy is a persistent message streaming log **built from the ground up** using low-level I/O with **thread-per-core shared nothing architecture**, `io_uring` and `compio` for maximum speed and efficiency.
 
 The name is an abbreviation for the Italian Greyhound - small yet extremely fast dogs, the best in their class. See the lovely [Fabio & Cookie](https://www.instagram.com/fabio.and.cookie/) ❤️
 
@@ -23,22 +23,23 @@ The name is an abbreviation for the Italian Greyhound - small yet extremely fast
 
 - **Highly performant**, persistent append-only log for message streaming
 - **Very high throughput** for both writes and reads
-- **Low latency and predictable resource usage** thanks to the Rust compiled language (no GC)
+- **Low latency and predictable resource usage** thanks to the Rust compiled language (no GC) and `io_uring`.
 - **User authentication and authorization** with granular permissions and Personal Access Tokens (PAT)
 - Support for multiple streams, topics and partitions
 - Support for **multiple transport protocols** (QUIC, TCP, HTTP)
 - Fully operational RESTful API which can be optionally enabled
-- Client SDKs available in multiple languages
+- Available client SDK in multiple languages
+- **Thread per core shared nothing design** together with `io_uring` guarantee the best possible performance on modern `Linux` systems.
 - **Works directly with binary data**, avoiding enforced schema and serialization/deserialization overhead
-- Custom **zero-copy (de)serialization**, significantly improving performance and reducing memory usage.
+- Custom **zero-copy (de)serialization**, which greatly improves the performance and reduces memory usage.
 - Configurable server features (e.g. caching, segment size, data flush interval, transport protocols etc.)
 - Server-side storage of **consumer offsets**
-- Multiple ways of polling messages:
+- Multiple ways of polling the messages:
   - By offset (using the indexes)
   - By timestamp (using the time indexes)
   - First/Last N messages
-  - Next N messages for a specific consumer
-- Possibility of **auto committing the offset** (e.g. to achieve _at-most-once_ delivery)
+  - Next N messages for the specific consumer
+- Possibility of **auto committing the offset** (e.g. to achieve *at-most-once* delivery)
 - **Consumer groups** providing the message ordering and horizontal scaling across the connected clients
 - **Message expiry** with auto deletion based on the configurable **retention policy**
 - Additional features such as **server side message deduplication**
@@ -53,7 +54,7 @@ The name is an abbreviation for the Italian Greyhound - small yet extremely fast
 - Built-in **CLI** to manage the streaming server installable via `cargo install iggy-cli`
 - Built-in **benchmarking app** to test the performance
 - **Single binary deployment** (no external dependencies)
-- Runs as a single node (clustering based on Viewstamped Replication will be implemented in the near future)
+- Running as a single node (clustering based on Viewstamped Replication will be implemented in the near future)
 
 ## Supported languages SDK
 

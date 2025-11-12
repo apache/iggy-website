@@ -1,11 +1,7 @@
 ---
 title: Message state
 slug: message-state
-authors:
-  - name: Piotr Gankiewicz
-    title: Apache Iggy founder
-    url: https://github.com/spetz
-    # image_url: https://github.com/spetz.png
+authors: [piotr]
 tags: [new-features, message-state, message-checksum]
 hide_table_of_contents: false
 ---

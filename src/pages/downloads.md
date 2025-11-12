@@ -1,6 +1,7 @@
 ---
 title: Downloads
 description: Official release artifacts of Apache Iggy (Incubating)
+wrapperClassName: downloads-page
 ---
 
 # Apache Iggy (Incubating) Downloads

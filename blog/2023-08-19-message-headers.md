@@ -1,11 +1,7 @@
 ---
 title: Message headers
 slug: message-headers
-authors:
-  - name: Piotr Gankiewicz
-    title: Apache Iggy founder
-    url: https://github.com/spetz
-    # image_url: https://github.com/spetz.png
+authors: [piotr]
 tags: [new-features, message-headers, breaking-changes]
 hide_table_of_contents: false
 ---
