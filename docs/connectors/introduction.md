@@ -24,11 +24,11 @@ The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, a
 
 ## Quick Start
 
-1. Build the project in release mode, and make sure that the plugins specified in `core/connectors/config.toml` under `path` are available. You can use either of `toml`, `json` or `yaml` formats for the configuration file.
+1. Build the project in release mode (or debug, and update the connectors paths in the config accordingly), and make sure that the plugins specified in `core/connectors/runtime/example_config/connectors/` directory under `path` are available. The configuration must be provided in `toml` format.
 
 2. Run `docker compose up -d` from `/examples/rust/src/sink-data-producer` which will start the Quickwit server to be used by an example sink connector. At this point, you can access the Quickwit UI at [http://localhost:7280](http://localhost:7280) - check this dashboard again later on, after the `events` index will be created.
 
-3. Set environment variable `IGGY_CONNECTORS_CONFIG_PATH=core/connectors/runtime/config` (adjust the path as needed) pointing to the runtime configuration file.
+3. Set environment variable `IGGY_CONNECTORS_CONFIG_PATH=core/connectors/runtime/example_config/config.toml` (adjust the path as needed) pointing to the runtime configuration file.
 
 4. Start the Iggy server and invoke the following commands via Iggy CLI to create the example streams and topics used by the sample connectors.
 
@@ -45,13 +45,13 @@ The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, a
 
 ## Runtime
 
-All the connectors are implemented as Rust libraries and can be used as a part of the connector runtime. The runtime is responsible for managing the lifecycle of the connectors and providing the necessary infrastructure for the connectors to run. For more information, please refer to the **[runtime documentation](/docs/connectors/runtime)**.
+All the connectors are implemented as Rust libraries and can be used as a part of the connector runtime. The runtime is responsible for managing the lifecycle of the connectors and providing the necessary infrastructure for the connectors to run. For more information, please refer to the **[runtime documentation](https://github.com/apache/iggy/tree/master/core/connectors/runtime)**.
 
 ## Sink
 
 Sinks are responsible for consuming the messages from the configured stream(s) and topic(s) and sending them further to the specified destination. For example, the Quickwit sink connector is responsible for sending the messages to the Quickwit indexer.
 
-Please refer to the **[Sink documentation](/docs/connectors/sink)** for the details about the configuration and the sample implementation.
+Please refer to the **[Sink documentation](https://github.com/apache/iggy/tree/master/core/connectors/sinks)** for the details about the configuration and the sample implementation.
 
 When implementing `Sink`, make sure to use the `sink_connector!` macro to expose the FFI interface and allow the connector runtime to register the sink with the runtime.
 Each sink should have its own, custom configuration, which is passed along with the unique plugin ID via expected `new()` method.
@@ -60,14 +60,14 @@ Each sink should have its own, custom configuration, which is passed along with 
 
 Sources are responsible for producing the messages to the configured stream(s) and topic(s). For example, the Test source connector will generate the random messages that will be then sent to the configured stream and topic.
 
-Please refer to the **[Source documentation](/docs/connectors/source)** for the details about the configuration and the sample implementation.
+Please refer to the **[Source documentation](https://github.com/apache/iggy/tree/master/core/connectors/sources)** for the details about the configuration and the sample implementation.
 
 ## Building the connectors
 
-New connector can be built simply by implementing either `Sink` or `Source` trait. Please check the **[sink](/docs/connectors/sink)** or **[source](/docs/connectors/source)** documentation, as well as the existing examples under `/sinks` and `/sources` directories.
+New connector can be built simply by implementing either `Sink` or `Source` trait. Please check the **[sink](https://github.com/apache/iggy/tree/master/core/connectors/sinks)** or **[source](https://github.com/apache/iggy/tree/master/core/connectors/sources)** documentation, as well as the existing examples under `/sinks` and `/sources` directories.
 
 ## Transformations
 
 Field transformations (depending on the supported payload formats) can be applied to the messages either before they are sent to the specified topic (e.g. when produced by the source connectors), or before consumed by the sink connectors. To add the new transformation, simply implement the `Transform` trait and extend the existing `load` function. Each transform may have its own, custom configuration.
 
-To find out more about the transforms, stream decoders or encoders, please refer to the **[SDK documentation](/docs/connectors/sdk)**.
+To find out more about the transforms, stream decoders or encoders, please refer to the **[SDK documentation](https://github.com/apache/iggy/tree/master/core/connectors/sdk)**.

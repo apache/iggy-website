@@ -5,7 +5,7 @@ title: About
 sidebar_position: 1
 ---
 
-**Iggy** is a persistent message streaming platform written in Rust, supporting QUIC, TCP (custom binary specification) and HTTP (regular REST API) transport protocols, **capable of processing millions of messages per second at ultra-low latency**.
+**Iggy** is a persistent message streaming platform written in Rust, supporting QUIC, TCP, WebSocket (custom binary specification) and HTTP (regular REST API) transport protocols, **capable of processing millions of messages per second at ultra-low latency**.
 
 Iggy provides **exceptionally high throughput and performance** while utilizing minimal computing resources.
 
@@ -26,7 +26,7 @@ The name is an abbreviation for the Italian Greyhound - small yet extremely fast
 - **Low latency and predictable resource usage** thanks to the Rust compiled language (no GC) and `io_uring`.
 - **User authentication and authorization** with granular permissions and Personal Access Tokens (PAT)
 - Support for multiple streams, topics and partitions
-- Support for **multiple transport protocols** (QUIC, TCP, HTTP)
+- Support for **multiple transport protocols** (QUIC, TCP, WebSocket, HTTP)
 - Fully operational RESTful API which can be optionally enabled
 - Available client SDK in multiple languages
 - **Thread per core shared nothing design** together with `io_uring` guarantee the best possible performance on modern `Linux` systems.
@@ -44,7 +44,7 @@ The name is an abbreviation for the Italian Greyhound - small yet extremely fast
 - **Message expiry** with auto deletion based on the configurable **retention policy**
 - Additional features such as **server side message deduplication**
 - **Multi-tenant** support via abstraction of **streams** which group **topics**
-- **TLS** support for all transport protocols (TCP, QUIC, HTTPS)
+- **TLS** support for all transport protocols (TCP, QUIC, WebSocket, HTTPS)
 - **[Connectors](https://github.com/apache/iggy/tree/master/core/connectors)** - sinks, sources and data transformations based on the **custom Rust plugins**
 - **[Model Context Protocol](https://github.com/apache/iggy/tree/master/core/ai/mcp)** - provide context to LLM with **MCP server**
 - Optional server-side as well as client-side **data encryption** using AES-256-GCM
@@ -102,8 +102,27 @@ Additionally, you can run the `CLI` which is available in the running container,
 
 Keep in mind that running the container on operating systems other than Linux, where the Docker is running in the VM, might result in the performance degradation.
 
+Also, when running the container, **make sure to include the additional capabilities**, as you can find in [docker-compose](https://github.com/apache/iggy/blob/master/docker-compose.yml) file:
+
+```yml
+cap_add:
+  - SYS_NICE
+security_opt:
+  - seccomp:unconfined
+ulimits:
+  memlock:
+    soft: -1
+    hard: -1
+```
+
+Or when running with `docker run`:
+
+```
+docker run --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 apache/iggy:edge
+```
+
 ### Versioning
 
 The official releases follow the regular semver (`0.5.0`) or have a `latest` tag applied (`apache/iggy:latest`).
 
-We also publish edge/dev/nightly releases (e.g. `0.5.0-edge.1` or `apache/iggy:edge`), for both SDKs and the Docker images. These are typically compatible with the latest changes but are not guaranteed to be stable and, as the name suggests, are not recommended for production use.
+We also publish edge/dev/nightly releases (e.g. `0.6.0-edge.1` or `apache/iggy:edge`), for both SDKs and the Docker images. These are typically compatible with the latest changes but are not guaranteed to be stable and, as the name suggests, are not recommended for production use.

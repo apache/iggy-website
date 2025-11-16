@@ -516,3 +516,10 @@ An optional transport layer, which can be used to connect to the server with any
 Similar to TCP it's a stateful protocol, however, it's not as performant as TCP. QUIC support is built on top of [Quinn](https://github.com/quinn-rs/quinn) library, and all the remaining options are essentially the direct mapping of the options available in Quinn. QUIC and TCP use the same custom binary protocol specification.
 
 To consume the QUIC API from Iggy SDK, you need to make use of the available `QuicClient` component.
+
+
+### WebSocket
+
+An optional transport layer, which can be used to connect to the server with any tool or application that supports WebSocket. It is enabled by default, but you can disable it by setting `enabled` to `false`. The `address` option specifies the address and port to listen on.
+
+To consume the WebSocket API from Iggy SDK, you need to make use of the available `WebSocketClient` component.
