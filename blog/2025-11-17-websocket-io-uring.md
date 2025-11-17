@@ -1,6 +1,6 @@
 ---
 slug: websocket-support-for-compio
-title: "Building compio-ws: WebSocket Support for Completion-Based I/O in Apache Iggy"
+title: "Building WebSocket Protocol in Apache Iggy using io_uring and Completion Based I/O Architecture"
 authors: [krishna]
 tags: [websocket, io_uring, async, compio, performance]
 ---
@@ -359,8 +359,15 @@ To understand the real-world performance characteristics of compio-ws, we ran Ap
 
 The following benchmarks are run using AWS i3en.3xlarge instance using 24.04 Ubuntu OS.
 
+**Hardware Specifications:**
+- **CPU:** Intel Xeon Platinum 8259CL @ 2.50GHz (Cascade Lake)
+- **Cores:** 6 physical cores with hyperthreading (12 vCPUs total)
+- **Cache:** 36 MB L3 cache
+- **Memory:** 96 GB RAM
+- **Storage:** Local NVMe SSD
+
 Common benchmark setting used:
-- enable fsync and fsync every single message (`exportIGGY_SYSTEM_PARTITION_ENFORCE_FSYNC=true` and `export IGGY_SYSTEM_PARTITION_MESSAGES_REQUIRED_TO_SAVE=1`)
+- enable fsync and fsync every single message (`export IGGY_SYSTEM_PARTITION_ENFORCE_FSYNC=true` and `export IGGY_SYSTEM_PARTITION_MESSAGES_REQUIRED_TO_SAVE=1`)
 - Use huge pages in linux.
 ```
 sudo sysctl -w vm.swappiness=10
@@ -438,7 +445,7 @@ Benchmark graphs:
 ![image](/websocket-support-for-compio/pc_ws.png)
 
 
-Analysis:
+### Analysis:
 
 The results show measurable but **reasonable** overhead from the WebSocket layer:
 
