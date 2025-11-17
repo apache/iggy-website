@@ -1,19 +1,23 @@
 ---
 slug: websocket-support-for-compio
-title: "Building `compio-ws`: WebSocket Support for Completion-Based I/O in Apache Iggy"
+title: "Building compio-ws: WebSocket Support for Completion-Based I/O in Apache Iggy"
 authors: [krishna]
-tags: [websocket, rust, compio, performance]
+tags: [websocket, io_uring, async, compio, performance]
 ---
 
 ## Introduction
 
-In our [0.5.0 release blog post](https://iggy.apache.org/blogs/2025/08/10/release-0.5.0), we announced that work was underway on a complete rewrite of Apache Iggy's core architecture using io_uring with a thread-per-core, shared nothing design. This architectural redesign aims to further improve performance, reduce tail latecies and lower resource usage by leveraging io_uring's completion based I/O model.
+In our [0.5.0 release blog post](https://iggy.apache.org/blogs/2025/08/10/release-0.5.0), we announced that work was underway on a complete rewrite of Apache Iggy's core architecture using io_uring with a thread-per-core, shared nothing design. This architectural redesign aims to further improve performance, reduce tail latecies and lower resource usage by **leveraging io_uring's completion based I/O model**.
+
+<!--truncate-->
 
 As part of this rewrite, we migrated from Tokio to [compio](https://github.com/compio-rs/compio), a completion-based async runtime that allows us to better utilize io_uring capabilities. However, it also presents different challenges when integrating with the wider Rust ecosystem.
 
 We came across one such challenge when we needed to add WebSocket support to Iggy server. WebSockets are useful for browser clients and streaming dashboards. The Rust ecosystem has excellent WebSocket libraries like [tungstenite](https://github.com/snapview/tungstenite-rs) and [tokio-tungstenite](https://github.com/snapview/tokio-tungstenite) but they are made when poll-based IO was the dominanat IO paradigm. They expect shared buffers and readiness-based I/O, fundamentally incompatible with compio's completion-based model that requires owned buffers.
 
-Here we describe the journey of building compio-ws, a WebSocket implementation for the compio async runtime, and the engineering challenges we faced bridging two fundamentally different I/O models.
+Here we describe our journey of building compio-ws, a WebSocket implementation for the compio async runtime, and the engineering challenges we faced bridging two fundamentally different I/O models and it finally lead to us [contributing](https://github.com/compio-rs/compio/pull/501) to `compio`.
+
+---
 
 ## Understanding the architectural divide (poll vs completion)
 
@@ -62,6 +66,8 @@ When we need to add WebSocket support, we can't just drop in tokio-tungstenite, 
 - Presents synchronous Read/Write traits to tungstenite
 - Efficiently bridges sync and async world
 
+---
+
 ## Challenge with Tungstenite
 
 Tungstenite is the de-facto Rust WebSocket protocol implementation. It handles all the WebSocket protocol logic:
@@ -95,38 +101,40 @@ These are fundamentally different programming models that don't compose cleanly.
 After realizing the incompatibility, we've decided to create `compio-ws` as a standalone crate. The architecture would be:
 
 ```
-                                            ┌────────────────────────────┐
-                                            │      Application Code      │
-                                            └──────────────┬─────────────┘
-                                                           │                                
-                                            ┌──────────────▼──────────────┐
-                                            │        compio-ws            │
-                                            │  WebSocket handshake / API  │
-                                            └──────────────┬──────────────┘
-                                                           │                                 
-                                                ┌──────────▼──────────┐
-                                                │     Tungstenite     │
-                                                │      (Protocol)     │
-                                                └──────────┬──────────┘
-                                                           │                   
-                                        ┌──────────────────▼────────────────────┐
-                                        │            Bridge Layer               │
-                                        │        (GrowableSyncStream)           │
-                                        │ Sync Read/Write  ↕  Async Buffer I/O  │
-                                        └──────────────────┬────────────────────┘
-                                                           │                   
-                                                ┌──────────▼──────────┐
-                                                │    Compio Runtime   │
-                                                │     (io_uring I/O)  │
-                                                └─────────────────────┘
+                                ┌────────────────────────────┐
+                                │      Application Code      │
+                                └──────────────┬─────────────┘
+                                               │                                
+                                ┌──────────────▼──────────────┐
+                                │        compio-ws            │
+                                │  WebSocket handshake / API  │
+                                └──────────────┬──────────────┘
+                                               │                                 
+                                    ┌──────────▼──────────┐
+                                    │     Tungstenite     │
+                                    │      (Protocol)     │
+                                    └──────────┬──────────┘
+                                               │                   
+                            ┌──────────────────▼────────────────────┐
+                            │            Bridge Layer               │
+                            │        (GrowableSyncStream)           │
+                            │ Sync Read/Write  ↕  Async Buffer I/O  │
+                            └──────────────────┬────────────────────┘
+                                               │                   
+                                    ┌──────────▼──────────┐
+                                    │    Compio Runtime   │
+                                    │     (io_uring I/O)  │
+                                    └─────────────────────┘
 
 ```
 
 The key insight: we need a bridge layer that provides synchronous Read/Write traits to tungstenite while internally using compio's async owned-buffer I/O.
 
-## First Attempt: SyncStream
+---
 
-Compio already provides SyncStream in the compio-io::compat module specifically for interoperating with libraries that expect synchronous I/O traits. It's a clever structure that maintains internal buffers to bridge the async/sync boundary:
+## First Attempt: `SyncStream`
+
+Compio already provides `SyncStream` in the `compio-io::compat` module specifically for interoperating with libraries that expect synchronous I/O traits. It's a clever structure that maintains internal buffers to bridge the async/sync boundary:
 
 ```rust
 pub struct SyncStream<S> {
@@ -144,7 +152,7 @@ impl<S> SyncStream<S> {
 }
 ```
 
-The default DEFAULT_BUF_SIZE is 8KB, but you can specify any capacity you want. Once created, the buffer capacity is fixed. It never grows. This can be a problem, which we will discuss below, read along.
+The default `DEFAULT_BUF_SIZE` is 8KB, but you can specify any capacity you want. Once created, the buffer capacity is fixed. It never grows. This can be a problem, which we will discuss below, read along.
 
 Here's how it works:
 
@@ -255,7 +263,8 @@ loop {
 }
 ```
 
-### The problem with fixed buffer size in SyncStream
+---
+## The problem with fixed buffer size in `SyncStream`
 
 The initial implementation worked perfectly for messages smaller than the buffer. WebSocket handshakes completed, ping/pong frames exchanged, text messages flowed. Everything seemed fine.
 
@@ -298,7 +307,7 @@ The sync trait contract requires immediate success or `WouldBlock`. There's no w
 
 We tried the obvious fix of increasing the `SyncStream` buffer size to 1MB. Which worked perfectly and compio-ws passed all tests in the standard autobahn testsuite. But this solution is still fragile when the user doesn't know the peak memory usage of their workload and this can lead to overprovisioning and wastage of server resources. 
 
-## The Solution: GrowableSyncStream
+## The Solution: `GrowableSyncStream`
 
 Design goals:
 - Dynamic growth: Buffers start small and grow as needed
@@ -339,6 +348,8 @@ Write path:
 - `flush_write_buf()` handles progressive flushing and shrinks back to base
 
 With these changes compio-ws successfully passes the all the tests in `autobahn-testsuite` that `tokio-tungstenite` passes.
+
+---
 
 ## Benchmarks
 
@@ -387,7 +398,15 @@ We compared two scenarios:
 | Max          | 11.63 ms |  16.88 ms | +5.25 ms (45.1% higher) |
 | Min          |  1.93 ms |   2.60 ms | +0.67 ms (34.7% higher) |
 
------
+Benchmark graphs:
+
+#### TCP 
+![image](/websocket-support-for-compio/tcp-1234.png)
+
+#### WebSocket
+![image](/websocket-support-for-compio/ws-1234.png)
+
+---
 
 Next we look at pinned-consumer benchmark.
 
@@ -410,34 +429,51 @@ Workload characteristics:
 | Max          | 2.02 ms |  10.44 ms | +8.42 ms (416.8% higher) |
 | Min          | 0.55 ms |   1.14 ms | +0.59 ms (107.3% higher) |
 
+Benchmark graphs:
+
+#### TCP 
+![image](/websocket-support-for-compio/pc_tcp.png)
+
+#### WebSocket
+![image](/websocket-support-for-compio/pc_ws.png)
+
 
 Analysis:
 
-WebSocket shows ~1.5-2 ms higher average latency:
+The results show measurable but **reasonable** overhead from the WebSocket layer:
+
+**Producer latency:** WebSocket adds ~0.8-1.0ms across most percentiles (30-40% higher than TCP). Even at P9999, we achieve 9.48ms latency - impressive for a durable workload with fsync-per-message enabled.
+
+**Consumer latency:** WebSocket shows roughly 2× the latency of raw TCP, adding ~0.7-1.0ms. The P9999 of 2.52ms demonstrates consistent performance even at high percentiles.
+
+Under durability constraints, achieving single-digit millisecond latencies at P9999 for producers and sub-3ms for consumers is quite good.
+
+**Adapter layer cost:** The current implementation uses GrowableSyncStream as a bridge between sync and async I/O models. The buffer grows in linear increments, which can be suboptimal for large messages. However, for this first implementation enabling WebSocket support in a completion-based runtime, the performance is acceptable.
+
+**WebSocket protocol overhead:**
 - WebSocket framing: each message needs frame headers.
 - Masking: XOR operation on payload
-- Buffering layer: GrowableSyncStream adds one more buffer in the path
 
-The relatively poor performance of WebSockets is not entirely unexpected especially when its using a buffering layer in between IO and protocol handling. The buffer also grows in linear increments so this could be suboptimal for performance. For a first cut we believe this is acceptable. GrowableSyncStream maintains roughly proportional overhead even at high percentiles. The P9999 shows larger absolute differences but percentage-wise remains consistent with lower percentiles.
+**Tail latency consistency:** GrowableSyncStream maintains roughly proportional overhead even at high percentiles. The P9999 shows larger absolute differences but percentage-wise remains consistent with lower percentiles, indicating predictable behavior under load.
 
-
+---
 
 ## Future Work
 
 1. Smarter Buffer Growth
-- Current: Linear `base_capacity` increments
-- Better: Exponential growth (like `Vec::reserve`)
-- Impact: Reduce reallocation overhead for large messages
+   - Current: Linear `base_capacity` increments
+   - Better: Exponential growth (like `Vec::reserve`)
+   - Impact: Reduce reallocation overhead for large messages
 
 2. Buffer Pooling
-- Current: Allocate/deallocate per message
-- Better: Per-core buffer pools with object reuse
-- Impact: Reduce allocator pressure
+   - Current: Allocate/deallocate per message
+   - Better: Per-core buffer pools with object reuse
+   - Impact: Reduce allocator pressure
 
 3. WebSocket implementation with native owned buffers
-- Implement WebSocket protocol directly with owned buffers from scratch.
-- Direct integration with compio to use io_uring capabilties
-- Could increase performance significantly
-- This would be a significant undertaking because the implementation should handle all corner cases of the RFC. 
+   - Implement WebSocket protocol directly with owned buffers from scratch.
+   - Direct integration with compio to use io_uring capabilities.
+   - Could increase performance significantly.
+   - This is a significant undertaking due to full RFC compliance.
 
-We [contributed](https://github.com/compio-rs/compio/pull/501) `compio-ws` to `compio` and anyone contributed interested in improving `compio-ws` can contribute to `compio`.
+We [contributed](https://github.com/compio-rs/compio/pull/501) `compio-ws` to `compio` and anyone interested in improving `compio-ws` can contribute to `compio`.
