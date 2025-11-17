@@ -3,6 +3,7 @@ slug: websocket-support-for-compio
 title: "Building WebSocket Protocol in Apache Iggy using io_uring and Completion Based I/O Architecture"
 authors: [krishna]
 tags: [websocket, io_uring, async, compio, performance]
+date: 2025-11-17
 ---
 
 ## Introduction
