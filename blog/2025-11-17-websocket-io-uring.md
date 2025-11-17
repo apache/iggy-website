@@ -1,8 +1,8 @@
 ---
-slug: websocket-io-uring
 title: "Building WebSocket Protocol in Apache Iggy using io_uring and Completion Based I/O Architecture"
 authors: [krishna]
 tags: [websocket, io_uring, async, compio, performance]
+hide_table_of_contents: false
 date: 2025-11-17
 ---
 
