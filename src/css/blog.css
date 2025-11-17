@@ -1327,9 +1327,13 @@ hr {
     opacity: 0.8;
 }
 
-.blog-tags-post-list-page article h2,
-.blog-tags-post-list-page .title_f1Hy {
-    font-size: 2rem !important;
+/* Tag pages title styling - match blog list page */
+.blog-tags-post-list-page article header h2,
+.blog-tags-post-list-page .title_f1Hy,
+.blog-tags-post-list-page article header a[href*="/blogs/"],
+h2.title_f1Hy,
+h2.title_f1Hy a {
+    font-size: 2.75rem !important;
     font-weight: 700 !important;
     letter-spacing: -0.02em !important;
     margin-bottom: 1.5rem !important;
@@ -1337,15 +1341,18 @@ hr {
     margin-top: 0 !important;
 }
 
-.blog-tags-post-list-page article h2 a,
-.blog-tags-post-list-page .title_f1Hy a {
+.blog-tags-post-list-page article header h2 a,
+.blog-tags-post-list-page .title_f1Hy a,
+h2.title_f1Hy a {
     color: var(--text-1) !important;
     text-decoration: none !important;
     transition: opacity 0.2s ease;
+    font-size: 2.75rem !important;
 }
 
-.blog-tags-post-list-page article h2 a:hover,
-.blog-tags-post-list-page .title_f1Hy a:hover {
+.blog-tags-post-list-page article header h2 a:hover,
+.blog-tags-post-list-page .title_f1Hy a:hover,
+h2.title_f1Hy a:hover {
     opacity: 0.7;
 }
 
