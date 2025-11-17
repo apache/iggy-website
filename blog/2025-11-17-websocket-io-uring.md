@@ -485,3 +485,24 @@ Under durability constraints, achieving single-digit millisecond latencies at P9
    - This is a significant undertaking due to full RFC compliance.
 
 We [contributed](https://github.com/compio-rs/compio/pull/501) `compio-ws` to `compio` and anyone interested in improving `compio-ws` can contribute to `compio`.
+
+## Conclusion
+
+**Current state in Iggy:** WebSocket support is currently implemented with long polling on the consumer side and push-based notifications is planned for future releases. This has different implications for producers and consumers.
+
+**For consumers (receiving messages):** The current long polling implementation means consumers must repeatedly request new messages, even when none are available. This is inefficient, especially for low-power edge clients.
+
+**For producers (sending messages):** WebSocket provides immediate benefits. Instead of establishing new connections or using inefficient long polling, producers can maintain a persistent WebSocket connection and push messages directly to the server. This is particularly valuable for:
+
+- Browser-based producers sending events or telemetry
+- Edge devices reporting sensor data or metrics
+- Dashboard applications sending commands or configuration updates
+
+**What's next:** While compio-ws with GrowableSyncStream enables WebSocket support today, significant optimization potential remains. A native WebSocket implementation designed for owned buffers from the ground up could eliminate the adapter layer overhead and unlock the full performance potential of io_uring's zero-copy capabilities.
+We invite the Rust community to contribute:
+
+- **Optimize** `GrowableSyncStream`: Implement exponential buffer growth and pooling
+- **Owned buffer WS protocol implementation:** Build WebSocket from scratch with owned buffers
+- **Push-based consumers:** Help implement server-push notifications in Iggy
+- **Edge client libraries:** Create WebSocket SDKs optimized for resource-constrained devices
+
