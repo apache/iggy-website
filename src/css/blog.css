@@ -391,7 +391,9 @@ BLOG POST PAGE .blog-post-page {
 
 RESPONSIVE @media screen and (max-width: 1400px) {
     .blog-list-page .container,
-    .blog-post-page .container {
+    .blog-post-page .container,
+    .blog-tags-post-list-page .container,
+    .blog-tags-list-page .container {
         padding-left: 5rem;
         padding-right: 5rem;
     }
@@ -399,7 +401,9 @@ RESPONSIVE @media screen and (max-width: 1400px) {
 
 @media screen and (max-width: 996px) {
     .blog-list-page .container,
-    .blog-post-page .container {
+    .blog-post-page .container,
+    .blog-tags-post-list-page .container,
+    .blog-tags-list-page .container {
         padding: 2rem 2rem;
     }
 
@@ -430,7 +434,9 @@ RESPONSIVE @media screen and (max-width: 1400px) {
 
 @media screen and (max-width: 768px) {
     .blog-list-page .container,
-    .blog-post-page .container {
+    .blog-post-page .container,
+    .blog-tags-post-list-page .container,
+    .blog-tags-list-page .container {
         padding: 2rem 1rem;
     }
 
@@ -1247,4 +1253,281 @@ hr {
     margin: 0 !important;
     padding: 0 !important;
     border: none !important;
+}
+
+/* TAG-FILTERED PAGES - Apply same styling as blog list pages */
+.blog-tags-post-list-page,
+.blog-tags-list-page {
+    background: var(--bg-1) !important;
+}
+
+.blog-tags-post-list-page .container,
+.blog-tags-list-page .container {
+    background: var(--bg-1) !important;
+    max-width: 100% !important;
+    padding: 4rem 8rem !important;
+}
+
+/* Hide sidebar on tag pages to match blog list full width */
+.blog-tags-post-list-page .col--3,
+.blog-tags-list-page .col--3 {
+    display: none !important;
+}
+
+.blog-tags-post-list-page .col--7,
+.blog-tags-list-page .col--7 {
+    max-width: 100% !important;
+    flex: 0 0 100% !important;
+}
+
+.blog-tags-post-list-page main,
+.blog-tags-list-page main,
+.blog-tags-post-list-page article,
+.blog-tags-list-page article {
+    background: var(--bg-1) !important;
+}
+
+.blog-tags-post-list-page h1,
+.blog-tags-post-list-page h2,
+.blog-tags-post-list-page h3,
+.blog-tags-post-list-page p,
+.blog-tags-post-list-page time,
+.blog-tags-post-list-page a,
+.blog-tags-post-list-page span,
+.blog-tags-post-list-page div,
+.blog-tags-list-page h1,
+.blog-tags-list-page h2,
+.blog-tags-list-page h3,
+.blog-tags-list-page p,
+.blog-tags-list-page time,
+.blog-tags-list-page a,
+.blog-tags-list-page span,
+.blog-tags-list-page div {
+    color: var(--text-1) !important;
+}
+
+.blog-tags-post-list-page h1 {
+    font-size: 4rem !important;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 4rem;
+    color: var(--text-1) !important;
+}
+
+.blog-tags-post-list-page article.margin-bottom--xl {
+    border: none;
+    background: transparent !important;
+    padding: 3rem 0;
+    margin-bottom: 3rem !important;
+    border-bottom: 1px solid var(--line-separator);
+    transition: opacity 0.2s ease;
+}
+
+.blog-tags-post-list-page article.margin-bottom--xl:hover {
+    opacity: 0.8;
+}
+
+.blog-tags-post-list-page article h2,
+.blog-tags-post-list-page .title_f1Hy {
+    font-size: 2rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em !important;
+    margin-bottom: 1.5rem !important;
+    line-height: 1.3 !important;
+    margin-top: 0 !important;
+}
+
+.blog-tags-post-list-page article h2 a,
+.blog-tags-post-list-page .title_f1Hy a {
+    color: var(--text-1) !important;
+    text-decoration: none !important;
+    transition: opacity 0.2s ease;
+}
+
+.blog-tags-post-list-page article h2 a:hover,
+.blog-tags-post-list-page .title_f1Hy a:hover {
+    opacity: 0.7;
+}
+
+.blog-tags-post-list-page article time,
+.blog-tags-post-list-page article .margin-vert--md,
+.blog-tags-post-list-page article .margin-vert--md *,
+.blog-tags-post-list-page article header *,
+.blog-tags-post-list-page .avatar__subtitle {
+    color: var(--text-1) !important;
+    font-size: 1.15rem !important;
+    font-weight: 400 !important;
+}
+
+.blog-tags-post-list-page article .markdown {
+    color: var(--text-1) !important;
+    font-size: 1.35rem !important;
+    line-height: 1.7 !important;
+    margin-top: 1.5rem !important;
+}
+
+.blog-tags-post-list-page article .markdown p {
+    color: var(--text-1) !important;
+}
+
+.blog-tags-post-list-page article footer {
+    margin-top: 2rem !important;
+}
+
+.blog-tags-post-list-page article footer a[aria-label*="Read more"] {
+    color: var(--text-1) !important;
+    font-weight: 600 !important;
+    font-size: 1.2rem !important;
+    text-decoration: none !important;
+    border-bottom: 2px solid var(--text-1);
+    transition: opacity 0.2s ease;
+}
+
+.blog-tags-post-list-page article footer a[aria-label*="Read more"]:hover {
+    opacity: 0.7;
+}
+
+.blog-tags-post-list-page article footer a[class*="tag"],
+.blog-tags-post-list-page .tags a,
+.blog-tags-list-page .tags a,
+.blog-tags-list-page a[class*="tag"] {
+    background-color: transparent !important;
+    color: var(--text-1) !important;
+    padding: 0.5rem 1rem !important;
+    border-radius: 4px !important;
+    font-size: 1.05rem !important;
+    font-weight: 500 !important;
+    text-decoration: none !important;
+    border: 1px solid var(--neutral--50) !important;
+    transition: all 0.2s ease;
+    margin-right: 0.75rem;
+    margin-bottom: 0.75rem;
+    display: inline-block;
+}
+
+.blog-tags-post-list-page article footer a[class*="tag"]:hover,
+.blog-tags-post-list-page .tags a:hover,
+.blog-tags-list-page .tags a:hover,
+.blog-tags-list-page a[class*="tag"]:hover {
+    background-color: var(--hover-grey) !important;
+    border-color: var(--text-1) !important;
+}
+
+.blog-tags-post-list-page .avatar,
+.blog-tags-post-list-page .avatar * {
+    color: var(--text-1) !important;
+}
+
+.blog-tags-post-list-page aside,
+.blog-tags-post-list-page aside *,
+.blog-tags-list-page aside,
+.blog-tags-list-page aside * {
+    color: var(--text-1) !important;
+}
+
+/* Tags List Page - Fix tag display with counts */
+.blog-tags-list-page h2 {
+    font-size: 2.5rem !important;
+    font-weight: 700 !important;
+    color: var(--text-1) !important;
+    margin-bottom: 1.5rem !important;
+}
+
+.blog-tags-list-page .hash-link {
+    display: none !important;
+}
+
+.blog-tags-list-page ul {
+    list-style: none !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 1rem !important;
+    margin-bottom: 3rem !important;
+}
+
+.blog-tags-list-page li {
+    margin: 0 !important;
+}
+
+.blog-tags-list-page a[class*="tag"] {
+    background-color: transparent !important;
+    color: var(--text-1) !important;
+    padding: 0.75rem 1.25rem !important;
+    border-radius: 6px !important;
+    font-size: 1.15rem !important;
+    font-weight: 500 !important;
+    text-decoration: none !important;
+    border: 2px solid var(--neutral--50) !important;
+    transition: all 0.2s ease !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+}
+
+.blog-tags-list-page a[class*="tag"]:hover {
+    background-color: var(--hover-grey) !important;
+    border-color: var(--primary--60) !important;
+}
+
+.blog-tags-list-page a[class*="tag"] span {
+    background-color: var(--primary--60) !important;
+    color: var(--bg-1) !important;
+    padding: 0.25rem 0.6rem !important;
+    border-radius: 4px !important;
+    font-size: 0.9rem !important;
+    font-weight: 700 !important;
+}
+
+.blog-tags-list-page hr {
+    display: none !important;
+}
+
+/* CODE BLOCK COPY BUTTON STYLING */
+button[class*="copyButton"],
+button[class*="clean-btn"][title*="Copy"],
+.theme-code-block button,
+div[class*="codeBlockContainer"] button,
+div[class*="buttonGroup"] button {
+    background-color: var(--hover-grey) !important;
+    color: var(--text-1) !important;
+    border: 1px solid var(--line-separator) !important;
+    border-radius: 4px !important;
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+button[class*="copyButton"]:hover,
+button[class*="clean-btn"][title*="Copy"]:hover,
+.theme-code-block button:hover,
+div[class*="codeBlockContainer"] button:hover,
+div[class*="buttonGroup"] button:hover {
+    background-color: var(--primary--60) !important;
+    color: var(--bg-1) !important;
+    border-color: var(--primary--60) !important;
+}
+
+button[class*="copyButton"]::before,
+button[class*="clean-btn"][title*="Copy"]::before {
+    content: "Copy" !important;
+    display: inline !important;
+    margin-right: 0.25rem !important;
+}
+
+button[class*="copyButton"][class*="copied"]::before {
+    content: "Copied!" !important;
+}
+
+/* Ensure code block buttons are visible */
+pre button,
+.prism-code button,
+.theme-code-block-highlighted-line button {
+    display: inline-block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
 }
