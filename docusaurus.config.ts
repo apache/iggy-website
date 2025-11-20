@@ -10,14 +10,12 @@ async function getGitHubStars(): Promise<string> {
     return stars >= 1000 ? `${(stars / 1000).toFixed(1)}K` : stars.toString();
   } catch (error) {
     console.error("Failed to fetch GitHub stars:", error);
-    return "3.1K";
+    return "3.2K";
   }
 }
 
 export default async function createConfig(): Promise<Config> {
   const githubStars = await getGitHubStars();
-
-  // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
   const config: Config = {
     title: "Hyper-Efficient Message Streaming at Laser Speed.",
@@ -132,9 +130,9 @@ export default async function createConfig(): Promise<Config> {
             position: "left",
           },
           {
-            href: "https://github.com/apache/iggy",
-            label: `GitHub ⭐ ${githubStars}`,
+            type: "html",
             position: "right",
+            value: `<a href="https://github.com/apache/iggy" target="_blank" rel="noopener noreferrer" class="navbar__link">GitHub ⭐ <span id="github-stars">${githubStars}</span></a>`,
           },
           {
             type: "dropdown",

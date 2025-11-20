@@ -267,6 +267,8 @@ BLOG POST PAGE .blog-post-page {
     background-color: #0d0d0d !important;
     font-size: 1rem !important;
     padding: 1.5rem !important;
+    overflow-x: auto !important;
+    max-width: 100% !important;
 }
 
 .blog-post-page .markdown pre code {
@@ -437,23 +439,134 @@ RESPONSIVE @media screen and (max-width: 1400px) {
     .blog-post-page .container,
     .blog-tags-post-list-page .container,
     .blog-tags-list-page .container {
-        padding: 2rem 1rem;
+        padding: 1.5rem 1rem !important;
     }
 
     .blog-list-page h1 {
-        font-size: 2.5rem !important;
+        font-size: 2rem !important;
+        margin-bottom: 2rem !important;
     }
 
     .blog-list-page article h2 {
-        font-size: 1.75rem !important;
+        font-size: 1.5rem !important;
+    }
+
+    .blog-list-page article h2 a,
+    h2.title_f1Hy a {
+        font-size: 1.5rem !important;
     }
 
     .blog-post-page article h1 {
-        font-size: 2.5rem !important;
+        font-size: 2rem !important;
     }
 
     .blog-post-page .markdown {
+        font-size: 1rem !important;
+    }
+
+    .blog-post-page .markdown h2 {
+        font-size: 1.5rem !important;
+    }
+
+    .blog-post-page .markdown h3 {
+        font-size: 1.25rem !important;
+    }
+
+    .blog-post-page .markdown h4 {
         font-size: 1.1rem !important;
+    }
+
+    .blog-list-page article time,
+    .blog-list-page article .margin-vert--md,
+    .blog-list-page article .margin-vert--md * {
+        font-size: 0.95rem !important;
+    }
+
+    .blog-list-page article .markdown {
+        font-size: 1rem !important;
+    }
+
+    .blog-post-page .markdown li,
+    .blog-list-page article .markdown li {
+        font-size: 1rem !important;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .blog-list-page .container,
+    .blog-post-page .container,
+    .blog-tags-post-list-page .container,
+    .blog-tags-list-page .container {
+        padding: 1rem 0.75rem !important;
+    }
+
+    .blog-list-page h1 {
+        font-size: 1.75rem !important;
+        margin-bottom: 1.5rem !important;
+    }
+
+    .blog-list-page article {
+        padding: 2rem 0 !important;
+    }
+
+    .blog-list-page article h2,
+    .blog-list-page article h2 a,
+    h2.title_f1Hy,
+    h2.title_f1Hy a {
+        font-size: 1.35rem !important;
+    }
+
+    .blog-post-page article h1 {
+        font-size: 1.75rem !important;
+    }
+
+    .blog-post-page article header {
+        margin-bottom: 2rem !important;
+    }
+
+    .blog-post-page .markdown {
+        font-size: 0.95rem !important;
+    }
+
+    .blog-post-page .markdown h2 {
+        font-size: 1.35rem !important;
+        margin-top: 2rem !important;
+    }
+
+    .blog-post-page .markdown h3 {
+        font-size: 1.15rem !important;
+    }
+
+    .blog-post-page .markdown pre {
+        margin: 1.5rem -0.75rem !important;
+        border-radius: 0 !important;
+        font-size: 0.85rem !important;
+    }
+
+    .blog-post-page .markdown pre code {
+        font-size: 0.85rem !important;
+    }
+
+    .blog-post-page .markdown ul,
+    .blog-post-page .markdown ol {
+        padding-left: 1.5rem !important;
+    }
+
+    .blog-post-page .markdown table {
+        font-size: 0.85rem !important;
+    }
+
+    .blog-post-page .markdown th,
+    .blog-post-page .markdown td {
+        padding: 0.75rem 0.5rem !important;
+    }
+
+    .pagination-nav__link {
+        padding: 1.5rem 1rem !important;
+    }
+
+    .pagination-nav__label {
+        font-size: 1rem !important;
     }
 }
 
@@ -650,6 +763,8 @@ DOCS PAGES .docs-wrapper,
     background-color: #0d0d0d !important;
     font-size: 1rem !important;
     padding: 1.5rem !important;
+    overflow-x: auto !important;
+    max-width: 100% !important;
 }
 
 .theme-doc-markdown pre code {
@@ -1042,6 +1157,157 @@ main.docMainContainer_TBSr {
     padding-right: 8rem !important;
 }
 
+@media screen and (max-width: 996px) {
+    .container.padding-top--md.padding-bottom--lg {
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
+
+    .theme-doc-markdown article,
+    .docs-wrapper .container {
+        padding: 2rem 2rem !important;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    .container.padding-top--md.padding-bottom--lg {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    .theme-doc-markdown article,
+    .docs-wrapper .container {
+        padding: 1.5rem 1rem !important;
+    }
+
+    .theme-doc-markdown h1 {
+        font-size: 2rem !important;
+    }
+
+    .theme-doc-markdown h2 {
+        font-size: 1.5rem !important;
+        margin-top: 2rem !important;
+    }
+
+    .theme-doc-markdown h3 {
+        font-size: 1.25rem !important;
+        margin-top: 1.5rem !important;
+    }
+
+    .theme-doc-markdown h4 {
+        font-size: 1.1rem !important;
+    }
+
+    .theme-doc-markdown,
+    .theme-doc-markdown article {
+        font-size: 1rem !important;
+    }
+
+    .theme-doc-markdown li {
+        font-size: 1rem !important;
+    }
+
+    .theme-doc-markdown pre {
+        font-size: 0.9rem !important;
+    }
+
+    .theme-doc-markdown pre code {
+        font-size: 0.85rem !important;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .container.padding-top--md.padding-bottom--lg {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    .theme-doc-markdown article,
+    .docs-wrapper .container {
+        padding: 1rem 0.75rem !important;
+    }
+
+    .theme-doc-markdown h1 {
+        font-size: 1.75rem !important;
+        margin-bottom: 1.5rem !important;
+    }
+
+    .theme-doc-markdown h2 {
+        font-size: 1.35rem !important;
+        margin-top: 2rem !important;
+        padding-bottom: 0.5rem !important;
+    }
+
+    .theme-doc-markdown h3 {
+        font-size: 1.15rem !important;
+        margin-top: 1.5rem !important;
+    }
+
+    .theme-doc-markdown h4 {
+        font-size: 1rem !important;
+    }
+
+    .theme-doc-markdown,
+    .theme-doc-markdown article,
+    .theme-doc-markdown p,
+    .theme-doc-markdown li {
+        font-size: 0.95rem !important;
+        line-height: 1.6 !important;
+    }
+
+    .theme-doc-markdown ul,
+    .theme-doc-markdown ol {
+        padding-left: 1.5rem !important;
+    }
+
+    .theme-doc-markdown pre {
+        margin: 1.5rem -0.75rem !important;
+        border-radius: 0 !important;
+        font-size: 0.85rem !important;
+        padding: 1rem !important;
+    }
+
+    .theme-doc-markdown pre code {
+        font-size: 0.8rem !important;
+    }
+
+    .theme-doc-markdown table {
+        font-size: 0.85rem !important;
+        display: block !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+
+    .theme-doc-markdown th,
+    .theme-doc-markdown td {
+        padding: 0.75rem 0.5rem !important;
+        font-size: 0.85rem !important;
+    }
+
+    .theme-doc-markdown blockquote {
+        margin: 1.5rem -0.5rem !important;
+        padding: 1rem 1.25rem !important;
+    }
+
+    .theme-doc-markdown img {
+        margin: 2rem -0.75rem !important;
+        border-radius: 4px !important;
+    }
+
+    .menu__link {
+        font-size: 0.9rem !important;
+        padding: 0.4rem 0.75rem !important;
+    }
+
+    .pagination-nav__link {
+        padding: 1rem 0.75rem !important;
+    }
+
+    .pagination-nav__label {
+        font-size: 0.95rem !important;
+    }
+}
+
 .blog-list-page hr,
 .blog-list-page article hr {
     display: none !important;
@@ -1151,6 +1417,8 @@ pre {
     background-color: #0d0d0d !important;
     font-size: 1rem !important;
     padding: 1.5rem !important;
+    overflow-x: auto !important;
+    max-width: 100% !important;
 }
 
 .markdown pre code,
