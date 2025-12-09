@@ -14,7 +14,8 @@ The Apache Iggy project publishes source‑code releases as compressed archives 
 
 | Version | Date&nbsp;(UTC) | Source archive | Signatures&nbsp;&amp;&nbsp;checksums |
 |---------|-----------------|----------------|--------------------------------------|
-| **0.5.0-incubating** *(latest)* | 2025-08-10 | [`iggy-0.5.0-incubating-src.tar.gz`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz) | [`asc`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.asc), [`sha512`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.sha512) |
+| **0.6.0-incubating** *(latest)* | 2025-12-09 | [`iggy-0.6.0-incubating-src.tar.gz`](https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz) | [`asc`](https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz.asc), [`sha512`](https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz.sha512) |
+| **0.5.0-incubating** | 2025-08-10 | [`iggy-0.5.0-incubating-src.tar.gz`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz) | [`asc`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.asc), [`sha512`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.sha512) |
 | **0.4.300-incubating** | 2025-04-15 | [`iggy-0.4.300-incubating-src.tar.gz`](https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz) | [`asc`](https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz.asc), [`sha512`](https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz.sha512) |
 
 Older incubating releases will appear in the same [downloads directory](https://downloads.apache.org/incubator/iggy/) after they are approved by the Apache Incubator PMC. Permanent archives are kept at [archive.apache.org](https://archive.apache.org/); none exist yet because there are no older releases.
@@ -34,14 +35,14 @@ Older incubating releases will appear in the same [downloads directory](https://
 ```bash
 # Download artifact, matching .asc file and KEYS
 curl -O https://downloads.apache.org/incubator/iggy/KEYS
-curl -O https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz
-curl -O https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.asc
+curl -O https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz
+curl -O https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz.asc
 
 # Import Iggy release keys
 gpg --import KEYS
 
 # Verify signature
-gpg --verify iggy-0.5.0-incubating-src.tar.gz.asc iggy-0.5.0-incubating-src.tar.gz
+gpg --verify iggy-0.6.0-incubating-src.tar.gz.asc iggy-0.6.0-incubating-src.tar.gz
 ```
 
 A successful verification prints **"Good signature from …"** and the fingerprint of an Iggy committer’s key.
@@ -51,14 +52,14 @@ A successful verification prints **"Good signature from …"** and the fingerpri
 ### Verify the checksum
 
 ```bash
-curl -O https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.sha512
-shasum -a 512 -c iggy-0.5.0-incubating-src.tar.gz.sha512
+curl -O https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz.sha512
+shasum -a 512 -c iggy-0.6.0-incubating-src.tar.gz.sha512
 ```
 
 The command should output:
 
 ```
-iggy-0.5.0-incubating-src.tar.gz: OK
+iggy-0.6.0-incubating-src.tar.gz: OK
 ```
 
 ---
