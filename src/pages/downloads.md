@@ -12,11 +12,11 @@ The Apache Iggy project publishes source‑code releases as compressed archives 
 
 ## Releases
 
-| Version | Date&nbsp;(UTC) | Source archive | Signatures&nbsp;&amp;&nbsp;checksums |
-|---------|-----------------|----------------|--------------------------------------|
-| **0.6.0-incubating** *(latest)* | 2025-12-09 | [`iggy-0.6.0-incubating-src.tar.gz`](https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz) | [`asc`](https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz.asc), [`sha512`](https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz.sha512) |
-| **0.5.0-incubating** | 2025-08-10 | [`iggy-0.5.0-incubating-src.tar.gz`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz) | [`asc`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.asc), [`sha512`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.sha512) |
-| **0.4.300-incubating** | 2025-04-15 | [`iggy-0.4.300-incubating-src.tar.gz`](https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz) | [`asc`](https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz.asc), [`sha512`](https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz.sha512) |
+| Version | Date&nbsp;(UTC) | Source archive | Signatures&nbsp;&amp;&nbsp;checksums |Changelog |
+|---------|-----------------|----------------|--------------------------------------|----------------|
+| **0.6.0-incubating** *(latest)* | 2025-12-09 | [`iggy-0.6.0-incubating-src.tar.gz`](https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz) | [`asc`](https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz.asc), [`sha512`](https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz.sha512) |[0.6.0](https://iggy.apache.org/blogs/2025/12/09/release-0.6.0)
+| **0.5.0-incubating** | 2025-08-10 | [`iggy-0.5.0-incubating-src.tar.gz`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz) | [`asc`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.asc), [`sha512`](https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.sha512) |[0.5.0](https://iggy.apache.org/blogs/2025/08/10/release-0.5.0/)
+| **0.4.300-incubating** | 2025-04-15 | [`iggy-0.4.300-incubating-src.tar.gz`](https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz) | [`asc`](https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz.asc), [`sha512`](https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz.sha512) |[0.4.300](https://github.com/apache/iggy/releases/tag/server-0.4.300)
 
 Older incubating releases will appear in the same [downloads directory](https://downloads.apache.org/incubator/iggy/) after they are approved by the Apache Incubator PMC. Permanent archives are kept at [archive.apache.org](https://archive.apache.org/); none exist yet because there are no older releases.
 
