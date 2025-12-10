@@ -9,15 +9,15 @@ SDK provides the commonly used structs and traits such as `Sink` and `Source`, a
 
 Moreover, it contains both, the `decoders` and `encoders` modules, implementing either `StreamDecoder` or `StreamEncoder` traits, which are used when consuming or producing data from/to Iggy streams.
 
-SDK is WiP, and it'd certainly benefit from having the support of multiple format schemas, such as Protobuf, Avro, Flatbuffers etc. including decoding/encoding the data between the different formats (when applicable) and supporting the data transformations whenever possible (easy for JSON, but complex for Bincode for example).
+SDK is WiP, and it'd certainly benefit from having the support of multiple format schemas, such as Avro, Flatbuffers etc. including decoding/encoding the data between the different formats (when applicable) and supporting the data transformations whenever possible (easy for JSON, but complex for Bincode for example).
 
-Last but not least, the different `transforms` are available, to transform (add, update, delete etc.) the particular fields of the data being processed via external configuration. It's as simple as adding a new transform to the `transforms` section of the particular connector configuration:
+Last but not least, the different `transforms` are available, to transform (add, update, delete etc.) the particular fields of the data being processed via external configuration. It's as simple as adding a new transform to the `transforms` section of the particular connector configuration file:
 
 ```toml
-[sources.random.transforms.add_fields]
+[transforms.add_fields]
 enabled = true
 
-[[sources.random.transforms.add_fields.fields]]
+[[transforms.add_fields.fields]]
 key = "message"
 value.static = "hello"
 ```
@@ -28,7 +28,9 @@ The SDK includes support for Protocol Buffers (protobuf) format with both encodi
 
 ### Configuration Example
 
-Here's a complete example configuration for using Protocol Buffers with Iggy connectors:
+Here's a complete example configuration for using Protocol Buffers with Iggy connectors.
+
+**Main runtime config (config.toml):**
 
 ```toml
 [iggy]
@@ -36,41 +38,57 @@ address = "localhost:8090"
 username = "iggy"
 password = "iggy"
 
-[sources.protobuf_source]
+[connectors]
+config_type = "local"
+config_dir = "path/to/connectors"
+```
+
+**Source connector config (connectors/protobuf_source.toml):**
+
+```toml
+type = "source"
+key = "protobuf"
 enabled = true
+version = 0
 name = "Protobuf Source"
 path = "target/release/libiggy_connector_protobuf_source"
 
-[[sources.protobuf_source.streams]]
+[[streams]]
 stream = "protobuf_stream"
 topic = "protobuf_topic"
 schema = "proto"
 batch_size = 1000
 send_interval = "5ms"
 
-[sources.protobuf_source.config]
+[plugin_config]
 schema_path = "schemas/message.proto"
 message_type = "com.example.Message"
 use_any_wrapper = true
+```
 
-[sinks.protobuf_sink]
+**Sink connector config (connectors/protobuf_sink.toml):**
+
+```toml
+type = "sink"
+key = "protobuf"
 enabled = true
+version = 0
 name = "Protobuf Sink"
 path = "target/release/libiggy_connector_protobuf_sink"
 
-[[sinks.protobuf_sink.streams]]
+[[streams]]
 stream = "protobuf_stream"
 topic = "protobuf_topic"
 schema = "proto"
 
-[[sinks.protobuf_sink.transforms]]
+[[transforms]]
 type = "proto_convert"
 target_format = "json"
 preserve_structure = true
 
 field_mappings = { "old_field" = "new_field", "legacy_id" = "id" }
 
-[[sinks.protobuf_sink.transforms]]
+[[transforms]]
 type = "proto_convert"
 target_format = "proto"
 preserve_structure = false

@@ -222,6 +222,7 @@ Apache®, the names of Apache projects, and the feather logo are either register
       prism: {
         theme: prismThemes.github,
         darkTheme: prismThemes.dracula,
+        additionalLanguages: ["toml", "bash", "rust", "json"],
       },
       matomo: {
         matomoUrl: "https://analytics.apache.org/",

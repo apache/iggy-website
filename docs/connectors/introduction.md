@@ -7,8 +7,6 @@ sidebar_position: 1
 
 The highly performant and modular runtime for statically typed, yet dynamically loaded connectors. Ingest the data from the external sources and push it further to the Iggy streams, or fetch the data from the Iggy streams and push it further to the external sources. Create your own Rust plugins by simply implementing either the `Source` or `Sink` trait and build custom pipelines for the data processing.
 
-**This is still WiP, and the runtime can be started only after compilation from the source code (no installable package yet).**
-
 The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, and can be fetched via `docker pull apache/iggy-connect`.
 
 ## Features
@@ -20,7 +18,8 @@ The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, a
 - **Statically Typed**: Ensures type safety and compile-time checks, reducing runtime errors.
 - **Easy Customization**: Provides a simple interface for implementing custom connectors, making it easy to create new plugins.
 - **Data transformation**: Supports data transformation with the help of existing functions.
-- **Powerful configuration**: Define your sinks, sources, and transformations in the configuration file.
+- **Powerful configuration**: Define your sinks, sources, and transformations in the configuration file or fetch them from a remote HTTP API.
+- **Flexible configuration providers**: Support for local file-based and HTTP-based configuration providers for centralized configuration management.
 
 ## Quick Start
 
@@ -43,15 +42,29 @@ The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, a
 
 6. Start the connector runtime `cargo run --bin iggy-connectors -r` - you should be able to browse Quickwit UI with records being constantly added to the `events` index. At the same time, you should see the new messages being added to the `example` stream and `topic1` topic by the test source connector - you can use Iggy Web UI to browse the data. The messages will have applied the basic fields transformations.
 
+## Configuration
+
+The same rules applies when it comes to overringing the configuration via environment variables as for the main [Iggy server](docs/server/configuration).
+
+You can provide the following envs during the runtime startup:
+
+```
+IGGY_CONNECTORS_ENV_PATH - path to the .env file for custom environment variables
+
+IGGY_CONNECTORS_CONFIG_PATH - path to the connectors runtime configuration file
+```
+
+Any configuration section can be overriden with `IGGY_CONNECTORS_` prefix, followed by the section name and the key name, e.g. `IGGY_CONNECTORS_IGGY_USERNAME`.
+
 ## Runtime
 
-All the connectors are implemented as Rust libraries and can be used as a part of the connector runtime. The runtime is responsible for managing the lifecycle of the connectors and providing the necessary infrastructure for the connectors to run. For more information, please refer to the **[runtime documentation](https://github.com/apache/iggy/tree/master/core/connectors/runtime)**.
+All the connectors are implemented as Rust libraries and can be used as a part of the connector runtime. The runtime is responsible for managing the lifecycle of the connectors and providing the necessary infrastructure for the connectors to run. For more information, please refer to the **[runtime documentation](/docs/connectors/runtime)**.
 
 ## Sink
 
 Sinks are responsible for consuming the messages from the configured stream(s) and topic(s) and sending them further to the specified destination. For example, the Quickwit sink connector is responsible for sending the messages to the Quickwit indexer.
 
-Please refer to the **[Sink documentation](https://github.com/apache/iggy/tree/master/core/connectors/sinks)** for the details about the configuration and the sample implementation.
+Please refer to the **[Sink documentation](/docs/connectors/sink)** for the details about the configuration and the sample implementation.
 
 When implementing `Sink`, make sure to use the `sink_connector!` macro to expose the FFI interface and allow the connector runtime to register the sink with the runtime.
 Each sink should have its own, custom configuration, which is passed along with the unique plugin ID via expected `new()` method.
@@ -60,14 +73,14 @@ Each sink should have its own, custom configuration, which is passed along with 
 
 Sources are responsible for producing the messages to the configured stream(s) and topic(s). For example, the Test source connector will generate the random messages that will be then sent to the configured stream and topic.
 
-Please refer to the **[Source documentation](https://github.com/apache/iggy/tree/master/core/connectors/sources)** for the details about the configuration and the sample implementation.
+Please refer to the **[Source documentation](/docs/connectors/source)** for the details about the configuration and the sample implementation.
 
 ## Building the connectors
 
-New connector can be built simply by implementing either `Sink` or `Source` trait. Please check the **[sink](https://github.com/apache/iggy/tree/master/core/connectors/sinks)** or **[source](https://github.com/apache/iggy/tree/master/core/connectors/sources)** documentation, as well as the existing examples under `/sinks` and `/sources` directories.
+New connector can be built simply by implementing either `Sink` or `Source` trait. Please check the **[sink](/docs/connectors/sink)** or **[source](/docs/connectors/source)** documentation, as well as the existing examples under `/sinks` and `/sources` directories.
 
 ## Transformations
 
 Field transformations (depending on the supported payload formats) can be applied to the messages either before they are sent to the specified topic (e.g. when produced by the source connectors), or before consumed by the sink connectors. To add the new transformation, simply implement the `Transform` trait and extend the existing `load` function. Each transform may have its own, custom configuration.
 
-To find out more about the transforms, stream decoders or encoders, please refer to the **[SDK documentation](https://github.com/apache/iggy/tree/master/core/connectors/sdk)**.
+To find out more about the transforms, stream decoders or encoders, please refer to the **[SDK documentation](/docs/connectors/sdk)**.
