@@ -44,7 +44,7 @@ The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, a
 
 ## Configuration
 
-The same rules applies when it comes to overringing the configuration via environment variables as for the main [Iggy server](docs/server/configuration).
+The same rules applies when it comes to overringing the configuration via environment variables as for the main [Iggy server](/docs/server/configuration).
 
 You can provide the following envs during the runtime startup:
 
