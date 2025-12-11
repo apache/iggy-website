@@ -452,7 +452,23 @@ validate_checksum = false
 # The threshold of buffered messages before triggering a save to disk (integer).
 # Specifies how many messages accumulate before persisting to storage.
 # Adjusting this can balance between write performance and data durability.
-messages_required_to_save = 5000
+# Together with `size_of_messages_required_to_save` it defines the threshold of buffered messages.
+# Minimum value is 32. Value has to be a multiple of 32 due to minimum
+# direct I/O block size (512 bytes) and message index size (16 bytes per message).
+# With direct I/O, writes must occur in blocks of at least 512 bytes, which equals 32 message indices.
+# The direct I/O requirement was added as forward compatibility, keep in mind that in case of 
+# discovering better solution in the future, this requirement might be removed.
+messages_required_to_save = 1024
+
+# The size threshold of buffered messages before triggering a save to disk (string).
+# Specifies how much size of messages accumulate before persisting to storage.
+# Adjusting this can balance between write performance and data durability.
+# This is soft limit, actual number of messages may be higher, depending on last batch size.
+# Together with `messages_required_to_save` it defines the threshold of buffered messages.
+# Minimum value is 512 B. Value has to be a multiple of 512 B due to direct I/O requirements.
+# Direct I/O operations must align with the underlying storage block size (typically 512 B or 4 KiB).
+# 512 B is also minimum size the block device can store atomically, so writing less than that may lead to partial writes in case of a crash/power loss.
+size_of_messages_required_to_save = "1 MiB"
 
 # Segment configuration
 [system.segment]
@@ -490,6 +506,12 @@ expiry = "1 m"
 # Controls whether streams/topics/partitions should be recreated if the expected data for existing state is missing (boolean).
 recreate_missing_state = true
 ```
+
+### Durability
+
+The single node `Iggy` server by default provides low durability guarantees, meaning that in case of a crash or power loss, some of messages might be lost.
+To fix that you can enable `enforce_fsync` option in `system.partition` section together with setting `messages_required_to_save` and `size_of_messages_required_to_save` to lowest allowed values.
+Since `messages_required_to_save` has to be at least 32 and `size_of_messages_required_to_save` at least 512 B, in case if your message size is not big enough, you might want to pad your message to 512 B boundary, or alternatively send messages in batches.
 
 ### HTTP
 

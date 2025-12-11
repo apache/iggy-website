@@ -23,6 +23,24 @@ There are advantages and disadvantages of both approaches, but the main differen
 
 As you might've guessed by now, Iggy is the latter - the message streaming platform.
 
+## Thread per core (shared nothing) + io_uring
+
+Iggy utilizies `io_uring` as the main I/O interface, which allows it to achieve high performance and low latency. Each core (shard), runs it's own instance of the server, which means that there is (almost) no shared state between the cores. This allows Iggy to scale linearly with the number of cores, as there is no contention between the cores. This architecture been proven by systems such as `redpanda` or `scylladb`, which are known for their high performance and low latency. Each shard owns an subset of partitions (units of parallelism in message streaming systems), and is responsible for handling all the I/O operations for those partitions. The requests are routed between the shards using message passing, which allows to avoid the locking. The partitions are distributed between the shards using `Murmur3` hashing algorithm, with an correction for small number of partitions.
+
+```rs
+pub fn calculate_shard_assignment(ns: &IggyNamespace, upperbound: u32) -> u16 {
+    let mut hasher = Murmur3Hasher::default();
+    hasher.write_u64(ns.inner());
+    let hash = hasher.finish32();
+    // Murmur3 has problems with weak lower bits for small integer inputs, so we use bits from the middle.
+    return ((hash >> 16) % upperbound) as u16;
+}
+```
+
+`io_uring` is an ever-growing beast, to learn more about it please check the [documentation](https://kernel.dk/io_uring.pdf) or the excellent [presentation](https://www.youtube.com/watch?v=ToSRCSijRuE) by Jens Axboe, the original author of `io_uring`.
+
+Check [benchmarking](../server/benchmarking.md) section to see some performance numbers.
+
 ## Append-only log
 
 The append-only log is the core concept of Iggy. It's a simple data structure, which is optimized for the append-only operations. It's a sequence of records, that are being appended to the end of the log. The records are immutable, so that they can't be changed once they are written to the log. The records are being written in the order they are received, which results in the log being is ordered.
