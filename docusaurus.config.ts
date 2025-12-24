@@ -10,7 +10,7 @@ async function getGitHubStars(): Promise<string> {
     return stars >= 1000 ? `${(stars / 1000).toFixed(1)}K` : stars.toString();
   } catch (error) {
     console.error("Failed to fetch GitHub stars:", error);
-    return "3.2K";
+    return "3.7K";
   }
 }
 
