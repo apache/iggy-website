@@ -11,6 +11,8 @@ In case no configuration file is found, the server will use the default configur
 
 Let's take a look at the configuration file, and discuss the available options.
 
+**Note:** This is not the default configuration file, values below are only used as reference.
+
 ```toml
 [data_maintenance.archiver]
 # Enables or disables the archiver process.
