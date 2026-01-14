@@ -7,7 +7,7 @@ sidebar_position: 5
 
 **Benchmarks should be the first-class citizens**. We believe that performance is crucial for any system, and we strive to provide the best possible performance for our users. Please check, why we believe that the **[transparent benchmarking](https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks)** is so important.
 
-We've also built the **[benchmarking platform](https://benchmarks.iggy.apache.org)** where anyone can upload the benchmarks and compare the results with others. This is the another open-source project available [here](https://github.com/iggy-rs/iggy-bench-dashboard).
+We've also built the **[benchmarking platform](https://benchmarks.iggy.apache.org)** where anyone can upload the benchmarks and compare the results with others. This is the another open-source project available [here](https://github.com/apache/iggy/tree/master/core/bench/dashboard).
 
 ![Benchmarking Platform](/img/bench_platform.png)
 
