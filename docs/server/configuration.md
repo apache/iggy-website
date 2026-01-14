@@ -5,61 +5,20 @@ title: Configuration
 sidebar_position: 2
 ---
 
-The configuration can be found in `server.toml` file in `configs` directory. The config file is loaded from the current working directory, but you can specify the path to the configuration file by setting `IGGY_CONFIG_PATH` environment variable, for example `export IGGY_CONFIG_PATH=configs/server.toml` (or other command depending on OS). You can also provide the `.env` file in order to override the configuration - the convention is to use `IGGY_` prefix for the environment variables e.g. `IGGY_HTTP_ENABLED=true`.
+The server reads its configuration from `configs/server.toml` by default. You can specify a different path by setting the `IGGY_CONFIG_PATH` environment variable (e.g., `export IGGY_CONFIG_PATH=/path/to/server.toml`). You can also use a `.env` file to override specific settings using the `IGGY_` prefix (e.g., `IGGY_HTTP_ENABLED=true`).
 
-In case no configuration file is found, the server will use the default configuration.
+If no configuration file is found, the server uses its built-in defaults.
 
-Let's take a look at the configuration file, and discuss the available options.
+Let's take a look at the available configuration options. The following example shows all settings with their default values:
+
+**Note:** For the most up-to-date configuration reference, please refer to the [server.toml](https://github.com/apache/iggy/blob/master/core/configs/server.toml) file in the project's repository.
 
 ```toml
-[data_maintenance.archiver]
-# Enables or disables the archiver process.
-enabled = false
-
-# Kind of archiver to use. Available options: "disk".
-kind = "disk"
-
-[data_maintenance.archiver.disk]
-# Path for storing the archived data on disk.
-path = "local_data/archive"
-
-[data_maintenance.archiver.s3]
-# Access key ID for the S3 bucket.
-key_id = "123"
-
-# Secret access key for the S3 bucket
-key_secret = "secret"
-
-# Name of the S3 bucket.
-bucket = "iggy"
-
-# Endpoint of the S3 region.
-endpoint = "http://localhost:9000"
-
-# Region of the S3 bucket.
-region = "eu-west-1"
-
-# Temporary directory for storing the data before uploading to S3.
-tmp_upload_dir = "local_data/s3_tmp"
-
 [data_maintenance.messages]
-# Enables or disables the archiver process for closed segments containing messages.
-archiver_enabled = false
-
 # Enables or disables the expired message cleaner process.
 cleaner_enabled = false
 
-# Interval for running the message archiver and cleaner.
-interval = "1 m"
-
-[data_maintenance.state]
-# Enables or disables the archiver process for state log.
-archiver_enabled = false
-
-# Sets whether the state archiver should overwrite existing log archive or always create a new one.
-overwrite = true
-
-# Interval for running the state archiver
+# Interval for running the message cleaner.
 interval = "1 m"
 
 # HTTP server configuration
@@ -70,11 +29,21 @@ interval = "1 m"
 enabled = true
 
 # Specifies the network address and port for the HTTP server.
-# The format is "HOST:PORT". For example, "0.0.0.0:3000" listens on all network interfaces on port 3000.
-address = "0.0.0.0:3000"
+# The format is "HOST:PORT". For example, "127.0.0.1:3000" listens on localhost only on port 3000.
+address = "127.0.0.1:3000"
 
 # Maximum size of the request body in bytes. For security reasons, the default limit is 2 MB.
 max_request_size = "2 MB"
+
+# Enables the embedded Web UI dashboard at '/ui'.
+# When set to `true` and the server is compiled with the 'iggy-web' feature,
+# the Svelte dashboard will be served at the '/ui' endpoint, providing a
+# browser-based interface for managing streams, topics, and viewing messages.
+# If the server is compiled without 'iggy-web' feature and this is set to `true`,
+# a warning will be logged at startup but the server will continue to run.
+# `true` enables the embedded Web UI (requires server built with 'iggy-web' feature).
+# `false` disables the embedded Web UI (default).
+web_ui = false
 
 # Configuration for Cross-Origin Resource Sharing (CORS).
 [http.cors]
@@ -93,7 +62,7 @@ allowed_origins = ["*"]
 
 # Lists allowed headers that can be used in CORS requests.
 # For example, ["content-type"] permits only the content-type header.
-allowed_headers = ["content-type"]
+allowed_headers = ["content-type", "authorization"]
 
 # Headers that browsers are allowed to access in CORS responses.
 # An empty array means no additional headers are exposed to browsers.
@@ -116,16 +85,16 @@ allow_private_network = false
 algorithm = "HS256"
 
 # The issuer of the JWT, typically a URL or an identifier of the issuing entity.
-issuer = "iggy.rs"
+issuer = "iggy.apache.org"
 
 # Intended audience for the JWT, usually the recipient or system intended to process the token.
-audience = "iggy.rs"
+audience = "iggy.apache.org"
 
 # Lists valid issuers for JWT validation to ensure tokens are from trusted sources.
-valid_issuers = ["iggy.rs"]
+valid_issuers = ["iggy.apache.org"]
 
 # Lists valid audiences for JWT validation to confirm tokens are for the intended recipient.
-valid_audiences = ["iggy.rs"]
+valid_audiences = ["iggy.apache.org"]
 
 # Expiry time for access tokens.
 access_token_expiry = "1 h"
@@ -137,10 +106,10 @@ clock_skew = "5 s"
 not_before = "0 s"
 
 # Secret key for encoding JWTs.
-encoding_secret = "top_secret$iggy.rs$_jwt_HS256_key#!"
+encoding_secret = "top_secret$iggy123$_jwt_HS256_key#!"
 
 # Secret key for decoding JWTs.
-decoding_secret = "top_secret$iggy.rs$_jwt_HS256_key#!"
+decoding_secret = "top_secret$iggy123$_jwt_HS256_key#!"
 
 # Indicates if the secret key is base64 encoded.
 # `true` means the secret is base64 encoded.
@@ -165,10 +134,10 @@ endpoint = "/metrics"
 enabled = false
 
 # Path to the TLS certificate file.
-cert_file = "certs/iggy_cert.pem"
+cert_file = "core/certs/iggy_cert.pem"
 
 # Path to the TLS key file.
-key_file = "certs/iggy_key.pem"
+key_file = "core/certs/iggy_key.pem"
 
 # TCP server configuration.
 [tcp]
@@ -178,8 +147,11 @@ key_file = "certs/iggy_key.pem"
 enabled = true
 
 # Defines the network address and port for the TCP server.
-# For example, "0.0.0.0:8090" listens on all network interfaces on port 8090.
-address = "0.0.0.0:8090"
+# For example, "127.0.0.1:8090" listens on localhost only on port 8090.
+address = "127.0.0.1:8090"
+
+# Enable TCP socket migration across shards.
+socket_migration = true
 
 # Whether to use ipv4 or ipv6
 ipv6 = false
@@ -191,11 +163,16 @@ ipv6 = false
 # `false` leaves TCP connections unencrypted.
 enabled = false
 
-# Path to the TLS certificate for TCP.
-certificate = "certs/iggy.pfx"
+# Enables or disables self-signed certificate generation.
+# `true` generates a self-signed certificate if cert files don't exist.
+# `false` requires certificate files to exist at the specified paths.
+self_signed = true
 
-# Password for the TLS certificate, required for accessing the private key.
-password = "iggy123"
+# Path to the TLS certificate file.
+cert_file = "core/certs/iggy_cert.pem"
+
+# Path to the TLS key file.
+key_file = "core/certs/iggy_key.pem"
 
 # Configuration for the TCP socket
 [tcp.socket]
@@ -226,8 +203,8 @@ linger = "0 s"
 enabled = true
 
 # Network address and port for the QUIC server.
-# For example, "0.0.0.0:8080" binds to all interfaces on port 8080.
-address = "0.0.0.0:8080"
+# For example, "127.0.0.1:8080" binds to localhost on port 8080.
+address = "127.0.0.1:8080"
 
 # Maximum number of simultaneous bidirectional streams in QUIC.
 max_concurrent_bidi_streams = 10_000
@@ -258,20 +235,24 @@ max_idle_timeout = "10 s"
 self_signed = true
 
 # Path to the QUIC TLS certificate file.
-cert_file = "certs/iggy_cert.pem"
+cert_file = "core/certs/iggy_cert.pem"
 
 # Path to the QUIC TLS key file.
-key_file = "certs/iggy_key.pem"
+key_file = "core/certs/iggy_key.pem"
 
-# Message cleaner configuration.
-[message_cleaner]
-# Enables or disables the background process for deleting expired messages.
-# `true` activates the message cleaner.
-# `false` turns it off, messages will not be auto-deleted based on expiry.
-enabled = true
+# Configuration for the QUIC socket
+[quic.socket]
+# Whether to override the OS-default socket parameters
+override_defaults = false
 
-# Interval for running the message cleaner.
-interval = "1 m"
+# SO_RCVBUF: maximum size of the receive buffer, can be clamped by the OS
+recv_buffer_size = "64 KB"
+
+# SO_SNDBUF: maximum size of the send buffer, can be clamped by the OS
+send_buffer_size = "64 KB"
+
+# SO_KEEPALIVE: whether to regularly send a keepalive packet maintaining the connection
+keepalive = false
 
 # Message saver configuration.
 [message_saver]
@@ -352,6 +333,14 @@ path = "compatibility"
 # `false` allows the OS to manage write operations, which can improve performance.
 enforce_fsync = false
 
+# Maximum number of retries for a failed file operation (e.g., append, overwrite).
+# This defines how many times the system will attempt the operation before failing.
+max_file_operation_retries = 1
+
+# Delay between retries in case of a failed file operation.
+# This helps to avoid immediate repeated attempts and can reduce load.
+retry_delay = "1 s"
+
 # Runtime configuration.
 [system.runtime]
 # Path for storing runtime data.
@@ -363,8 +352,15 @@ path = "runtime"
 # Path for storing log files.
 path = "logs"
 
-# Level of logging detail. Options: "debug", "info", "warn", "error".
+# Log filtering directive using the same syntax as the RUST_LOG environment variable.
+# Supports simple levels ("trace", "debug", "info", "warn", "error", "off" or "none")
+# as well as complex directives like "warn,server=debug,iggy=trace".
+# Note: RUST_LOG environment variable always takes precedence over this setting.
 level = "info"
+
+# Whether to write logs to file. When false, logs are only written to stdout.
+# When enabled, logs are stored in {system.path}/{system.logging.path} (default: local_data/logs).
+file_enabled = true
 
 # Maximum size of the log files before rotation.
 max_size = "512 MB"
@@ -374,16 +370,6 @@ retention = "7 days"
 
 # Interval for printing system information to the log.
 sysinfo_print_interval = "10 s"
-
-# Cache configuration.
-[system.cache]
-# Enables or disables the system cache.
-# `true` activates caching for frequently accessed data.
-# `false` disables caching, data is always read from the source.
-enabled = true
-
-# Maximum size of the cache, e.g. "4GB".
-size = "4 GB"
 
 # Encryption configuration
 [system.encryption]
@@ -424,13 +410,14 @@ path = "topics"
 # "unlimited" or "0" means topics are kept indefinitely.
 # A size value in human-readable format determines the maximum size of a topic.
 # When a topic reaches this size, the oldest messages are deleted to make room for new ones.
-# Messages are removed in full segments, so if segment size is 1 GB and the topic size is 10 GB,
-# the oldest segment will be deleted upon reaching 10 GB.
-# Example: `max_topic_size = "10 GB"` means oldest messages in topics will be deleted when they reach 10 GB.
+# Messages are removed in full segments, so if segment size is 1 GiB and the topic size is 10 GiB,
+# the oldest segment will be deleted upon reaching 10 GiB.
+# Example: `max_topic_size = "10 GiB"` means oldest messages in topics will be deleted when they reach 10 GiB.
 # Note: this setting can be overwritten with CreateTopic and UpdateTopic requests.
-max_size = "10 GB"
+max_size = "unlimited"
 
 # Configures whether the oldest segments are deleted when a topic reaches its maximum size (boolean).
+# Note: segments are removed in intervals defined by `system.message_cleaner.interval`.
 delete_oldest_segments = false
 
 # Partition configuration
@@ -449,15 +436,14 @@ enforce_fsync = false
 # `false` skips these checks for faster loading at the risk of undetected corruption.
 validate_checksum = false
 
-# The threshold of buffered messages before triggering a save to disk (integer).
+# The count threshold of buffered messages before triggering a save to disk (integer).
 # Specifies how many messages accumulate before persisting to storage.
 # Adjusting this can balance between write performance and data durability.
+# This is soft limit, actual number of messages may be higher, depending on last batch size.
 # Together with `size_of_messages_required_to_save` it defines the threshold of buffered messages.
 # Minimum value is 32. Value has to be a multiple of 32 due to minimum
 # direct I/O block size (512 bytes) and message index size (16 bytes per message).
 # With direct I/O, writes must occur in blocks of at least 512 bytes, which equals 32 message indices.
-# The direct I/O requirement was added as forward compatibility, keep in mind that in case of 
-# discovering better solution in the future, this requirement might be removed.
 messages_required_to_save = 1024
 
 # The size threshold of buffered messages before triggering a save to disk (string).
@@ -467,28 +453,38 @@ messages_required_to_save = 1024
 # Together with `messages_required_to_save` it defines the threshold of buffered messages.
 # Minimum value is 512 B. Value has to be a multiple of 512 B due to direct I/O requirements.
 # Direct I/O operations must align with the underlying storage block size (typically 512 B or 4 KiB).
-# 512 B is also minimum size the block device can store atomically, so writing less than that may lead to partial writes in case of a crash/power loss.
 size_of_messages_required_to_save = "1 MiB"
 
 # Segment configuration
 [system.segment]
 # Defines the soft limit for the size of a storage segment.
 # When a segment reaches this size, a new segment is created for subsequent data.
-# Example: if `size` is set "1GB", the actual segment size may be 1GB + the size of remaining messages in received batch.
-size = "1 GB"
+# Example: if `size` is set "1GiB", the actual segment size may be 1GiB + the size of remaining messages in received batch.
+# Maximum size is 1 GiB. Size has to be a multiple of 512 B.
+size = "1 GiB"
+
 # Configures the message time-based expiry setting.
 # "none" means messages are kept indefinitely.
 # A time value in human-readable format determines the lifespan of messages.
 # Example: `message_expiry = "2 days 4 hours 15 minutes"` means messages will expire after that duration.
 message_expiry = "none"
 
+# Defines the file system confirmation behavior during state updates.
+# Controls how the system waits for file write operations to complete.
+# Possible values:
+# - "wait": waits for the file operation to complete before proceeding.
+# - "no_wait": proceeds without waiting for the file operation to finish, potentially increasing performance but at the cost of durability.
+server_confirmation = "wait"
+
 # Configures whether expired segments are archived (boolean) or just deleted without archiving.
 archive_expired = false
 
-# Controls whether to cache indexes (time and positional) for segment access (boolean).
-# `true` keeps indexes in memory, speeding up data retrieval.
-# `false` reads indexes from disk, which can conserve memory at the cost of access speed.
-cache_indexes = true
+# Controls whether to cache indexes (time and positional) for segment access.
+# Possible values:
+# - "true" or "all": keeps indexes in memory, speeding up data retrieval at the cost of memory
+# - "open_segment": keeps indexes in memory only for the currently open segment
+# - "false" or "none": reads indexes from disk, which can conserve memory at the cost of access speed
+cache_indexes = "open_segment"
 
 # Message deduplication configuration
 [system.message_deduplication]
@@ -497,14 +493,95 @@ cache_indexes = true
 # `false` treats each message as unique, even if IDs are duplicated.
 enabled = false
 # Maximum number of ID entries in the deduplication cache (u64).
-max_entries = 1000
+max_entries = 10000
 # Maximum age of ID entries in the deduplication cache in human-readable format.
 expiry = "1 m"
 
 # Recovery configuration in case of lost data
 [system.recovery]
 # Controls whether streams/topics/partitions should be recreated if the expected data for existing state is missing (boolean).
-recreate_missing_state = true
+recreate_missing_state = false
+
+# Memory pool configuration
+[system.memory_pool]
+# Enables or disables the memory pool (boolean).
+# `true` enables the memory pool.
+# `false` disables the memory pool.
+enabled = true
+
+# Size of the memory pool (string).
+# Example: "512 MiB" or "1 GiB".
+# This defines the maximum, total memory allocated for the memory pool.
+# Note: This number has to be multiplication of 4096 (default linux page size).
+# Minimum size is 512 MiB due to internal implementation details.
+size = "4 GiB"
+
+# Maximum number of buffers in each bucket (u32).
+# There are 32 buckets in the memory pool. Each bucket can hold up to this number of buffers
+# and holds different buffer sizes, from 256 B to 512 MiB.
+# Note: This number has to be a power of 2. Minimum value is 128 due to internal implementation details.
+bucket_capacity = 8192
+
+# Cluster configuration
+[cluster]
+# Enables or disables cluster mode (boolean).
+# When enabled, this node will participate in the cluster and coordinate with other nodes.
+enabled = false
+
+# Unique cluster name (string).
+# All nodes in the same cluster must share the same name.
+# This prevents accidental cross-cluster communication.
+name = "iggy-cluster"
+
+# Current node configuration
+[cluster.node.current]
+# Name of this node - must be unique across all nodes in the cluster
+# The node will use its configured transport addresses (tcp.address, quic.address, etc.)
+name = "iggy-node-1"
+# IP address that other nodes should use to connect to this node
+ip = "127.0.0.1"
+
+# Other nodes in the cluster
+# Each field in 'ports' is optional. If omitted, the current node's configured port will be used.
+# This is useful when all nodes use the same ports but different IPs, or when only some ports differ.
+[[cluster.node.others]]
+name = "iggy-node-2"
+ip = "127.0.0.1"
+ports = { tcp = 8091, quic = 8081, http = 3001, websocket = 8093 }
+
+# [[cluster.node.others]]
+# name = "iggy-node-3"
+# ip = "192.168.1.100"
+# # Only some ports specified, others will use defaults from current node
+# ports = { tcp = 8092, http = 3002 }
+
+# Example with all default ports (uses current node's configured ports):
+# [[cluster.node.others]]
+# name = "iggy-node-4"
+# ip = "192.168.1.101"
+# ports = {}  # Empty ports - all will use current node's defaults
+
+# Sharding configuration
+[system.sharding]
+# CPU allocation - controls the number of shards and their CPU affinity.
+# Possible values:
+# - "all": Use all available CPU cores (default)
+# - numeric value (e.g. 4): Use 4 shards (4 threads pinned to cores 0, 1, 2, 3)
+# - range (e.g. "5..8"): Use 3 shards with affinity to cores 5, 6, 7
+# - numa settings:
+#     + "numa:auto": Use all available numa node, cores
+#     + "numa:nodes=0,1;cores=4;no_ht=true": Use NUMA node 0 and 1, each nodes use 4 cores, and no hyperthreads
+cpu_allocation = "numa:auto"
+
+[websocket]
+enabled = true
+address = "127.0.0.1:8092"
+
+[websocket.tls]
+enabled = false
+self_signed = true
+cert_file = "core/certs/iggy_cert.pem"
+key_file = "core/certs/iggy_key.pem"
 ```
 
 ### Durability
