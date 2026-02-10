@@ -1,13 +1,17 @@
-# Ignore local build artifacts
+# Dependencies
 /node_modules
-/build
-/.cache
-/.docusaurus
 
-# Ignore system files
+# Next.js
+/.next/
+/out/
+
+# Fumadocs generated
+.source/
+
+# System files
 .DS_Store
 Thumbs.db
 
-# ignore idea files
+# IDE
 /.idea
 /.code

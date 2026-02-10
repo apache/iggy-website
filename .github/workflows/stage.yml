@@ -3,8 +3,8 @@ name: Deploy Apache Iggy Staging Website
 on:
   push:
     branches:
-      - staging  # Runs when you push to the staging branch
-  workflow_dispatch:  # Allows manual triggering
+      - staging
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -13,35 +13,31 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch full history for accurate commits
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - name: Install Dependencies
-        run: |
-          npm install
+        run: npm install
 
-      - name: Clean Build Directory
-        run: |
-          rm -rf ./build
-
-      - name: Build Apache Iggy Website
-        run: |
-          npm run build --clean
+      - name: Build Website
+        run: npm run build
 
       - name: Copy ASF config
-        run: |
-          cp .asf.yaml ./build/.asf.yaml  # Ensure .asf.yaml is inside build directory
-          cp .asf.yaml ./build/.asf.yaml  # Ensure .asf.yaml is inside build directory
+        run: cp .asf.yaml ./out/.asf.yaml
 
-      # Publish to asf-staging for development/staging
       - name: Publish Iggy Website to asf-staging
         if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: asf-staging
-          publish_dir: ./build
+          publish_dir: ./out
           destination_dir: ./
           force_orphan: true
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Deploy staging website from staging branch'
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_message: "Deploy staging website from staging branch"

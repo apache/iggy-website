@@ -1,0 +1,4 @@
+{
+  "title": "Server",
+  "pages": ["introduction", "configuration", "docker", "schema", "benchmarking"]
+}

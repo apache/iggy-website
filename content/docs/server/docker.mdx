@@ -1,0 +1,55 @@
+---
+title: Docker
+---
+
+You can easily run the Iggy server with Docker - the official images can be found [here](https://hub.docker.com/r/apache/iggy), simply type `docker pull apache/iggy`.
+
+Below is an example of the `docker-compose.yml` file which additionally overrides the default configuration (described in the section below) with the environment variables. If you prefer using the configuration file, you can mount it as a volume and provide the path to it with the `IGGY_CONFIG_PATH` environment variable.
+
+When running the container, **make sure to include the additional capabilities**, as you can find in [docker-compose](https://github.com/apache/iggy/blob/master/docker-compose.yml) file:
+
+
+```yaml
+iggy:
+  image: apache/iggy:latest
+  container_name: iggy
+  restart: unless-stopped
+  cap_add:
+    - SYS_NICE
+  security_opt:
+    - seccomp:unconfined
+  ulimits:
+    memlock:
+      soft: -1
+      hard: -1
+  environment:
+    - IGGY_ROOT_USERNAME=iggy
+    - IGGY_ROOT_PASSWORD=Secret123
+    - IGGY_HTTP_ENABLED=true
+    - IGGY_HTTP_ADDRESS=0.0.0.0:80
+    - IGGY_TCP_ENABLED=true
+    - IGGY_TCP_ADDRESS=0.0.0.0:3000
+    - IGGY_QUIC_ENABLED=false
+    - IGGY_WEBSOCKET_ENABLED=false
+    - IGGY_HEARTBEAT_ENABLED=true
+    - IGGY_HEARTBEAT_INTERVAL=5s
+  ports:
+    - "3010:80"
+    - "5100:3000"
+  networks:
+    - iggy
+  volumes:
+    - iggy:/iggy/local_data
+
+networks:
+  iggy:
+
+volumes:
+  iggy:
+```
+
+Or when running with `docker run`:
+
+```
+docker run --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 apache/iggy:edge
+```

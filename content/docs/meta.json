@@ -1,0 +1,14 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "introduction",
+    "server",
+    "sdk",
+    "cli",
+    "connectors",
+    "ai",
+    "web_ui",
+    "faq"
+  ]
+}

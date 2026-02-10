@@ -3,8 +3,8 @@ name: Deploy Apache Iggy Website
 on:
   push:
     branches:
-      - main  # Runs when you push to the main branch
-  workflow_dispatch:  # Allows manual triggering
+      - main
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -13,35 +13,31 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch full history for accurate commits
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - name: Install Dependencies
-        run: |
-          npm install
+        run: npm install
 
-      - name: Clean Build Directory
-        run: |
-          rm -rf ./build
-  
-      - name: Build Apache Iggy Website
-        run: |
-          npm run build --clean
+      - name: Build Website
+        run: npm run build
 
       - name: Copy ASF config
-        run: |
-          cp .asf.yaml ./build/.asf.yaml  # Ensure .asf.yaml is inside build directory
-          cp .asf.yaml ./build/.asf.yaml  # Ensure .asf.yaml is inside build directory
+        run: cp .asf.yaml ./out/.asf.yaml
 
-      # Publish to asf-site for production
       - name: Publish Iggy Website to asf-site
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: asf-site
-          publish_dir: ./build
+          publish_dir: ./out
           destination_dir: ./
           force_orphan: true
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Deploy website from main branch'
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_message: "Deploy website from main branch"
