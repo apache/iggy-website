@@ -3,6 +3,7 @@ import Image from "next/image";
 import { Logo } from "@/components/logo";
 import { GitHubStars } from "@/components/github-stars";
 import { ASFDropdown } from "@/components/asf-dropdown";
+import { ASFMobileLinks } from "@/components/asf-mobile-links";
 
 const sharedLinks: BaseLayoutProps["links"] = [
   { text: "Docs", url: "/docs" },
@@ -26,7 +27,11 @@ const sharedLinks: BaseLayoutProps["links"] = [
   },
   {
     type: "custom",
-    on: "nav",
+    on: "menu",
+    children: <ASFMobileLinks />,
+  },
+  {
+    type: "custom",
     secondary: true,
     children: <GitHubStars />,
   },
