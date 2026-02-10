@@ -68,6 +68,16 @@ export function docsOptions(): BaseLayoutProps {
     nav: {
       title: <Logo className="h-9 w-auto md:h-11" />,
     },
-    links: [],
+    links: [
+      { text: "Home", url: "/" },
+      { text: "Blogs", url: "/blogs" },
+      { text: "Downloads", url: "/downloads" },
+      {
+        type: "custom",
+        on: "nav",
+        secondary: true,
+        children: <GitHubStars />,
+      },
+    ],
   };
 }
