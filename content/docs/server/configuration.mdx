@@ -2,7 +2,7 @@
 title: Configuration
 ---
 
-The server reads its configuration from `configs/server.toml` by default. You can specify a different path by setting the `IGGY_CONFIG_PATH` environment variable (e.g., `export IGGY_CONFIG_PATH=/path/to/server.toml`). You can also use a `.env` file to override specific settings using the `IGGY_` prefix (e.g., `IGGY_HTTP_ENABLED=true`).
+The server reads its configuration from `core/server/config.toml` by default. You can specify a different path by setting the `IGGY_CONFIG_PATH` environment variable (e.g., `export IGGY_CONFIG_PATH=/path/to/config.toml`). You can also use a `.env` file to override specific settings using the `IGGY_` prefix (e.g., `IGGY_HTTP_ENABLED=true`).
 
 If no configuration file is found, the server uses its built-in defaults.
 
