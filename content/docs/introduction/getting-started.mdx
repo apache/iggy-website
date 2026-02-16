@@ -12,7 +12,7 @@ Once you're familiar with the [architecture](/docs/introduction/architecture), i
 
 In the typical scenario, e.g. when working with the microservices architecture or any other kind of the distributed system, each application can be both at the same time (producer and consumer), as the particular service might publish its own messages (typically in a form of the events - facts, that have already happened) while at the same time be interested in the notifications coming from the other service(s).
 
-The completed sample can be found in [repository](https://github.com/apache/iggy/tree/master/core/examples/src/getting-started), however, we will go through the implementation step by step, so that you can get a better understanding of how to build the applications from scratch.
+The completed sample can be found in [repository](https://github.com/apache/iggy/tree/master/examples/rust/src/getting-started), however, we will go through the implementation step by step, so that you can get a better understanding of how to build the applications from scratch.
 
 Also, please do keep in mind that we'll be using the default implementation of `IggyClient` which provides a wrapper on top of the low-level, transport-specific `Client` trait (which you can always use, if you want to have more control over the communication with the server).
 
