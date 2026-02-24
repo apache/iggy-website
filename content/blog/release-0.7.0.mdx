@@ -1,0 +1,167 @@
+---
+title: Apache Iggy 0.7.0 Release
+author: piotr
+tags: ["release", "0.7.0", "announcement"]
+date: 2026-02-24
+---
+## Release 0.7.0
+
+Less than three months after [0.6.0](https://iggy.apache.org/blogs/2025/12/09/release-0.6.0/), we're excited to release **[Apache Iggy 0.7.0](https://github.com/apache/iggy/releases/tag/server-0.7.0)** — a massive step toward production-ready clustering.
+
+While 0.6.0 was about the io_uring rewrite, 0.7.0 is about what comes next: **replication**. We've built the foundations for **Viewstamped Replication (VSR)** consensus, redesigned how the server manages metadata, added **NUMA awareness** and **socket migration**, embedded the **Web UI directly into the server binary**, and shipped important improvements across all SDKs and connectors.
+
+## New Committer
+
+We're thrilled to welcome **[Łukasz Zborek](https://github.com/lukaszzborek)** as a new Apache Iggy committer! Łukasz has been a core contributor to our C# SDK and is the #8 contributor in our repository. His work goes far beyond building a top-notch C# SDK — he has helped find and fix issues across many areas of the project. His contributions span CI, BDD testing, core features like TLS support, reconnection handling, and the high-level consumer/publisher APIs. Congratulations, Łukasz!
+
+---
+
+## Iggy Server
+
+### Clustering & VSR Consensus
+
+The primary focus of 0.7.0 is laying the groundwork for **clustering with [Viewstamped Replication (VSR)](https://sands.kaust.edu.sa/classes/CS240/F21/papers/vr-revisited.pdf)** — a critical milestone for fault-tolerant, replicated deployments.
+
+We've implemented the core consensus building blocks that will power the upcoming cluster mode:
+
+- **[VSR view_change](https://github.com/apache/iggy/pull/2546)** — the view change protocol from the VSR-revisited paper, enabling leader election and fault recovery
+- **[Replication pipeline](https://github.com/apache/iggy/pull/2493)** — core replication machinery including `on_ack`, `send_prepare_ok`, and `replicate`, with [on_replicate](https://github.com/apache/iggy/pull/2469) for data propagation between nodes
+- **[Deterministic tick-based timeouts](https://github.com/apache/iggy/pull/2450)** — precise, deterministic timeout mechanism essential for correct consensus behavior
+- **[Metadata snapshots](https://github.com/apache/iggy/pull/2675)** — a three-layer snapshot system enabling state transfer between replicas for recovery and bootstrapping
+- **[Partitions module](https://github.com/apache/iggy/pull/2735)** — extracted partition and segment logic into a dedicated crate, with a [unified Partitions trait](https://github.com/apache/iggy/pull/2620) that abstracts both single-node and replicated operations behind the same interface
+- **[Pipeline decoupling](https://github.com/apache/iggy/pull/2740)** — made `VsrConsensus` generic over the `Pipeline` trait, so implementations can be swapped and memory usage is reduced by keeping only headers in the pipeline
+- **[Message bus](https://github.com/apache/iggy/pull/2446)** — internal message bus for inter-component communication
+- **[Simulator](https://github.com/apache/iggy/pull/2688)** — initial version of a distributed system simulator for testing VSR behavior in a controlled, deterministic environment
+
+### LeftRight-Based Global Metadata
+
+We've **[replaced the distributed slab ECS approach](https://github.com/apache/iggy/pull/2555)** with a centralized **LeftRight-based global metadata store**. This is one of the largest refactoring efforts in this release — shards now read from a shared, lock-free snapshot while shard 0 exclusively handles writes. The result is consistent metadata across all shards without per-read synchronization, and a much simpler concurrency model that's easier to reason about and extend for clustering.
+
+### NUMA Awareness
+
+The server now features **[NUMA awareness](https://github.com/apache/iggy/pull/2412)** with configurable CPU affinity and memory binding per NUMA node. On multi-socket machines, this keeps each shard's memory local to its CPU, reducing cross-socket latency and improving cache efficiency — an important optimization for high-throughput deployments.
+
+### Socket Migration Across Shards
+
+**[TCP socket migration](https://github.com/apache/iggy/pull/2476)** eliminates cross-shard forwarding overhead. When a client connects to a shard that doesn't own its target partition, the socket is migrated to the correct shard instead of forwarding every request. This significantly reduces latency for workloads spread across multiple shards.
+
+### Embedded Web UI
+
+The Web UI can now be **[embedded directly into the server binary](https://github.com/apache/iggy/pull/2485)**, served at the `/ui` endpoint. No separate deployment needed — just start the server and open the dashboard. The feature is **[enabled by default](https://github.com/apache/iggy/pull/2497)** and can be **[toggled](https://github.com/apache/iggy/pull/2494)** via `http.web_ui` in the server config.
+
+### Cooperative Partition Reassignment
+
+**[Cooperative partition reassignment](https://github.com/apache/iggy/pull/2734)** for consumer groups eliminates message duplicates during rebalancing. Previously, partitions were moved instantly on join — the old consumer could still be mid-processing while the new one polled the same uncommitted offset. The new approach introduces a "pending revocation" phase where partitions are held until the committed offset catches up or a timeout is reached, ensuring clean handoff without duplicates.
+
+### Log Rotation
+
+**[Configurable log rotation](https://github.com/apache/iggy/pull/2452)** based on file size and retention policies prevents unbounded log growth in long-running deployments.
+
+### Breaking Changes
+
+- **[Reserved u64 in message header](https://github.com/apache/iggy/pull/2657)** — added for forward-compatible protocol extensions (all SDKs updated)
+- **[Arbitrary header key kinds](https://github.com/apache/iggy/pull/2637)** — `HeaderKey` now supports non-string types, matching `HeaderValue` capabilities
+- **[MessagePack replaces bincode](https://github.com/apache/iggy/pull/2523)** — state persistence switched to `msgpack` from the unmaintained `bincode`
+- **[Compile-time env var mappings](https://github.com/apache/iggy/pull/2614)** — new `configs_derive` crate replaces runtime path inference, making environment variable handling explicit and unambiguous; `server.toml` renamed to `config.toml`
+- **[Legacy C++ client removed](https://github.com/apache/iggy/pull/2668)** — the old C++ client has been removed from the repository
+
+### Security Improvements
+
+- **[Hardened deserializers](https://github.com/apache/iggy/pull/2741)** — all command deserializers now use checked reads instead of direct byte indexing, preventing malformed packets from crashing the server
+- **[Password hashing before state log](https://github.com/apache/iggy/pull/2724)** — fixed a critical bug where plaintext passwords were persisted to the state log, causing login failures after server restart
+- **[Auth required for stats](https://github.com/apache/iggy/pull/2559)** — the `/stats` endpoint now requires authentication
+- **[Permission inheritance fixes](https://github.com/apache/iggy/pull/2564)** — consolidated permissions into the metadata crate and fixed broken inheritance (e.g., `manage_stream` now correctly implies `read_stream`)
+
+### Notable Bug Fixes
+
+- **[Memory leak in segment rotation](https://github.com/apache/iggy/pull/2686)** — sealed segments retained index buffers and open file writers indefinitely; under heavy load, memory could grow unbounded
+- **[Message cleaner](https://github.com/apache/iggy/pull/2670)** — new segments ignored the topic's configured `message_expiry`, causing messages to never be cleaned up
+- **[Stream stats corruption](https://github.com/apache/iggy/pull/2736)** — purging one topic incorrectly zeroed stats for the entire stream
+- **[Segment rotation race](https://github.com/apache/iggy/pull/2588)** — prevented panic when segment rotates during async persistence
+- **[IOV_MAX overflow](https://github.com/apache/iggy/pull/2581)** — chunked vectored writes for large message batches
+- **[Message availability during persistence](https://github.com/apache/iggy/pull/2575)** — messages remain readable during async disk I/O
+- **[Graceful shutdown](https://github.com/apache/iggy/pull/2439)** — all shards shut down cleanly when one panics, with [panic propagation](https://github.com/apache/iggy/pull/2515) from connection handlers and [critical task failure handling](https://github.com/apache/iggy/pull/2506)
+- **[Consumer group leave race](https://github.com/apache/iggy/pull/2521)** — fixed race condition in consumer group leave and index corruption in `append_messages`
+- **[Stale consumer group clients](https://github.com/apache/iggy/pull/2547)** — properly handled stale clients in consumer group operations
+- **[PAT broadcast across shards](https://github.com/apache/iggy/pull/2589)** — personal access tokens created via HTTP are now broadcast to all shards, fixing cross-protocol visibility
+- **[Empty permission maps crash](https://github.com/apache/iggy/pull/2527)** — fixed server crash on restart when users had empty permission maps
+- **[Entity ID gaps on bootstrap](https://github.com/apache/iggy/pull/2548)** — handled ID gaps after deletions during server restart
+
+Docker images are available on **[Docker Hub](https://hub.docker.com/u/apache?page=1&search=iggy)**.
+
+---
+
+## SDKs
+
+All SDKs now have **auto-publishing** enabled — edge and RC versions are automatically published to their respective package registries on every merge.
+
+- [Rust](https://crates.io/crates/iggy) — improved high-level producer/consumer with ordered sharding, graceful `shutdown()`, and message loss prevention; fixed `max_in_flight` permit acquisition and client reconnection after disconnect
+- [C#](https://www.nuget.org/packages/Apache.Iggy/) — .NET 10 support, `DeleteSegments` and `GetSnapshot` methods, `TimeSpan`-based expiry handling, source link for debugging
+- [Java](https://mvnrepository.com/artifact/org.apache.iggy/iggy-java-sdk) — fluent builder API (`Iggy.tcpClientBuilder().blocking()`), semantic exception hierarchy, BDD tests with Cucumber, user headers support, TLS for HTTP, memory leak detection in CI
+- [Python](https://pypi.org/project/apache-iggy/) — `AsyncIterator` interface for `IggyConsumer`, `message_expiry` parameter in `create_topic`, Windows build support
+- [Node.js (TypeScript)](https://www.npmjs.com/package/apache-iggy) — comprehensive JSDoc comments for improved API documentation and IDE support
+- [Go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) — leader redirection for cluster failover handling
+
+---
+
+## Connectors
+
+New connectors and runtime improvements:
+
+- **[Apache Pinot connector](https://github.com/apache/iggy/pull/2499)** — new external connector for Apache Pinot integration
+- **[Postgres sink & source](https://github.com/apache/iggy/pull/2579)** — extended with JSON and raw message format support, multiple processing modes (mark/delete), and comprehensive integration tests
+- **[Prometheus metrics](https://github.com/apache/iggy/pull/2633)** — `/metrics` and `/stats` endpoints for monitoring connector runtime, per-connector message counters, CPU/memory tracking
+- **[Quickwit sink tests](https://github.com/apache/iggy/pull/2636)** — integration test coverage for the Quickwit sink
+- **[Telemetry logging](https://github.com/apache/iggy/pull/2612)** — structured logging with telemetry for connectors and MCP
+- **[Retry mechanism](https://github.com/apache/iggy/pull/2437)** — configurable retry with exponential backoff for the HTTP config provider
+- **[State loss prevention](https://github.com/apache/iggy/pull/2743)** and **[memory leak fix](https://github.com/apache/iggy/pull/2685)** — critical reliability improvements for long-running connectors
+
+Learn more in the [documentation](/docs/connectors/introduction).
+
+---
+
+## Web UI
+
+- Embedded into the server binary (see above)
+- User headers now display decoded values based on their type (string, int, float, bool, etc.) with expandable rows for type details
+- Checksum displayed as hex alongside raw value
+- Fixed root user ID (now 0 instead of 1)
+- Fixed logout side-effect on page load
+- Refactored from SSR to SPA with client-side authentication
+- Benchmark dashboard upgraded to Yew 0.22
+
+---
+
+## Helm Charts
+
+- **[Fixed volume mount path](https://github.com/apache/iggy/pull/2526)** and added io_uring requirements for proper Kubernetes deployment
+
+---
+
+## CI/CD & Infrastructure
+
+- **ARM64 builds** — native ARM64 runners with shared Docker cache, aarch64 builds in pre-merge and release workflows
+- **Edge releases** — rolling pre-releases with versioned Docker tags (e.g., `0.6.1-edge.2`) and binary tarballs
+- **Auto-publish** — all SDKs (Rust, C#, Java, Python, Node.js, Go) automatically publish edge/RC versions on merge
+- **Code coverage** — Codecov integration for Rust and Java
+- **Pre-commit hooks** — local validation for all SDKs matching CI tools and versions
+- **Test harness** — `iggy_harness` proc macro for consistent, boilerplate-free test infrastructure with crash detection
+
+---
+
+## What's Next
+
+Our primary focus remains **completing the clustering implementation with VSR consensus**. The foundations laid in 0.7.0 — view change, replication pipeline, metadata snapshots, partitions module — will come together into a fully functional replicated cluster in the upcoming releases.
+
+Other upcoming efforts:
+- Server core optimizations: kTLS, DirectIO, and continued NUMA and socket migration tuning
+- SDK evolution with synchronous clients and [sans-io](https://www.firezone.dev/blog/sans-io) architecture for better testability and portability
+- More connector integrations and runtime hardening
+- Web UI enhancements — building on the newly embedded dashboard
+- **Agentic AI** exploration for streaming-based agent coordination
+
+---
+
+Thanks to our amazing community and contributors for making Apache Iggy better with every release. A special welcome to our new committer Łukasz Zborek!
+
+**Join us on [Discord](https://discord.gg/apache-iggy) and help shape the future of the project!**

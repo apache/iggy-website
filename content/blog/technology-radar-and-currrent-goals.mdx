@@ -29,7 +29,7 @@ Without a doubt, being able to run your infrastructure (which processes & stores
 
 We've started [experimenting](https://github.com/iggy-rs/iggy-cluster-sandbox) with the replication over half a year ago already by implementing the basic, Raft based consensus algorithm for the simple message streaming server.
 
-At the same time, we were researching the other possible solutions, after we've finally decided to move on with **Viewstamped Replication** (in its [revisited form](https://pmg.csail.mit.edu/papers/vr-revisited.pdf)), which was successfully used by e.g. [TigerBeetle](https://tigerbeetle.com/).
+At the same time, we were researching the other possible solutions, after we've finally decided to move on with **Viewstamped Replication** (in its [revisited form](https://sands.kaust.edu.sa/classes/CS240/F21/papers/vr-revisited.pdf)), which was successfully used by e.g. [TigerBeetle](https://tigerbeetle.com/).
 
 Long story short - the **deterministic leader election**, allows us to go for ring topology and chain replication of our data - it's excellent for high throughput, which is very important for us.
 
