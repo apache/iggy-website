@@ -2,7 +2,7 @@
 title: Our migration journey to thread-per-core architecture powered by io_uring
 author: grzegorz
 tags: ["engineering", "performance", "io_uring", "thread-per-core", "rust"]
-date: 2026-02-25
+date: 2026-02-27
 draft: true
 ---
 
@@ -185,9 +185,66 @@ It seems like we are not the only ones that are aware of that problem: [Microsof
 
 It's worth noting that one of the key reasons we ended up going with `compio` is that they want to move with the times and expose more and more `io_uring` APIs. Their codebase is structured so that the driver is decoupled from the executor, I would push the pluggability even further. A very hot topic in distributed systems these days is `DST` (Deterministic Simulation Testing): the idea is to replace all non-deterministic sources in your system (network, block devices, time, etc.) with deterministic ones, so that one can re-run the entire execution of the system from a single `seed` value. At this moment, with async Rust, it is very difficult, if not borderline impossible, to achieve total determinism. The main factor is that one cannot easily replace, for example, the time wheel used for timeouts in those executors. If library authors designed their executors so you could plug in different implementations of the time wheel, scheduler, and driver interceptors for network/storage, we could **fully** test our systems deterministically, with zero changes needed to the underlying codebase. No need for interfaces behind `Storage`, no need for timeout managers that have to be replaced with deterministic ones; we could use all of the goodies that come from the Rust `Futures` model while maintaining the ability to test our systems deterministically.
 
-## Benchmarking
+## Benchmarks
 
-// TODO: run benchmarks on AWS
+Scaling is where the thread-per-core architecture truly shines, the more partitions and producers you throw at it, the better it performs.
+
+### 8 Partitions
+
+**v0.5.0** with `tokio`
+![version 0.5.0 8 producers](/thread-per-core-io_uring/pp_8_0.5_rl.png)
+
+**v0.6.1** with `thread-per-core` + `io_uring`
+![version 0.6.1 8 producers](/thread-per-core-io_uring/pp_8_0.6_rl.png)
+
+**v0.7.0** with _shared *something*_
+![version 0.7.0 8 producers](/thread-per-core-io_uring/pp_8_0.7_rl.png)
+
+The difference wasn't that big, `tokio` managed to keep up decently well with 8 producers, but as we increase the load, the gap widens significantly.
+
+### 16 Partitions
+
+**v0.5.0** with `tokio`
+![version 0.5.0 16 producers](/thread-per-core-io_uring/pp_16_0.5_rl.png)
+
+**v0.6.1** with `thread-per-core` + `io_uring`
+![version 0.6.1 16 producers](/thread-per-core-io_uring/pp_16_0.6.png)
+
+**v0.7.0** with _shared *something*_
+![version 0.7.0 16 producers](/thread-per-core-io_uring/pp_16_0.7.png)
+
+### 32 Partitions 
+
+The gains compound further as partition count doubles:
+
+**v0.5.0** with `tokio`
+![version 0.5.0 32 producers](/thread-per-core-io_uring/pp_32_0.5_rl.png)
+
+**v0.6.1** with `thread-per-core` + `io_uring`
+![version 0.6.1 32 producers](/thread-per-core-io_uring/pp_32_0.6.png)
+
+**v0.7.0** with _shared *something*_
+![version 0.7.0 32 producers](/thread-per-core-io_uring/pp_32_0.7.png)
+
+### Strong Consistency Mode (`fsync`)
+
+Flush the data to disk on every batch write.
+
+#### 16 Partitions
+
+**v0.5.0** with `tokio`
+![version 0.5.0 16 producers](/thread-per-core-io_uring/pp_16_0.5_fsync.png)
+
+**v0.7.0** with _shared *something*_
+![version 0.7.0 16 producers](/thread-per-core-io_uring/pp_16_0.7_fsync.png)
+
+#### 32 Partitions
+
+**v0.5.0** with `tokio`
+![version 0.5.0 32 producers](/thread-per-core-io_uring/pp_32_0.5_fsync.png)
+
+**v0.7.0** with _shared *something*_
+![version 0.7.0 32 producers](/thread-per-core-io_uring/pp_32_0.7_fsync.png)
 
 ## Closing words
 Finally, even though we went into significant detail in this blog post, we have only scratched the surface of what is possible, and several subsections could easily be blog posts on their own. If you are interested in learning more about thread-per-core shared-nothing design, check out the `Seastar` framework, it is the SOTA in this space. For now we shift our attention to the [on-going work on clustering](https://github.com/apache/iggy/releases/tag/server-0.7.0), using [Viewstamped Replication](https://sands.kaust.edu.sa/classes/CS240/F21/papers/vr-revisited.pdf). 
