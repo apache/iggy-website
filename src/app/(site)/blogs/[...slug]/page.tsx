@@ -18,6 +18,7 @@ function findPostByDateSlug(slugParts: string[]) {
   const [year, month, day, postSlug] = slugParts;
   return (
     blogPosts.find((p) => {
+      if (p.draft) return false;
       const date = new Date(p.date);
       return (
         date.getFullYear() === Number(year) &&
@@ -79,7 +80,7 @@ export default async function BlogPost(props: {
 }
 
 export function generateStaticParams() {
-  return blogPosts.map((page) => {
+  return blogPosts.filter((page) => !page.draft).map((page) => {
     const date = new Date(page.date);
     const year = String(date.getFullYear());
     const month = String(date.getMonth() + 1).padStart(2, "0");

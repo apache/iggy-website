@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant S0 as shard-0
+    participant S1 as shard-1
+
+    Note over S1: T0: shard-1 receives local CreateStream request
+    S1->>S1: Handle CreateStream (local request)
+
+    Note over S1: T1: local handler hits .await and yields
+    S1-->>S1: Yield to executor
+
+    Note over S0,S1: T2: shard-0 broadcasts CreatedStream event
+    S0->>S1: CreatedStream event
+
+    Note over S1: T3: background event task on shard-1 starts
+    S1->>S1: Handle CreatedStream (background task)
+
+    Note over S1: T4: background handler hits .await and yields
+    S1-->>S1: Yield to executor
+
+    Note over S1: T5: executor can resume either task first
+    S1->>S1: Resume order is non-deterministic

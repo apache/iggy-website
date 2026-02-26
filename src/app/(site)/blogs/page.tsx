@@ -17,9 +17,11 @@ function getSlug(filePath: string): string {
 }
 
 export default function BlogIndex() {
-  const posts = [...blogPosts].sort(
+  const posts = [...blogPosts]
+    .filter((post) => !post.draft)
+    .sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-  );
+    );
 
   return (
     <main className="min-h-screen px-6 py-20 md:px-12">

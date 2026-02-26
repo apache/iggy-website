@@ -21,6 +21,7 @@ export const blogPosts = defineCollections({
       .or(z.date())
       .transform((value) => new Date(value)),
     tags: z.array(z.string()).optional().default([]),
+    draft: z.boolean().optional().default(false),
   }),
 });
 
