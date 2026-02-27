@@ -3,7 +3,6 @@ title: Our migration journey to thread-per-core architecture powered by io_uring
 author: grzegorz
 tags: ["engineering", "performance", "io_uring", "thread-per-core", "rust"]
 date: 2026-02-27
-draft: true
 ---
 
 ## Introduction
@@ -189,40 +188,66 @@ It's worth noting that one of the key reasons we ended up going with `compio` is
 
 Scaling is where the thread-per-core architecture truly shines, the more partitions and producers you throw at it, the better it performs.
 
+Each benchmark is **interactive**, and clicking on the image will take you to its full report on our site [benchmarks.iggy.apache.org](https://benchmarks.iggy.apache.org).
+
 ### 8 Partitions
 
 **v0.5.0** with `tokio`
-![version 0.5.0 8 producers](/thread-per-core-io_uring/pp_8_0.5_rl.png)
+[![version 0.5.0 8 producers](/thread-per-core-io_uring/pp_8_0.5_rl.png)](https://benchmarks.iggy.apache.org/benchmarks/b983ec73-43cf-44c4-ab4e-2287c3706fb2)
 
 **v0.6.1** with `thread-per-core` + `io_uring`
-![version 0.6.1 8 producers](/thread-per-core-io_uring/pp_8_0.6_rl.png)
+[![version 0.6.1 8 producers](/thread-per-core-io_uring/pp_8_0.6_rl.png)](https://benchmarks.iggy.apache.org/benchmarks/0ac461f6-59b3-4822-8de0-3bd1a662966e)
 
 **v0.7.0** with _shared *something*_
-![version 0.7.0 8 producers](/thread-per-core-io_uring/pp_8_0.7_rl.png)
+[![version 0.7.0 8 producers](/thread-per-core-io_uring/pp_8_0.7_rl.png)](https://benchmarks.iggy.apache.org/benchmarks/fb570d39-d6bb-4eb1-a960-c8e0d16cd5d9)
 
 The difference wasn't that big, `tokio` managed to keep up decently well with 8 producers, but as we increase the load, the gap widens significantly.
+
+#### 8 Producers × 8 Streams — 20 GB (20M msgs)
+
+| Version | Throughput/node | P95 | P99 | P999 | P9999 |
+|---------|---------------:|----:|----:|-----:|------:|
+| **v0.5.0** | 1,000 MB/s | 1.36 ms | 1.52 ms | 2.36 ms | 34.00 ms |
+| **v0.7.0** | 1,000 MB/s | 1.47 ms | 1.57 ms | 1.81 ms | 6.51 ms |
+| **Improvement** | — | +8% | +3% | **-23%** | **-81%** |
 
 ### 16 Partitions
 
 **v0.5.0** with `tokio`
-![version 0.5.0 16 producers](/thread-per-core-io_uring/pp_16_0.5_rl.png)
+[![version 0.5.0 16 producers](/thread-per-core-io_uring/pp_16_0.5_rl.png)](https://benchmarks.iggy.apache.org/benchmarks/481c7504-177a-4df8-b771-cda1edbeeaa0)
 
 **v0.6.1** with `thread-per-core` + `io_uring`
-![version 0.6.1 16 producers](/thread-per-core-io_uring/pp_16_0.6.png)
+[![version 0.6.1 16 producers](/thread-per-core-io_uring/pp_16_0.6.png)](https://benchmarks.iggy.apache.org/benchmarks/88eca6c0-6729-44b0-9843-28125d0ff44a)
 
 **v0.7.0** with _shared *something*_
-![version 0.7.0 16 producers](/thread-per-core-io_uring/pp_16_0.7.png)
+[![version 0.7.0 16 producers](/thread-per-core-io_uring/pp_16_0.7.png)](https://benchmarks.iggy.apache.org/benchmarks/2c6a0f6a-fb4d-4e84-8ac0-bfca60c75b21)
 
-### 32 Partitions 
+#### 16 Producers × 16 Streams — 40 GB (40M msgs)
+
+| Version | Throughput/node | P95 | P99 | P999 | P9999 |
+|---------|---------------:|----:|----:|-----:|------:|
+| **v0.5.0** | 1,000 MB/s | 2.52 ms | 3.01 ms | 3.54 ms | 86.30 ms |
+| **v0.7.0** | 1,000 MB/s | 1.82 ms | 2.05 ms | 2.29 ms | 7.17 ms |
+| **Improvement** | — | **-28%** | **-32%** | **-35%** | **-92%** |
+
+### 32 Partitions
 
 **v0.5.0** with `tokio`
-![version 0.5.0 32 producers](/thread-per-core-io_uring/pp_32_0.5_rl.png)
+[![version 0.5.0 32 producers](/thread-per-core-io_uring/pp_32_0.5_rl.png)](https://benchmarks.iggy.apache.org/benchmarks/5f056d32-4856-461d-92c8-439e406cc49e)
 
 **v0.6.1** with `thread-per-core` + `io_uring`
-![version 0.6.1 32 producers](/thread-per-core-io_uring/pp_32_0.6.png)
+[![version 0.6.1 32 producers](/thread-per-core-io_uring/pp_32_0.6.png)](https://benchmarks.iggy.apache.org/benchmarks/402df805-94f3-4a78-9a2d-a4bda9d51655)
 
 **v0.7.0** with _shared *something*_
-![version 0.7.0 32 producers](/thread-per-core-io_uring/pp_32_0.7.png)
+[![version 0.7.0 32 producers](/thread-per-core-io_uring/pp_32_0.7.png)](https://benchmarks.iggy.apache.org/benchmarks/ddaca68e-8374-499c-bb08-53ad06b164ec)
+
+#### 32 Producers × 32 Streams — 80 GB (80M msgs)
+
+| Version | Throughput/node | P95 | P99 | P999 | P9999 |
+|---------|---------------:|----:|----:|-----:|------:|
+| **v0.5.0** | 1,000 MB/s | 3.77 ms | 4.52 ms | 5.43 ms | 27.52 ms |
+| **v0.7.0** | 1,001 MB/s | 1.62 ms | 1.82 ms | 2.38 ms | 11.83 ms |
+| **Improvement** | — | **-57%** | **-60%** | **-56%** | **-57%** |
 
 ### Strong Consistency Mode (`fsync`)
 
@@ -231,23 +256,46 @@ Flush the data to disk on every batch write.
 #### 16 Partitions
 
 **v0.5.0** with `tokio`
-![version 0.5.0 16 producers](/thread-per-core-io_uring/pp_16_0.5_fsync.png)
+[![version 0.5.0 16 producers](/thread-per-core-io_uring/pp_16_0.5_fsync.png)](https://benchmarks.iggy.apache.org/benchmarks/54142b7a-8dfd-4803-8ff1-adb5bce8d5df)
 
 **v0.7.0** with _shared *something*_
-![version 0.7.0 16 producers](/thread-per-core-io_uring/pp_16_0.7_fsync.png)
+[![version 0.7.0 16 producers](/thread-per-core-io_uring/pp_16_0.7_fsync.png)](https://benchmarks.iggy.apache.org/benchmarks/48343378-1052-44a4-b1a6-0b06b9436127)
+
+##### 16 Producers × 16 Streams — 40 GB (40M msgs) — fsync
+
+| Version | Throughput/node | P95 | P99 | P999 | P9999 |
+|---------|---------------:|----:|----:|-----:|------:|
+| **v0.5.0** | 843 MB/s | 18.00 ms | 19.72 ms | 21.52 ms | 23.15 ms |
+| **v0.7.0** | 992 MB/s | 9.98 ms | 13.04 ms | 16.27 ms | 18.98 ms |
+| **Improvement** | **+18%** | **-45%** | **-34%** | **-24%** | **-18%** |
 
 #### 32 Partitions
 
 **v0.5.0** with `tokio`
-![version 0.5.0 32 producers](/thread-per-core-io_uring/pp_32_0.5_fsync.png)
+[![version 0.5.0 32 producers](/thread-per-core-io_uring/pp_32_0.5_fsync.png)](https://benchmarks.iggy.apache.org/benchmarks/6fc5936a-4134-45c4-b8d9-ba962bf47b98)
 
 **v0.7.0** with _shared *something*_
-![version 0.7.0 32 producers](/thread-per-core-io_uring/pp_32_0.7_fsync.png)
+[![version 0.7.0 32 producers](/thread-per-core-io_uring/pp_32_0.7_fsync.png)](https://benchmarks.iggy.apache.org/benchmarks/cf933d06-8119-4d14-b2ce-7c398dfa0dbf)
+
+##### 32 Producers × 32 Streams — 80 GB (80M msgs) — fsync
+
+| Version | Throughput/node | P95 | P99 | P999 | P9999 |
+|---------|---------------:|----:|----:|-----:|------:|
+| **v0.5.0** | 931 MB/s | 33.98 ms | 37.09 ms | 41.13 ms | 48.62 ms |
+| **v0.7.0** | 1,102 MB/s | 18.49 ms | 23.74 ms | 29.79 ms | 34.43 ms |
+| **Improvement** | **+18%** | **-46%** | **-36%** | **-28%** | **-29%** |
+
+### And what about reading the data?
+
+[![version 0.7.0 16 consumers](/thread-per-core-io_uring/pc_16_0.7.png)](https://benchmarks.iggy.apache.org/benchmarks/63607acc-5861-47c7-9673-5c1ce649ed0c)
+
+##### 16 Consumers × 16 Streams — 40 GB (40M msgs)
+
+| Throughput | P95 | P99 | P999 | P9999 |
+|----------:|----:|----:|-----:|------:|
+| 3,361 MB/s | 1.98 ms | 2.26 ms | 2.57 ms | 3.88 ms |
 
 ## Closing words
 Finally, even though we went into significant detail in this blog post, we have only scratched the surface of what is possible, and several subsections could easily be blog posts on their own. If you are interested in learning more about thread-per-core shared-nothing design, check out the `Seastar` framework, it is the SOTA in this space. For now we shift our attention to the [on-going work on clustering](https://github.com/apache/iggy/releases/tag/server-0.7.0), using [Viewstamped Replication](https://sands.kaust.edu.sa/classes/CS240/F21/papers/vr-revisited.pdf). 
 
 Stay tuned a deep-dive blog post on that is coming, and we’re just getting started 🚀
-
-
-
