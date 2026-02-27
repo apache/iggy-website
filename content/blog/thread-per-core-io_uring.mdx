@@ -35,7 +35,8 @@ With all the design pieces in place, it was time to visit the marketplace of **a
 - `compio`
 
 All of them support `io_uring` as the driver, some exclusively, others as one of several available ones.
-,
+
+
 Using the FIFO order - [monoio](https://github.com/bytedance/monoio) was our choice for the initial [proof-of-concept](https://github.com/apache/iggy/tree/io_uring_monoio_runtime), it worked pretty well, but as we explored the monstrous API surface of `io_uring`, we realized that it's pretty far behind when it comes to feature parity and doesn't appear to be very actively maintained. Don't get us wrong, the runtime still receives patches, especially after [incidents like this](https://www.reddit.com/r/rust/comments/1gfi5r1/async_rust_is_not_safe_with_io_uring/), but the overall pace of development doesn't keep up with a rapidly evolving interface like `io_uring`.
 
 Next on the list [glommio](https://github.com/DataDog/glommio) - this one is particularly interesting as it was initially developed by `Glauber Costa`, who previously worked at `ScyllaDB`, the creators of the `Seastar` framework, `glommio` significantly differs from the other two runtimes on our list. It's still a thread-per-core runtime, but it uses a proportional-share scheduler, creates 3 `io_uring` instances per thread (a main ring, a latency ring, and a polling ring), and ships with quite a lot of high-level APIs (similar to `Seastar`) that one can use. Unfortunately, it followed the same fate as `monoio`,  it's pretty much unmaintained at this point. On top of that, it's fairly opinionated as a runtime, and we disagreed with some of those opinions (more on that later).
