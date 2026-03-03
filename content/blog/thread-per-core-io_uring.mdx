@@ -210,7 +210,7 @@ The difference wasn't that big, `tokio` managed to keep up decently well with 8 
 |---------|---------------:|----:|----:|-----:|------:|
 | **v0.5.0** | 1,000 MB/s | 1.36 ms | 1.52 ms | 2.36 ms | 34.00 ms |
 | **v0.7.0** | 1,000 MB/s | 1.47 ms | 1.57 ms | 1.81 ms | 6.51 ms |
-| **Improvement** | — | +8% | +3% | **-23%** | **-81%** |
+| **Improvement** | — | -8% | -3% | **+23%** | **+81%** |
 
 ### 16 Partitions
 
@@ -229,7 +229,7 @@ The difference wasn't that big, `tokio` managed to keep up decently well with 8 
 |---------|---------------:|----:|----:|-----:|------:|
 | **v0.5.0** | 1,000 MB/s | 2.52 ms | 3.01 ms | 3.54 ms | 86.30 ms |
 | **v0.7.0** | 1,000 MB/s | 1.82 ms | 2.05 ms | 2.29 ms | 7.17 ms |
-| **Improvement** | — | **-28%** | **-32%** | **-35%** | **-92%** |
+| **Improvement** | — | **+28%** | **+32%** | **+35%** | **+92%** |
 
 ### 32 Partitions
 
@@ -248,7 +248,7 @@ The difference wasn't that big, `tokio` managed to keep up decently well with 8 
 |---------|---------------:|----:|----:|-----:|------:|
 | **v0.5.0** | 1,000 MB/s | 3.77 ms | 4.52 ms | 5.43 ms | 27.52 ms |
 | **v0.7.0** | 1,001 MB/s | 1.62 ms | 1.82 ms | 2.38 ms | 11.83 ms |
-| **Improvement** | — | **-57%** | **-60%** | **-56%** | **-57%** |
+| **Improvement** | — | **+57%** | **+60%** | **+56%** | **+57%** |
 
 ### Strong Consistency Mode (`fsync`)
 
@@ -268,7 +268,7 @@ Flush the data to disk on every batch write.
 |---------|---------------:|----:|----:|-----:|------:|
 | **v0.5.0** | 843 MB/s | 18.00 ms | 19.72 ms | 21.52 ms | 23.15 ms |
 | **v0.7.0** | 992 MB/s | 9.98 ms | 13.04 ms | 16.27 ms | 18.98 ms |
-| **Improvement** | **+18%** | **-45%** | **-34%** | **-24%** | **-18%** |
+| **Improvement** | -18% | **+45%** | **+34%** | **+24%** | **+18%** |
 
 #### 32 Partitions
 
@@ -284,7 +284,7 @@ Flush the data to disk on every batch write.
 |---------|---------------:|----:|----:|-----:|------:|
 | **v0.5.0** | 931 MB/s | 33.98 ms | 37.09 ms | 41.13 ms | 48.62 ms |
 | **v0.7.0** | 1,102 MB/s | 18.49 ms | 23.74 ms | 29.79 ms | 34.43 ms |
-| **Improvement** | **+18%** | **-46%** | **-36%** | **-28%** | **-29%** |
+| **Improvement** | -18% | **+46%** | **+36%** | **+28%** | **+29%** |
 
 ### And what about reading the data?
 
