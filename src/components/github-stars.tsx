@@ -1,27 +1,26 @@
-"use client";
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-
-const FALLBACK = "3.8K";
+import data from "@/github-stars.json";
 
 export function GitHubStars() {
-  const [stars, setStars] = useState(FALLBACK);
-
-  useEffect(() => {
-    fetch("https://api.github.com/repos/apache/iggy")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.stargazers_count) {
-          const count = data.stargazers_count;
-          setStars(
-            count >= 1000 ? `${(count / 1000).toFixed(1)}K` : String(count),
-          );
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   return (
     <Link
       href="https://github.com/apache/iggy"
@@ -30,7 +29,7 @@ export function GitHubStars() {
     >
       GitHub{" "}
       <span className="inline-flex items-center gap-1 text-fd-primary">
-        &#9733; {stars}
+        &#9733; {data.stars}
       </span>
     </Link>
   );

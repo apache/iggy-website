@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/fetch-github-stars.mjs",
     "build": "next build",
     "start": "next start",
     "postinstall": "fumadocs-mdx"

@@ -17,13 +17,33 @@
  * under the License.
  */
 
-import { docs, blogPosts } from "fumadocs-mdx:collections/server";
-import { loader } from "fumadocs-core/source";
+import { writeFileSync } from "fs";
 
-export const source = loader({
-  baseUrl: "/docs",
-  source: docs.toFumadocsSource(),
-});
+const FALLBACK = "3.9K";
 
-// Blog posts as raw collection for direct access to custom schema fields
-export { blogPosts };
+function formatStars(count) {
+  return count >= 1000 ? `${(count / 1000).toFixed(1)}K` : String(count);
+}
+
+async function main() {
+  let stars = FALLBACK;
+  try {
+    const res = await fetch("https://api.github.com/repos/apache/iggy");
+    if (res.ok) {
+      const data = await res.json();
+      if (data.stargazers_count) {
+        stars = formatStars(data.stargazers_count);
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to fetch GitHub stars, using fallback:", e.message);
+  }
+
+  writeFileSync(
+    new URL("../src/github-stars.json", import.meta.url),
+    JSON.stringify({ stars }),
+  );
+  console.log(`GitHub stars: ${stars}`);
+}
+
+main();

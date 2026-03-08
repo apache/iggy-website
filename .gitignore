@@ -8,6 +8,9 @@
 # Fumadocs generated
 .source/
 
+# Build-time generated
+src/github-stars.json
+
 # System files
 .DS_Store
 Thumbs.db
