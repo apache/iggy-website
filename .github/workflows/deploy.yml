@@ -32,7 +32,7 @@ jobs:
         run: cp .asf.yaml ./out/.asf.yaml
 
       - name: Publish Iggy Website to asf-site
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
