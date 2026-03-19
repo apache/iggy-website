@@ -8,4 +8,40 @@ Iggy is a persistent message streaming platform that stores messages in an appen
 
 ## Q: Are there plans to support Kafka protocol in Iggy?
 
-Currently, Iggy does not support the Kafka protocol. Our focus is on providing a high-performance native protocol that leverages the strengths of Iggy’s architecture. However, we are open to community contributions (in fact there is an [discussion](https://github.com/apache/iggy/discussions/6) about it).
+Currently, Iggy does not support the Kafka protocol. Our focus is on providing a high-performance native protocol that leverages the strengths of Iggy's architecture. However, we are open to community contributions (in fact there is an [discussion](https://github.com/apache/iggy/discussions/6) about it).
+
+## Q: What transport protocol should I use?
+
+For maximum throughput and lowest latency, use **TCP**. If you need built-in encryption without configuring TLS separately, **QUIC** is a good choice. **WebSocket** works well for browser-based clients. **HTTP** is the most accessible but has the highest overhead due to JSON serialization and stateless connections (no consumer groups).
+
+## Q: What are the system requirements?
+
+Iggy is a single binary with no external dependencies. On Linux, it uses `io_uring` for maximum performance, which requires kernel 5.19+. The server starts with around 20 MB of RAM (plus the configured memory pool, default 4 GiB). For Docker, you need to set `SYS_NICE` capability, disable seccomp, and set unlimited memlock.
+
+## Q: How does consumer group rebalancing work?
+
+When consumers join or leave a consumer group, the server triggers cooperative partition rebalancing. Partitions are redistributed among active members. During rebalancing, there is a pending revocation phase (configurable timeout, default 30s) to ensure in-progress message processing can complete before partitions move to new owners.
+
+## Q: Does Iggy support exactly-once delivery?
+
+Iggy supports **at-most-once** (with auto-commit), **at-least-once** (without auto-commit, manual offset management), and **exactly-once** via application-level deduplication. The server provides optional hash-based message deduplication per partition to help with this.
+
+## Q: How do I secure my Iggy deployment?
+
+Iggy supports TLS on all transport protocols, Argon2id password hashing, granular per-stream/per-topic permissions, Personal Access Tokens for programmatic access, and optional AES-256-GCM encryption at rest. For the HTTP API, JWT tokens are used for session management. See the [Security](/docs/server/security) documentation for details.
+
+## Q: Can I use Iggy with my existing tooling?
+
+Iggy provides a [Model Context Protocol (MCP)](/docs/ai/mcp) server with 40+ tools for LLM integration, [connectors](/docs/connectors/introduction) for piping data to/from external systems (PostgreSQL, MongoDB, Elasticsearch, Apache Iceberg, Quickwit), Prometheus metrics, and OpenTelemetry traces/logs. The HTTP API works with any REST client.
+
+## Q: What happened to the Tokio-based runtime?
+
+Iggy migrated from Tokio to a thread-per-core architecture with `compio` (which uses `io_uring` on Linux) starting with version 0.6.0. The migration delivered major performance improvements, including up to 92% better P9999 tail latency and 18% throughput improvement with fsync enabled. You can read the full story in the [thread-per-core io_uring blog post](https://iggy.apache.org/blogs/2026/02/27/thread-per-core-io_uring/).
+
+## Q: Is clustering/replication available?
+
+Clustering based on Viewstamped Replication (VSR) is under active development. The core consensus protocol, view change mechanism, deterministic timeout management, and network simulator are implemented. It is not yet production-ready. See the [Clustering](/docs/clustering/vsr) documentation for the current state.
+
+## Q: What examples are available?
+
+Examples are available in the [repository](https://github.com/apache/iggy/tree/master/examples) for multiple languages: Rust (basic, getting-started, message headers, compression, multi-tenant, stream builder, TLS), Go, Python, Java, Node.js, and C#. Docker Compose files and Helm charts are also provided.

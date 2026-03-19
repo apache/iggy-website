@@ -63,7 +63,7 @@ The PostgreSQL source connector allows you to fetch data from PostgreSQL databas
 
 - Build-time feature flag: enable with `--features cdc_pg_replicate` on the `iggy_connector_postgres_source` crate.
 - When `cdc_backend` is set to `pg_replicate` but the feature is not enabled, the connector will return a clear initialization error.
-- The backend integrates Supabase's ETL for robust WAL decoding and resume from LSN.
+- The backend integrates Supabase's ETL for WAL decoding and resume from LSN.
 
 ### Notes
 

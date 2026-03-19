@@ -6,12 +6,48 @@ The highly performant and modular runtime for statically typed, yet dynamically 
 
 The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, and can be fetched via `docker pull apache/iggy-connect`.
 
+## Architecture
+
+Connectors are dynamically loaded shared libraries (`.so` on Linux, `.dylib` on macOS, `.dll` on Windows) loaded at runtime via `dlopen2`. Data crossing the FFI boundary between the runtime and plugins is serialized using **postcard**, a compact binary format. Each plugin receives its own Tokio runtime inside the SDK, ensuring isolation.
+
+### Data Flow
+
+The connector runtime operates in two directions - **source** (ingest) and **sink** (egress):
+
+<ConnectorPipeline />
+
+**Key details:**
+
+- **Transforms** run inside the runtime process, not inside the plugins. They are applied after decoding for sources (before sending to Iggy) and after consuming from Iggy for sinks (before forwarding to the external system).
+- **State persistence** is file-based (using MessagePack serialization) and applies to source connectors only, tracking the last polled position.
+- **Consumer groups** handle offset tracking for sink connectors automatically, so sinks do not need to manage their own offsets.
+
+### Available Connectors
+
+| Type   | Connectors                                                     |
+|--------|----------------------------------------------------------------|
+| Source | PostgreSQL, Elasticsearch, Random                              |
+| Sink   | PostgreSQL, MongoDB, Elasticsearch, Quickwit, Apache Iceberg, Stdout |
+
+### Transforms
+
+The following built-in transforms are available:
+
+- **add_fields** - add new fields to the message payload.
+- **delete_fields** - remove existing fields from the message payload.
+- **filter_fields** - keep only the specified fields, removing everything else.
+- **update_fields** - update existing fields with computed values such as `timestamp_millis` or `uuid_v7`.
+
+### Supported Schemas
+
+Messages can be decoded and encoded using the following formats: **JSON**, **Raw bytes**, **Text**, **Protocol Buffers**, and **FlatBuffers**.
+
 ## Features
 
 - **High Performance**: Utilizes Rust's performance characteristics to ensure fast data ingestion and egress.
 - **Low memory footprint**: Designed with memory efficiency in mind, minimizing the memory footprint of the connectors.
 - **Modular Design**: Designed with modularity in mind, allowing for easy extension and customization.
-- **Dynamic Loading**: Supports dynamic loading of plugins, enabling seamless integration with various data sources and sinks.
+- **Dynamic Loading**: Supports dynamic loading of plugins, allowing integration with various data sources and sinks at runtime.
 - **Statically Typed**: Ensures type safety and compile-time checks, reducing runtime errors.
 - **Easy Customization**: Provides a simple interface for implementing custom connectors, making it easy to create new plugins.
 - **Data transformation**: Supports data transformation with the help of existing functions.
@@ -61,7 +97,7 @@ All the connectors are implemented as Rust libraries and can be used as a part o
 
 Sinks are responsible for consuming the messages from the configured stream(s) and topic(s) and sending them further to the specified destination. For example, the Quickwit sink connector is responsible for sending the messages to the Quickwit indexer.
 
-Please refer to the **[Sink documentation](/docs/connectors/sink)** for the details about the configuration and the sample implementation.
+Please refer to the **[Sink documentation](/docs/connectors/sinks/sink)** for the details about the configuration and the sample implementation.
 
 When implementing `Sink`, make sure to use the `sink_connector!` macro to expose the FFI interface and allow the connector runtime to register the sink with the runtime.
 Each sink should have its own, custom configuration, which is passed along with the unique plugin ID via expected `new()` method.
@@ -70,11 +106,11 @@ Each sink should have its own, custom configuration, which is passed along with 
 
 Sources are responsible for producing the messages to the configured stream(s) and topic(s). For example, the Test source connector will generate the random messages that will be then sent to the configured stream and topic.
 
-Please refer to the **[Source documentation](/docs/connectors/source)** for the details about the configuration and the sample implementation.
+Please refer to the **[Source documentation](/docs/connectors/sources/source)** for the details about the configuration and the sample implementation.
 
 ## Building the connectors
 
-New connector can be built simply by implementing either `Sink` or `Source` trait. Please check the **[sink](/docs/connectors/sink)** or **[source](/docs/connectors/source)** documentation, as well as the existing examples under `/sinks` and `/sources` directories.
+New connector can be built simply by implementing either `Sink` or `Source` trait. Please check the **[sink](/docs/connectors/sinks/sink)** or **[source](/docs/connectors/sources/source)** documentation, as well as the existing examples under `/sinks` and `/sources` directories.
 
 ## Transformations
 

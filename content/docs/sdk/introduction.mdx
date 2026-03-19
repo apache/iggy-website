@@ -2,4 +2,109 @@
 title: Introduction
 ---
 
-This module contains the SDK-related components of the Apache Iggy message streaming infrastructure. Please note that some programming languages may not support all the lastest features of the Iggy Server.
+Iggy provides official client SDKs in multiple languages. The **Rust SDK** is the most feature-complete, offering both a high-level API (with auto-batching, consumer groups, offset management, retry logic) and a low-level API for direct protocol operations.
+
+| Language | Package | Registry | Transport | Connection string |
+|----------|---------|----------|-----------|-------------------|
+| Rust | [iggy](https://crates.io/crates/iggy) | crates.io | TCP, QUIC, HTTP, WebSocket | Yes |
+| Python | [apache-iggy](https://pypi.org/project/apache-iggy/) | PyPI | TCP, QUIC, HTTP, WebSocket | Yes (PyO3 wrapper) |
+| Java | [iggy](https://mvnrepository.com/artifact/org.apache.iggy/iggy) | Maven Central | TCP, HTTP | No |
+| Node.js | [apache-iggy](https://www.npmjs.com/package/apache-iggy) | npm | TCP | No |
+| Go | [iggy-go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) | pkg.go.dev | TCP | No |
+| C# | [Apache.Iggy](https://www.nuget.org/packages/Apache.Iggy/) | NuGet | TCP, HTTP | No |
+| C++ | [iggy-cpp](https://github.com/apache/iggy/tree/master/foreign/cpp) | GitHub (WIP) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
+
+Python and C++ wrap the Rust SDK, so they inherit all transport protocols when using connection strings. Java and C# implement TCP and HTTP natively. Go and Node.js currently support TCP only.
+
+The Rust SDK is always the first to receive new features.
+
+## Connection string
+
+Connection strings are supported by Rust, Python, and C++ SDKs. They provide a compact way to configure the client, including the transport protocol, credentials, server address, and options.
+
+**Format:**
+
+```
+iggy://username:password@host:port[?options]
+```
+
+**Transport selection** via scheme:
+
+| Scheme | Transport |
+|--------|-----------|
+| `iggy://` | TCP (default) |
+| `iggy+tcp://` | TCP |
+| `iggy+quic://` | QUIC |
+| `iggy+http://` | HTTP |
+| `iggy+ws://` | WebSocket |
+
+**Personal Access Token** authentication:
+
+```
+iggy://iggypat-your-token-here@host:port
+```
+
+**Examples:**
+
+```rust
+// Rust - TCP with default options
+let client = IggyClient::from_connection_string("iggy://iggy:iggy@localhost:8090")?;
+
+// Rust - QUIC with TLS
+let client = IggyClient::from_connection_string("iggy+quic://iggy:iggy@localhost:8080")?;
+
+// Rust - TCP with options
+let client = IggyClient::from_connection_string(
+    "iggy://iggy:iggy@localhost:8090?tls=true&reconnection_retries=unlimited&heartbeat_interval=5s"
+)?;
+```
+
+```python
+# Python
+client = IggyClient.from_connection_string("iggy://iggy:iggy@localhost:8090")
+```
+
+**Available TCP options:** `tls`, `tls_domain`, `tls_ca_file`, `reconnection_retries` (number or `unlimited`), `reconnection_interval`, `reestablish_after`, `heartbeat_interval`, `nodelay`
+
+**Available QUIC options:** `response_buffer_size`, `max_concurrent_bidi_streams`, `datagram_send_buffer_size`, `initial_mtu`, `send_window`, `receive_window`, `keep_alive_interval`, `max_idle_timeout`, `validate_certificate`, `heartbeat_interval`, `reconnection_max_retries`, `reconnection_interval`
+
+**Available WebSocket options:** `tls`, `tls_domain`, `tls_ca_file`, `heartbeat_interval`, `reconnection_retries`, `reconnection_interval`, `read_buffer_size`, `write_buffer_size`, `max_message_size`, `max_frame_size`
+
+**Available HTTP options:** `heartbeat_interval`, `retries`
+
+## Common operations
+
+All SDKs provide the same core operations through the unified client interface:
+
+- **SystemClient** - ping, stats, snapshot
+- **StreamClient** - create, get, list, update, delete, purge streams
+- **TopicClient** - create, get, list, update, delete, purge topics
+- **PartitionClient** - create, delete partitions
+- **MessageClient** - send, poll messages
+- **ConsumerOffsetClient** - get, store, delete consumer offsets
+- **ConsumerGroupClient** - create, get, list, delete consumer groups
+- **UserClient** - create, get, list, update, delete users, change password, update permissions
+- **PersonalAccessTokenClient** - create, list, delete PATs
+- **ClusterClient** - cluster metadata
+
+## Polling strategies
+
+When polling messages, you can choose from several strategies:
+
+| Strategy | Description |
+|----------|-------------|
+| `offset(n)` | Start from a specific offset |
+| `timestamp(t)` | Start after a specific timestamp |
+| `first()` | Start from the earliest available message |
+| `last()` | Start from the latest message |
+| `next()` | Continue from the last committed offset |
+
+## Partitioning strategies
+
+When sending messages, you can control partition routing:
+
+| Strategy | Description |
+|----------|-------------|
+| `partition_id(n)` | Send to a specific partition |
+| `balanced()` | Round-robin across partitions |
+| `messages_key(key)` | Hash-based routing by key |

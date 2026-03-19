@@ -4,11 +4,12 @@
     "index",
     "introduction",
     "server",
+    "clustering",
+    "connectors",
     "sdk",
     "cli",
-    "connectors",
-    "ai",
     "web_ui",
+    "ai",
     "faq"
   ]
 }

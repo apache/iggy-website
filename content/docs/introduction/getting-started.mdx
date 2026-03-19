@@ -4,21 +4,17 @@ title: Getting started
 
 ## Before we start
 
-This is a **Rust based implementation**, to look for examples in the other programming languages, please check the [SDK](/docs/sdk/introduction)
+This tutorial uses the **low-level Rust SDK** to show how things work under the hood - creating streams, topics, sending and polling messages step by step. This is great for understanding the fundamentals.
+
+For real-world applications, you might typically prefer the **[high-level SDK](/docs/sdk/rust/high-level-sdk)**, which provides `IggyProducer` and `IggyConsumer` builders with auto-batching, consumer groups, offset management, reconnection, and retry logic out of the box. Check the [Stream Builder](/docs/sdk/rust/stream-builder) docs for the most ergonomic API.
+
+For examples in other programming languages, see the [SDK section](/docs/sdk/introduction).
 
 ## What we will build
 
-Once you're familiar with the [architecture](/docs/introduction/architecture), it's high time to build the first application, or actually the set of applications - so-called **producer** (the one that will be publishing the messages to the stream) and **consumer** (yes, you got that right - it will handle the incoming messages stream).
+We will build a **producer** (publishing messages to a stream) and a **consumer** (reading those messages back). In a real system, a service can be both at the same time - publishing its own events while consuming events from other services.
 
-In the typical scenario, e.g. when working with the microservices architecture or any other kind of the distributed system, each application can be both at the same time (producer and consumer), as the particular service might publish its own messages (typically in a form of the events - facts, that have already happened) while at the same time be interested in the notifications coming from the other service(s).
-
-The completed sample can be found in [repository](https://github.com/apache/iggy/tree/master/examples/rust/src/getting-started), however, we will go through the implementation step by step, so that you can get a better understanding of how to build the applications from scratch.
-
-Also, please do keep in mind that we'll be using the default implementation of `IggyClient` which provides a wrapper on top of the low-level, transport-specific `Client` trait (which you can always use, if you want to have more control over the communication with the server).
-
-On the other hand, if you're looking for a **more developer-friendly client builder API** providing additional features and extensions, please check the next article under [High-level SDK](/docs/sdk/rust/high-level-sdk) section (this is typically how you'd use Iggy SDK in the real-world applications).
-
-Nevertheless, let's start with the basic scenario, and build the producer and consumer applications using the default `IggyClient` implementation, so you can get a better understanding of how to work with the streaming server.
+The completed sample can be found in the [repository](https://github.com/apache/iggy/tree/master/examples/rust/src/getting-started). We will go through the implementation step by step so you get a clear understanding of how it all fits together.
 
 ## Starting the Iggy server
 
@@ -114,9 +110,7 @@ To make use of logging, simply invoke `tracing_subscriber::fmt::init()` at the b
 
 ```rust
 use std::error::Error;
-use iggy::client::{Client, UserClient};
-use iggy::clients::client::IggyClient;
-use iggy::users::defaults::{DEFAULT_ROOT_PASSWORD, DEFAULT_ROOT_USERNAME};
+use iggy::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -136,23 +130,15 @@ So far, so good, however, before we will be able to publish any messages to our 
 
 Since our `IggyClient` implements the common [Client](https://github.com/apache/iggy/blob/master/core/sdk/src/clients/client.rs) trait, you can find lots of the different methods to interact with the server, also from the administrative point of view, e.g. creating the streams, topics etc.
 
-One thing worth mentioning is that, these methods are not idempotent - for example, if you were to try creating the stream with the same ID which already exists on the server, you would receive the specific error. In such a case, you can simply check for an error and move on. Let's do this then :)
+One thing worth mentioning is that, these methods are not idempotent - for example, if you were to try creating the stream with the same name which already exists on the server, you would receive the specific error. In such a case, you can simply check for an error and move on. When creating a stream, we only provide its name - the server assigns the numeric ID automatically. Let's do this then :)
 
 ```rust
-use iggy::client::{Client, StreamClient, TopicClient, UserClient};
-use iggy::clients::client::IggyClient;
-use iggy::identifier::Identifier;
-use iggy::streams::create_stream::CreateStream;
-use iggy::topics::create_topic::CreateTopic;
+use iggy::prelude::*;
 use std::error::Error;
 use tracing::{info, warn};
-use iggy::compression::compression_algorithm::CompressionAlgorithm;
-use iggy::users::defaults::{DEFAULT_ROOT_PASSWORD, DEFAULT_ROOT_USERNAME};
-use iggy::utils::expiry::IggyExpiry;
-use iggy::utils::topic_size::MaxTopicSize;
 
-const STREAM_ID: u32 = 1;
-const TOPIC_ID: u32 = 1;
+const STREAM_NAME: &str = "sample-stream";
+const TOPIC_NAME: &str = "sample-topic";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -167,19 +153,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn init_system(client: &IggyClient) {
-    match client.create_stream("sample-stream", Some(STREAM_ID)).await {
+    match client.create_stream(STREAM_NAME).await {
         Ok(_) => info!("Stream was created."),
         Err(_) => warn!("Stream already exists and will not be created again."),
     }
 
     match client
         .create_topic(
-            &STREAM_ID.try_into().unwrap(),
-            "sample-topic",
+            &STREAM_NAME.try_into().unwrap(),
+            TOPIC_NAME,
             1,
             CompressionAlgorithm::default(),
             None,
-            Some(TOPIC_ID),
             IggyExpiry::NeverExpire,
             MaxTopicSize::ServerDefault,
         )
@@ -210,15 +195,15 @@ let partitioning = Partitioning::partition_id(PARTITION_ID);
 
 client
     .send_messages(
-        &STREAM_ID.try_into().unwrap(),
-        &TOPIC_ID.try_into().unwrap(),
+        &STREAM_NAME.try_into().unwrap(),
+        &TOPIC_NAME.try_into().unwrap(),
         &partitioning,
         &mut messages,
     )
     .await?;
 ```
 
-As you might've already noticed, there are quite a few fields to be assigned. While some of them should be rather self-descriptive, let's discuss the `identifier` (created implicitly by using `TryFrom` on top of `STREAM_ID` and `TOPIC_ID`) and the `partitioning` which might be a little bit confusing at first, starting with the former.
+As you might've already noticed, there are quite a few fields to be assigned. While some of them should be rather self-descriptive, let's discuss the `identifier` (created implicitly by using `TryFrom` on top of `STREAM_NAME` and `TOPIC_NAME`) and the `partitioning` which might be a little bit confusing at first, starting with the former.
 
 ```rust
 pub struct Identifier {
@@ -228,7 +213,7 @@ pub struct Identifier {
 }
 ```
 
-Whenever we interact with the streaming server in terms of e.g. sending or polling the messages, managing the streams, topics etc. we need to provide the unique identifier of the stream and the topic that we want to use. Since each stream and topic have a unique numeric ID, as well as a unique name, we can use either of them. Here, we use the numeric ID by calling `Identifier::numeric()`, however, you can also use the string identifier by invoking the `Identifier::named()` method instead. It's up to your preference if you'd rather work with the identifier being a number or string when building your applications.
+Whenever we interact with the streaming server in terms of e.g. sending or polling the messages, managing the streams, topics etc. we need to provide the unique identifier of the stream and the topic that we want to use. Since each stream and topic have a unique numeric ID, as well as a unique name, we can use either of them. Here, we use the string name by calling `Identifier::named()` (implicitly via `TryFrom` on a `&str`), however, you can also use the numeric identifier by invoking the `Identifier::numeric()` method instead. It's up to your preference if you'd rather work with the identifier being a number or string when building your applications.
 
 Next, let's move onto the `partitioning` field:
 
@@ -254,8 +239,8 @@ async fn produce_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
     let interval = Duration::from_millis(500);
     info!(
         "Messages will be sent to stream: {}, topic: {}, partition: {} with interval {} ms.",
-        STREAM_ID,
-        TOPIC_ID,
+        STREAM_NAME,
+        TOPIC_NAME,
         PARTITION_ID,
         interval.as_millis()
     );
@@ -273,8 +258,8 @@ async fn produce_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
         }
         client
             .send_messages(
-                &STREAM_ID.try_into().unwrap(),
-                &TOPIC_ID.try_into().unwrap(),
+                &STREAM_NAME.try_into().unwrap(),
+                &TOPIC_NAME.try_into().unwrap(),
                 &partitioning,
                 &mut messages,
             )
@@ -290,21 +275,15 @@ The reason behind passing a mutable reference is that the underlying client (esp
 Finally, let's complete the implementation of the producer - once you start the application after the latest changes, you shall see the messages being sent to the newly created stream.
 
 ```rust
-use iggy::client::{Client, MessageClient, StreamClient, TopicClient, UserClient};
-use iggy::clients::client::IggyClient;
-use iggy::messages::send_messages::{Message, Partitioning};
+use iggy::prelude::*;
 use std::error::Error;
 use std::str::FromStr;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{info, warn};
-use iggy::compression::compression_algorithm::CompressionAlgorithm;
-use iggy::users::defaults::{DEFAULT_ROOT_PASSWORD, DEFAULT_ROOT_USERNAME};
-use iggy::utils::expiry::IggyExpiry;
-use iggy::utils::topic_size::MaxTopicSize;
 
-const STREAM_ID: u32 = 1;
-const TOPIC_ID: u32 = 1;
+const STREAM_NAME: &str = "sample-stream";
+const TOPIC_NAME: &str = "sample-topic";
 const PARTITION_ID: u32 = 1;
 
 #[tokio::main]
@@ -321,19 +300,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn init_system(client: &IggyClient) {
-    match client.create_stream("sample-stream", Some(STREAM_ID)).await {
+    match client.create_stream(STREAM_NAME).await {
         Ok(_) => info!("Stream was created."),
         Err(_) => warn!("Stream already exists and will not be created again."),
     }
 
     match client
         .create_topic(
-            &STREAM_ID.try_into().unwrap(),
-            "sample-topic",
+            &STREAM_NAME.try_into().unwrap(),
+            TOPIC_NAME,
             1,
             CompressionAlgorithm::default(),
             None,
-            Some(TOPIC_ID),
             IggyExpiry::NeverExpire,
             MaxTopicSize::ServerDefault,
         )
@@ -348,8 +326,8 @@ async fn produce_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
     let interval = Duration::from_millis(500);
     info!(
         "Messages will be sent to stream: {}, topic: {}, partition: {} with interval {} ms.",
-        STREAM_ID,
-        TOPIC_ID,
+        STREAM_NAME,
+        TOPIC_NAME,
         PARTITION_ID,
         interval.as_millis()
     );
@@ -367,8 +345,8 @@ async fn produce_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
         }
         client
             .send_messages(
-                &STREAM_ID.try_into().unwrap(),
-                &TOPIC_ID.try_into().unwrap(),
+                &STREAM_NAME.try_into().unwrap(),
+                &TOPIC_NAME.try_into().unwrap(),
                 &partitioning,
                 &mut messages,
             )
@@ -386,8 +364,8 @@ The consumer part will be rather easy to implement. Just like on the producer si
 ```rust
 let polled_messages = client
     .poll_messages(
-        &STREAM_ID.try_into()?,
-        &TOPIC_ID.try_into()?,
+        &STREAM_NAME.try_into()?,
+        &TOPIC_NAME.try_into()?,
         Some(PARTITION_ID),
         &Consumer::default(),
         &PollingStrategy::offset(offset),
@@ -421,12 +399,11 @@ async fn consume_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
     let mut offset = 0;
     let messages_per_batch = 10;
     let consumer = Consumer::default();
-    let mut strategy = PollingStrategy::offset(offset);
     loop {
         let polled_messages = client
             .poll_messages(
-                &STREAM_ID.try_into()?,
-                &TOPIC_ID.try_into()?,
+                &STREAM_NAME.try_into()?,
+                &TOPIC_NAME.try_into()?,
                 Some(PARTITION_ID),
                 &consumer,
                 &PollingStrategy::offset(offset),
@@ -442,7 +419,6 @@ async fn consume_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
         }
 
         offset += polled_messages.messages.len() as u64;
-        strategy.set_value(offset);
         for message in polled_messages.messages {
             handle_message(&message)?;
         }
@@ -454,19 +430,14 @@ async fn consume_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
 And here's the final code for our consumer application:
 
 ```rust
-use iggy::client::{Client, MessageClient, UserClient};
-use iggy::clients::client::IggyClient;
-use iggy::consumer::Consumer;
-use iggy::messages::poll_messages::PollingStrategy;
-use iggy::models::messages::PolledMessage;
+use iggy::prelude::*;
 use std::error::Error;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::info;
-use iggy::users::defaults::{DEFAULT_ROOT_PASSWORD, DEFAULT_ROOT_USERNAME};
 
-const STREAM_ID: u32 = 1;
-const TOPIC_ID: u32 = 1;
+const STREAM_NAME: &str = "sample-stream";
+const TOPIC_NAME: &str = "sample-topic";
 const PARTITION_ID: u32 = 1;
 
 #[tokio::main]
@@ -484,8 +455,8 @@ async fn consume_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
     let interval = Duration::from_millis(500);
     info!(
         "Messages will be consumed from stream: {}, topic: {}, partition: {} with interval {} ms.",
-        STREAM_ID,
-        TOPIC_ID,
+        STREAM_NAME,
+        TOPIC_NAME,
         PARTITION_ID,
         interval.as_millis()
     );
@@ -493,12 +464,11 @@ async fn consume_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
     let mut offset = 0;
     let messages_per_batch = 10;
     let consumer = Consumer::default();
-    let mut strategy = PollingStrategy::offset(offset);
     loop {
         let polled_messages = client
             .poll_messages(
-                &STREAM_ID.try_into()?,
-                &TOPIC_ID.try_into()?,
+                &STREAM_NAME.try_into()?,
+                &TOPIC_NAME.try_into()?,
                 Some(PARTITION_ID),
                 &consumer,
                 &PollingStrategy::offset(offset),
@@ -514,7 +484,6 @@ async fn consume_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
         }
 
         offset += polled_messages.messages.len() as u64;
-        strategy.set_value(offset);
         for message in polled_messages.messages {
             handle_message(&message)?;
         }
@@ -522,12 +491,12 @@ async fn consume_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn handle_message(message: &PolledMessage) -> Result<(), Box<dyn Error>> {
+fn handle_message(message: &IggyMessage) -> Result<(), Box<dyn Error>> {
     // The payload can be of any type as it is a raw byte array. In this case it's a simple string.
     let payload = std::str::from_utf8(&message.payload)?;
     info!(
         "Handling message at offset: {}, payload: {}...",
-        message.offset, payload
+        message.header.offset, payload
     );
     Ok(())
 }
@@ -538,4 +507,4 @@ Start the Iggy server, and then producer and consumer applications respectively 
 
 ## Summary
 
-What we've just achieved is merely the tip of an iceberg, however, it should give you a good understanding of what Iggy is all about, and hopefully, it wasn't too difficult to follow and get things up and running for the first time. Feel free to take a look at the more advanced [examples](https://github.com/apache/iggy/tree/master/core/examples), how to make use of `IggyClient` wrapper on top of the existing implementations of the `Client` trait, what happens when you start multiple producers and consumers and so on. Happy tweaking! :)
+What we've just achieved is merely the tip of an iceberg, however, it should give you a good understanding of what Iggy is all about, and hopefully, it wasn't too difficult to follow and get things up and running for the first time. Feel free to take a look at the more advanced [examples](https://github.com/apache/iggy/tree/master/examples/rust), how to make use of `IggyClient` wrapper on top of the existing implementations of the `Client` trait, what happens when you start multiple producers and consumers and so on. Happy tweaking! :)

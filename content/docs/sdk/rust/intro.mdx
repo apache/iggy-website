@@ -2,6 +2,112 @@
 title: Intro
 ---
 
-To learn more about the Rust SDK, please check the [getting started](/docs/introduction/getting-started) guide. The SDK is available on [crates.io](https://crates.io/crates/iggy) and the source code can be is part of the [core repository](https://github.com/apache/iggy/), located under `sdk` directory.
+The Rust SDK is the primary and most feature-complete client for Iggy. It is available on [crates.io](https://crates.io/crates/iggy) and the source code is part of the [core repository](https://github.com/apache/iggy/tree/master/core/sdk).
 
-To start using the Iggy SDK in your Rust project, simply run `cargo add iggy`.
+```bash
+cargo add iggy
+```
+
+## High-level vs low-level API
+
+The SDK provides two layers:
+
+**High-level API (recommended)** - the easiest way to get started. It handles connection management, auto-batching, consumer group lifecycle, offset commits, retry logic, and reconnection out of the box. Use `IggyClient`, `IggyProducer`, and `IggyConsumer` for the best developer experience.
+
+```rust
+use iggy::prelude::*;
+
+// Connect with a connection string
+let client = IggyClient::from_connection_string("iggy://iggy:iggy@localhost:8090")?;
+client.connect().await?;
+
+// Or use the builder
+let client = IggyClientBuilder::new()
+    .with_tcp()
+    .with_server_address("localhost:8090".to_string())
+    .build()?;
+client.connect().await?;
+client.login_user("iggy", "iggy").await?;
+```
+
+**Low-level API** - direct access to individual protocol operations. Useful when you need fine-grained control over every request, or when building custom abstractions on top.
+
+The high-level API is built on top of the low-level one, so you can always drop down when needed.
+
+## Connection string
+
+The connection string is the simplest way to configure the client. It supports all four transport protocols:
+
+```
+iggy://user:pass@host:port              (TCP, default)
+iggy+tcp://user:pass@host:port          (TCP, explicit)
+iggy+quic://user:pass@host:port         (QUIC)
+iggy+http://user:pass@host:port         (HTTP)
+iggy+ws://user:pass@host:port           (WebSocket)
+```
+
+Options can be appended as query parameters:
+
+```
+iggy://iggy:iggy@my-server:8090?tls=true&tls_ca_file=/path/to/ca.crt
+iggy://iggy:iggy@localhost:8090?reconnection_retries=unlimited&heartbeat_interval=5s
+```
+
+Personal Access Tokens are also supported:
+
+```
+iggy://iggypat-your-token@localhost:8090
+```
+
+## Quick example
+
+```rust
+use iggy::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = IggyClient::from_connection_string("iggy://iggy:iggy@localhost:8090")?;
+    client.connect().await?;
+
+    // Create stream and topic
+    client.create_stream("my-stream").await?;
+    client.create_topic(
+        &"my-stream".try_into()?,
+        "my-topic",
+        2,
+        CompressionAlgorithm::None,
+        None,
+        IggyExpiry::NeverExpire,
+        MaxTopicSize::ServerDefault,
+    ).await?;
+
+    // Send a message
+    let msg = IggyMessage::from_str("hello world")?;
+    client.send_messages(
+        &"my-stream".try_into()?,
+        &"my-topic".try_into()?,
+        &Partitioning::balanced(),
+        &mut [msg],
+    ).await?;
+
+    // Poll messages
+    let polled = client.poll_messages(
+        &"my-stream".try_into()?,
+        &"my-topic".try_into()?,
+        Some(1),
+        &Consumer::default(),
+        &PollingStrategy::offset(0),
+        10,
+        false,
+    ).await?;
+
+    for message in &polled.messages {
+        let payload = std::str::from_utf8(&message.payload)?;
+        println!("Offset: {}, Payload: {}", message.header.offset, payload);
+    }
+
+    Ok(())
+}
+```
+
+For the full getting started tutorial, see [Getting Started](/docs/introduction/getting-started). For the high-level producer/consumer builders, see [High-level SDK](/docs/sdk/rust/high-level-sdk) and [Stream Builder](/docs/sdk/rust/stream-builder).

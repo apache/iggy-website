@@ -20,15 +20,17 @@ The name is an abbreviation for the Italian Greyhound - small yet extremely fast
 
 - **Highly performant**, persistent append-only log for message streaming
 - **Very high throughput** for both writes and reads
-- **Low latency and predictable resource usage** thanks to the Rust compiled language (no GC) and `io_uring`.
-- **User authentication and authorization** with granular permissions and Personal Access Tokens (PAT)
+- **Low latency and predictable resource usage** thanks to the Rust compiled language (no GC) and `io_uring`
+- **Thread per core shared nothing design** together with `io_uring` guarantee the best possible performance on modern `Linux` systems
+- **NUMA-aware sharding** with CPU affinity and memory binding per NUMA node for optimal hardware utilization
+- **User authentication and authorization** with granular permissions, Personal Access Tokens (PAT) and Argon2id password hashing
 - Support for multiple streams, topics and partitions
 - Support for **multiple transport protocols** (QUIC, TCP, WebSocket, HTTP)
 - Fully operational RESTful API which can be optionally enabled
 - Available client SDK in multiple languages
-- **Thread per core shared nothing design** together with `io_uring` guarantee the best possible performance on modern `Linux` systems.
 - **Works directly with binary data**, avoiding enforced schema and serialization/deserialization overhead
-- Custom **zero-copy (de)serialization**, which greatly improves the performance and reduces memory usage.
+- Custom **zero-copy (de)serialization**, which greatly improves the performance and reduces memory usage
+- **Custom memory pool** with 32 buckets (buffer sizes from 256 B to 512 MiB) for pre-allocated, zero-copy message passing
 - Configurable server features (e.g. caching, segment size, data flush interval, transport protocols etc.)
 - Server-side storage of **consumer offsets**
 - Multiple ways of polling the messages:
@@ -37,52 +39,63 @@ The name is an abbreviation for the Italian Greyhound - small yet extremely fast
   - First/Last N messages
   - Next N messages for the specific consumer
 - Possibility of **auto committing the offset** (e.g. to achieve *at-most-once* delivery)
-- **Consumer groups** providing the message ordering and horizontal scaling across the connected clients
+- **Consumer groups** providing the message ordering and horizontal scaling across the connected clients, with cooperative partition rebalancing
 - **Message expiry** with auto deletion based on the configurable **retention policy**
 - Additional features such as **server side message deduplication**
 - **Multi-tenant** support via abstraction of **streams** which group **topics**
 - **TLS** support for all transport protocols (TCP, QUIC, WebSocket, HTTPS)
-- **[Connectors](https://github.com/apache/iggy/tree/master/core/connectors)** - sinks, sources and data transformations based on the **custom Rust plugins**
-- **[Model Context Protocol](https://github.com/apache/iggy/tree/master/core/ai/mcp)** - provide context to LLM with **MCP server**
+- **[Connectors](/docs/connectors/introduction)** - sinks, sources and data transformations based on the **custom Rust plugins** loaded dynamically at runtime
+- **[Model Context Protocol](/docs/ai/mcp)** - provide context to LLM with **MCP server** exposing 40+ tools for full Iggy management
 - Optional server-side as well as client-side **data encryption** using AES-256-GCM
 - Optional metadata support in the form of **message headers**
 - Optional **data backups and archiving** to disk or **S3** compatible cloud storage (e.g. AWS S3)
 - Support for **OpenTelemetry** logs & traces + Prometheus metrics
-- Built-in **CLI** to manage the streaming server installable via `cargo install iggy-cli`
+- Built-in **[CLI](/docs/cli/start)** to manage the streaming server installable via `cargo install iggy-cli`
+- Built-in **[Web UI](/docs/web_ui/start)** dashboard (Svelte) that can be embedded directly in the server binary or run as a standalone container
 - Built-in **benchmarking app** to test the performance
 - **Single binary deployment** (no external dependencies)
-- Running as a single node (clustering based on Viewstamped Replication will be implemented in the near future)
+- **TCP socket migration** across shards for optimal request routing
+- Running as a single node, with **clustering based on Viewstamped Replication (VSR)** currently being implemented
 
 ## Supported languages SDK
 
-- [Rust](https://crates.io/crates/iggy)
-- [C#](https://www.nuget.org/packages/Apache.Iggy/)
-- [Java](https://mvnrepository.com/artifact/org.apache.iggy/iggy-java-sdk)
-- [Python](https://pypi.org/project/apache-iggy/)
-- [Node.js (TypeScript)](https://www.npmjs.com/package/apache-iggy)
-- [Go](https://pkg.go.dev/github.com/apache/iggy/foreign/go)
-
-C++ and Elixir SDKs are a work in progress.
+| Language | Package | Registry |
+|----------|---------|----------|
+| Rust | [iggy](https://crates.io/crates/iggy) | crates.io |
+| C# | [Apache.Iggy](https://www.nuget.org/packages/Apache.Iggy/) | NuGet |
+| Java | [iggy](https://mvnrepository.com/artifact/org.apache.iggy/iggy) | Maven Central |
+| Python | [apache-iggy](https://pypi.org/project/apache-iggy/) | PyPI |
+| Node.js | [apache-iggy](https://www.npmjs.com/package/apache-iggy) | npm |
+| Go | [iggy-go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) | pkg.go.dev |
+| C++ | [iggy-cpp](https://github.com/apache/iggy/tree/master/foreign/cpp) | GitHub (WIP) |
 
 ## CLI
 
 The interactive CLI is implemented under the `cli` project, to provide the best developer experience. This is a great addition to the Web UI, especially for developers who prefer using the console tools.
 
-Iggy CLI can be installed with `cargo install iggy-cli` and then simply accessed by typing `iggy` in your terminal.
+Iggy CLI can be installed with `cargo install iggy-cli` and then simply accessed by typing `iggy` in your terminal. It supports named connection contexts (profiles) for managing multiple server connections, shell completions for bash/zsh/fish/elvish/powershell, and session-based login on Linux.
 
 ### Web UI
 
-There's a dedicated Web UI for the server, which allows you to manage streams, topics, partitions, browsing the messages and so on. This is an ongoing effort to build a comprehensive dashboard for administrative purposes of the Iggy server. Check the Web UI in the `/web` directory.
-The [docker image](https://hub.docker.com/r/apache/iggy-web-ui) is available, and can be fetched via `docker pull apache/iggy-web-ui`.
+The Web UI provides a comprehensive dashboard for the Iggy server, built with SvelteKit and TypeScript. It can run in two modes:
+
+- **Embedded** - compiled into the server binary (with `iggy-web` feature flag), served at the `/ui` endpoint
+- **Standalone** - as a separate container via `docker pull apache/iggy-web-ui`
+
+Features include stream/topic/partition management, message browser with JSON/string/XML decoders, user management, server logs viewer, real-time terminal, and server configuration overview.
 
 ## Connectors
 
 Iggy provides a highly performant and modular **[runtime](/docs/connectors/runtime)** for statically typed, yet dynamically loaded connectors. You can ingest data from external sources and push the data to Iggy streams, or fetch data from Iggy streams and forward it to external systems. **Create your own Rust plugins** by simply implementing either the `Source` or `Sink` trait and **build custom pipelines for the data processing**.
+
+Available connectors include sources for PostgreSQL, Elasticsearch, and random data generation, along with sinks for PostgreSQL, MongoDB, Elasticsearch, Quickwit, Apache Iceberg, and stdout.
+
 The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, and can be fetched via `docker pull apache/iggy-connect`.
 
 ## Model Context Protocol
 
-The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open protocol that standardizes how applications provide context to LLMs. The **[Iggy MCP Server](/docs/ai/mcp)** is an implementation of the MCP protocol for message streaming infrastructure. It can be used to provide context to LLMs in real-time, allowing for more accurate and relevant responses.
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open protocol that standardizes how applications provide context to LLMs. The **[Iggy MCP Server](/docs/ai/mcp)** is an implementation of the MCP protocol for message streaming infrastructure. It exposes 40+ tools covering streams, topics, partitions, messages, consumer groups, users, and more. It supports both HTTP and stdio transports, making it compatible with tools like Claude Desktop and other MCP clients.
+
 The [docker image](https://hub.docker.com/r/apache/iggy-mcp) is available, and can be fetched via `docker pull apache/iggy-mcp`.
 
 ### Docker
@@ -117,6 +130,10 @@ Or when running with `docker run`:
 ```
 docker run --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 apache/iggy:edge
 ```
+
+### Helm Charts
+
+Helm charts for Kubernetes deployment are available in the [repository](https://github.com/apache/iggy/tree/master/helm/charts/iggy). The chart includes templates for Deployment, Service, ServiceAccount, HPA (Horizontal Pod Autoscaler), Ingress, PersistentVolumeClaim, ServiceMonitor (for Prometheus), and root user credentials Secret.
 
 ### Versioning
 

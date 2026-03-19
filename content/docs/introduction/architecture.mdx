@@ -20,9 +20,37 @@ There are advantages and disadvantages of both approaches, but the main differen
 
 As you might've guessed by now, Iggy is the latter - the message streaming platform.
 
+## How a message flows through Iggy
+
+Before diving into the architecture details, here's the complete journey of a message from client to disk:
+
+<MessageFlowDiagram />
+
 ## Thread per core (shared nothing) + io_uring
 
-Iggy utilizies `io_uring` as the main I/O interface, which allows it to achieve high performance and low latency. Each core (shard), runs it's own instance of the server, which means that there is (almost) no shared state between the cores. This allows Iggy to scale linearly with the number of cores, as there is no contention between the cores. This architecture been proven by systems such as `redpanda` or `scylladb`, which are known for their high performance and low latency. Each shard owns an subset of partitions (units of parallelism in message streaming systems), and is responsible for handling all the I/O operations for those partitions. The requests are routed between the shards using message passing, which allows to avoid the locking. The partitions are distributed between the shards using `Murmur3` hashing algorithm, with an correction for small number of partitions.
+Iggy uses a **thread-per-core shared nothing architecture** combined with `io_uring` for maximum performance. This design has been proven by systems like ScyllaDB and Redpanda, and is inspired by the Seastar framework.
+
+<ShardDiagram />
+
+### How it works
+
+Each CPU core runs its own **shard** (an instance of `IggyShard`), pinned to a specific core via `sched_setaffinity` on Linux. Each shard has its own single-threaded `compio` async runtime, which means there is no cross-thread synchronization needed within a shard. Memory is bound to the NUMA node of the core via `hwlocality` for optimal memory access latency.
+
+### Asymmetric shard roles
+
+Shards have asymmetric roles:
+
+- **Shard 0 (Primary)** holds the exclusive `MetadataWriter`, runs the HTTP and QUIC servers, and acts as the VSR consensus primary
+- **Shards 1..N (Workers)** hold `MetadataReader` clones, manage local partitions, and run TCP/WebSocket servers for load distribution
+
+### Request routing
+
+Requests are routed between shards using **message passing** (via `crossfire` bounded mpsc channels), which avoids locking entirely. The routing logic splits operations into two planes:
+
+- **Metadata operations** (create/delete stream/topic/user etc.) always go to **shard 0**
+- **Partition operations** (send_messages, store_consumer_offset) are routed to the shard owning that partition via a `DashMap` lookup
+
+Partitions are distributed between shards using `Murmur3` hashing with correction for small partition counts:
 
 ```rs
 pub fn calculate_shard_assignment(ns: &IggyNamespace, upperbound: u32) -> u16 {
@@ -34,20 +62,60 @@ pub fn calculate_shard_assignment(ns: &IggyNamespace, upperbound: u32) -> u16 {
 }
 ```
 
-`io_uring` is an ever-growing beast, to learn more about it please check the [documentation](https://kernel.dk/io_uring.pdf) or the excellent [presentation](https://www.youtube.com/watch?v=ToSRCSijRuE) by Jens Axboe, the original author of `io_uring`.
+### IggyNamespace
 
-Check [benchmarking](../server/benchmarking.md) section to see some performance numbers.
+The `IggyNamespace` packs stream_id (12 bits), topic_id (12 bits), and partition_id (20 bits) into a single `u64` for efficient hashing and routing. This gives maximums of 4096 streams, 4096 topics per stream, and 1,000,000 partitions per topic.
+
+<NamespacePacking />
+
+### CPU allocation modes
+
+The sharding system supports multiple allocation modes via the `cpu_allocation` config:
+
+- `"all"` - one shard per available CPU core
+- A numeric value (e.g. `4`) - exactly N shards pinned to cores 0..N
+- A range (e.g. `"5..8"`) - shards on specified core range
+- `"numa:auto"` - automatically detect NUMA topology and bind accordingly
+- `"numa:nodes=0,1;cores=4;no_ht=true"` - fine-grained NUMA control per node with hyperthread avoidance
+
+### io_uring and compio
+
+Traditional async runtimes like tokio use `epoll` which is **readiness-based** - you ask the kernel "is this file descriptor ready?" and then perform the I/O yourself. The Linux kernel considers regular files "always ready" for epoll, which means tokio has to outsource file I/O to a blocking thread pool (up to 512 threads). This does not scale well.
+
+`io_uring` is **completion-based** - you submit I/O requests to a submission queue (SQ), and the kernel completes them and places results in a completion queue (CQ). Both queues are lock-free ring buffers shared between user space and kernel. This is fundamentally better for disk I/O.
+
+<IoUringComparison />
+
+Iggy uses **compio** as its async runtime, which provides a driver-disaggregated architecture on top of io_uring (Linux) and IOCP (Windows). Each shard gets its own compio executor configured with:
+- Capacity: 4096 concurrent I/O operations
+- Event interval: 128 events per loop iteration
+- Cooperative task running enabled
+
+### Performance: Tokio vs Thread-per-Core
+
+The migration from Tokio to thread-per-core with compio delivered significant latency improvements across the board:
+
+<BenchmarkChart />
+
+### TCP socket migration
+
+Iggy supports **TCP socket migration** across shards. When a client sends a request that targets a partition on a different shard, instead of forwarding the request (cross-shard hop), the TCP socket itself can be migrated to the owning shard. This eliminates the overhead of cross-shard message passing for data plane operations.
+
+### Left-right metadata
+
+Shared metadata (streams, topics, consumer groups) uses a **left-right** concurrent data structure. Shard 0 is the sole writer, while all other shards hold read-only clones that are updated lock-free. This provides:
+- Lock-free reads on all shards (no contention on the hot path)
+- Strongly consistent writes serialized through shard 0
 
 ## Append-only log
 
-The append-only log is the core concept of Iggy. It's a simple data structure, which is optimized for the append-only operations. It's a sequence of records, that are being appended to the end of the log. The records are immutable, so that they can't be changed once they are written to the log. The records are being written in the order they are received, which results in the log being is ordered.
+The append-only log is the core concept of Iggy. It's a simple data structure, which is optimized for the append-only operations. It's a sequence of records, that are being appended to the end of the log. The records are immutable, so that they can't be changed once they are written to the log. The records are being written in the order they are received, which results in the log being ordered.
 
 To navigate the log, you can use the offset, which is the position of the record in the log. The offset is a simple integer, that starts from 0 and is incremented by 1 for each record. When the client is reading the records from the log, it can specify the offset from which it wants to start reading the records. The client can also specify the maximum number of records it wants to read. The client can read the records from the beginning, or from the specific offset, which means that you can replay the messages.
 
-```mermaid
-graph LR
-  M1["Msg 1 · Offset 0"] --> M2["Msg 2 · Offset 1"] --> M3["Msg 3 · Offset 2"] --> M4["Msg 4 · Offset 3"] --> M5["Msg 5 · Offset 4"]
-```
+<AppendOnlyLogViz />
+
+<StreamHierarchy />
 
 ## Stream
 
@@ -58,7 +126,7 @@ The stream is a logical concept, and you might think of it as a namespace. For e
 
 The topic is also the logical concept, which is a part of the stream. The topic is identified by its unique ID. You could think of topic as an entity being responsible for storing the specific type of the records. For example, you could have a topic for the user events, and another topic for the order events, etc.
 
-The important thing to note is that, the messages are not being stored in the topic directly, but rather in the partitions, which are assigned to the topic. The topic can have one or more partitions assigned, that could help achieve higher parallelism and throughput. The topic can also have the retention policy assigned, which means that the records are being deleted automatically once they are older than the specified retention period.
+The important thing to note is that, the messages are not being stored in the topic directly, but rather in the partitions, which are assigned to the topic. The topic can have one or more partitions assigned, that could help achieve higher parallelism and throughput. The topic can also have the retention policy assigned, which means that the records are being deleted automatically once they are older than the specified retention period. Topics also support configurable compression (`none`, `gzip`, `lz4`, `zstd`) and maximum size limits.
 
 ## Partition
 
@@ -66,23 +134,77 @@ The partition has its own unique ID and belongs to the topic. The partition is r
 
 Thanks to having multiple partitions, we can achieve the horizontal scalability between many independent consumers, since each consumer can read the messages from the different partitions. This can be achieved by using more advanced concepts such as consumer groups.
 
+Each partition in the thread-per-core architecture is owned by exactly one shard and includes:
+- A `SegmentedLog` with sealed segments and one active segment
+- Consumer offsets and consumer group offsets
+- Optional `MessageDeduplicator` for server-side dedup
+- Partition statistics and an atomic offset counter
+
 ## Segment
 
-The segment, being a part of the partition, is the actual physical layer which stores the records in the binary format in a form of the files. Each segment has the limited size (e.g. 1 GB) and once it's full, the new segment is being created automatically. The segment name is based on the start offset of the first record in the segment and is unique per partition.
+The segment, being a part of the partition, is the actual physical layer which stores the records in the binary format in a form of the files. Each segment has the limited size (default 1 GiB) and once it's full, the new segment is being created automatically. The segment name is based on the start offset of the first record in the segment and is unique per partition.
+
+Each segment consists of:
+- `.log` file - the actual message data
+- `.index` file - positional and time indexes for fast lookups
+
+Index caching can be configured per strategy: `"all"` (all indexes in memory), `"open_segment"` (only the active segment cached, the default), or `"none"` (on-demand disk reads).
+
+## Consumer groups
+
+Consumer groups provide horizontal scaling for message consumption. When multiple consumers join the same consumer group, the server automatically distributes partitions among group members so that each partition is consumed by exactly one member. When members join or leave, the server triggers a **cooperative partition rebalancing** with a pending revocation phase (configurable timeout, default 30s) to ensure smooth transitions without message loss.
+
+<ConsumerGroupViz />
+
+## Message format
+
+<MessageHeaderDiagram />
+
+Each message has a 64-byte header stored in little-endian format:
+
+| Field | Bytes | Type | Description |
+|-------|-------|------|-------------|
+| checksum | 0-8 | u64 | xxHash3 integrity checksum |
+| id | 8-24 | u128 | Unique message ID (UUIDv4) |
+| offset | 24-32 | u64 | Sequential offset in partition |
+| timestamp | 32-40 | u64 | Server-assigned timestamp |
+| origin_timestamp | 40-48 | u64 | Client-provided timestamp |
+| user_headers_length | 48-52 | u32 | Length of optional headers |
+| payload_length | 52-56 | u32 | Length of payload |
+| reserved | 56-64 | u64 | Reserved (must be 0) |
+
+After the header comes the optional user headers bytes, followed by the payload bytes.
 
 ## Structure
 
 Having in mind that stream consists of topics, which might have one or more partitions assigned, and each partition consists of segments, we can visualize the structure of the Iggy data directory as follows:
 
 ```bash
-streams/
-└── 1/
-    └── topics/
-        └── 1/
-            └── partitions/
-                └── 1/
-                    ├── 00000000000000000000.index
-                    └── 00000000000000000000.log
+local_data/
+├── info.json
+├── state.messages
+└── streams/
+    └── 1/
+        └── topics/
+            └── 1/
+                └── partitions/
+                    └── 1/
+                        ├── 00000000000000000000.index
+                        └── 00000000000000000000.log
 ```
 
-The additional `.index` file is being created automatically and are being used to speed up the search operations by keeping track of the offsets and timestamps of the records.
+The `.index` file is created automatically and is used to speed up the search operations by keeping track of the offsets and timestamps of the records. The `state.messages` file is a write-ahead log that persists all metadata operations (stream/topic/user creation, etc.) with SHA-256 checksums for integrity.
+
+## Memory pool
+
+Iggy uses a custom memory pool with 32 buckets holding buffer sizes from 256 B to 512 MiB. The default pool size is 4 GiB with 8192 buffers per bucket. This eliminates allocation overhead on the hot path and enables zero-copy message passing between components. The pool is page-aligned (4096-byte multiples) and requires a minimum of 512 MiB.
+
+## Write pipeline
+
+Messages flow through a multi-stage write pipeline:
+
+1. Messages arrive and are buffered in a `MemoryMessageJournal`
+2. A flush is triggered when either the message count threshold (default 1024) or size threshold (default 1 MiB) is reached
+3. The `MessagesWriter` uses **vectored I/O** with `MAX_IOV_COUNT=1024` to minimize syscalls
+4. Optional `fsync` per partition for durability guarantees
+5. When a segment reaches its size limit (default 1 GiB), it is sealed and a new segment is created

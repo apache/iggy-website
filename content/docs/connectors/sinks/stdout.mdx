@@ -1,0 +1,34 @@
+---
+title: Stdout Sink
+---
+
+The stdout sink connector prints messages from Iggy streams to the standard output. This is useful for debugging, development, and verifying that your connector pipeline is working correctly.
+
+## Configuration
+
+```toml
+type = "sink"
+key = "stdout-sink"
+enabled = true
+version = 1
+name = "Stdout Sink"
+path = "/path/to/libstdout_sink.so"
+verbose = false
+
+[[streams]]
+stream = "my-stream"
+topics = ["my-topic"]
+schema = "json"
+batch_length = 10
+poll_interval = "1s"
+consumer_group = "stdout-sink-group"
+
+[plugin_config]
+print_payload = true
+```
+
+## Plugin config options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `print_payload` | bool | `true` | Whether to print the message payload to stdout |

@@ -1,5 +1,61 @@
 ---
-title: Intro
+title: Go SDK
 ---
 
-The Iggy Go SDK is a client library that allows you to interact with the Iggy API from your Go application. Repository can be found [here](https://github.com/apache/iggy/tree/master/foreign/go).
+The Iggy Go SDK is a client library that allows you to interact with the Iggy API from your Go application. It communicates with the Iggy server over TCP using the binary protocol. The repository can be found [here](https://github.com/apache/iggy/tree/master/foreign/go).
+
+## Installation
+
+```bash
+go get github.com/apache/iggy/foreign/go
+```
+
+## Quick start
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    iggy "github.com/apache/iggy/foreign/go"
+)
+
+func main() {
+    client, err := iggy.NewClient("localhost:8090")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close()
+
+    err = client.Login("iggy", "iggy")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Create a stream
+    err = client.CreateStream("my-stream")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Create a topic with 2 partitions
+    err = client.CreateTopic("my-stream", "my-topic", 2)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Send a message
+    err = client.SendMessages("my-stream", "my-topic", 1,
+        [][]byte{[]byte("Hello from Go!")})
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Println("Message sent successfully")
+}
+```
+
+## Examples
+
+Working examples are available in the [examples/go](https://github.com/apache/iggy/tree/master/examples/go) directory, including a getting-started example with producer and consumer.

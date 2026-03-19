@@ -1,5 +1,95 @@
 ---
-title: Intro
+title: Node.js SDK
 ---
 
-The Iggy Node.js SDK is a client library that allows you to interact with the Iggy API from your Node.js applications. This guide will help you get started with the SDK and show you how to use it to interact with the Iggy API. Repository can be found [here](https://github.com/apache/iggy/tree/master/foreign/node).
+The Iggy Node.js SDK is a client library that allows you to interact with the Iggy API from your Node.js and TypeScript applications. It communicates with the Iggy server over TCP using the binary protocol. The repository can be found [here](https://github.com/apache/iggy/tree/master/foreign/node).
+
+## Installation
+
+```bash
+npm install apache-iggy
+```
+
+## Quick start
+
+### Producer
+
+```typescript
+import { Client, Partitioning } from 'apache-iggy';
+
+const client = new Client({
+  transport: 'TCP',
+  options: {
+    port: 8090,
+    host: '127.0.0.1',
+  },
+  credentials: {
+    username: 'iggy',
+    password: 'iggy',
+  },
+});
+
+const messages = Array.from({ length: 10 }).map((_, i) => ({
+  id: i + 1,
+  headers: [],
+  payload: `message-${i + 1}`,
+}));
+
+await client.message.send({
+  streamId: 1,
+  topicId: 1,
+  messages,
+  partition: Partitioning.PartitionId(1),
+});
+```
+
+### Consumer
+
+```typescript
+import { Client, PollingStrategy, Consumer } from 'apache-iggy';
+
+const client = new Client({
+  transport: 'TCP',
+  options: {
+    port: 8090,
+    host: '127.0.0.1',
+  },
+  credentials: {
+    username: 'iggy',
+    password: 'iggy',
+  },
+});
+
+const STREAM_ID = 1;
+const TOPIC_ID = 1;
+const PARTITION_ID = 1;
+
+const polledMessages = await client.message.poll({
+  streamId: STREAM_ID,
+  topicId: TOPIC_ID,
+  consumer: Consumer.Single,
+  partitionId: PARTITION_ID,
+  pollingStrategy: PollingStrategy.Offset(BigInt(0)),
+  count: 10,
+  autocommit: false,
+});
+
+if (polledMessages && polledMessages.messages.length > 0) {
+  for (const message of polledMessages.messages) {
+    const payload = message.payload.toString('utf8');
+    console.log(`Offset: ${message.headers.offset}, Payload: ${payload}`);
+  }
+}
+```
+
+## Examples
+
+Working examples are available in the [examples/node](https://github.com/apache/iggy/tree/master/examples/node) directory, written in TypeScript. The following example sets are included:
+
+- **getting-started** - basic producer and consumer
+- **async** - asynchronous message processing
+- **message-envelope** - working with message envelopes
+- **message-headers** - custom message headers
+- **multi-tenant** - multi-tenant streaming setup
+- **tcp-tls** - TLS-encrypted TCP connections
+- **stream-builder** - stream builder API usage

@@ -19,12 +19,44 @@
 
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import { Mermaid } from "@/components/mermaid";
+import {
+  MessageFlowDiagram,
+  ShardDiagram,
+  IoUringComparison,
+  SegmentVisualization,
+  MessageHeaderDiagram,
+  BenchmarkChart,
+  NamespacePacking,
+  StreamHierarchy,
+  AppendOnlyLogViz,
+  ConsumerGroupViz,
+  ConnectorPipeline,
+  ServerEcosystem,
+  WhyIggy,
+  QuickStartSnippet,
+  DocsHero,
+} from "@/components/architecture-diagrams";
 import type { MDXComponents } from "mdx/types";
 
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
   return {
     ...defaultMdxComponents,
     Mermaid,
+    MessageFlowDiagram,
+    ShardDiagram,
+    IoUringComparison,
+    SegmentVisualization,
+    MessageHeaderDiagram,
+    BenchmarkChart,
+    NamespacePacking,
+    StreamHierarchy,
+    AppendOnlyLogViz,
+    ConsumerGroupViz,
+    ConnectorPipeline,
+    ServerEcosystem,
+    WhyIggy,
+    QuickStartSnippet,
+    DocsHero,
     ...components,
   };
 }

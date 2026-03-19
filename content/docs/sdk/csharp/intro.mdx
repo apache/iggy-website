@@ -1,5 +1,118 @@
 ---
-title: Intro
+title: C# SDK
 ---
 
-The Iggy SDK for C# is a library that allows you to interact with the Iggy API from your C# applications. This SDK provides a convenient way to interact with the Iggy API and allows you to easily integrate Iggy functionality into your C# applications. Repository can be found [here](https://github.com/apache/iggy/tree/master/foreign/csharp).
+The Iggy SDK for C# is a library that allows you to interact with the Iggy API from your .NET applications. It communicates with the Iggy server over TCP using the binary protocol. The repository can be found [here](https://github.com/apache/iggy/tree/master/foreign/csharp).
+
+## Installation
+
+```bash
+dotnet add package Apache.Iggy
+```
+
+## Quick start
+
+### Producer
+
+```csharp
+using System.Text;
+using Apache.Iggy;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Factory;
+using Apache.Iggy.Kinds;
+using Apache.Iggy.Messages;
+
+const string StreamName = "sample-stream";
+const string TopicName = "sample-topic";
+
+var client = IggyClientFactory.CreateClient(new IggyClientConfigurator()
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp,
+});
+
+await client.ConnectAsync();
+await client.LoginUser("iggy", "iggy");
+
+await client.CreateStreamAsync(StreamName);
+await client.CreateTopicAsync(
+    Identifier.String(StreamName),
+    TopicName,
+    1,
+    CompressionAlgorithm.None
+);
+
+var partitioning = Partitioning.PartitionId(0);
+for (int i = 0; i < 10; i++)
+{
+    var payload = Encoding.UTF8.GetBytes($"message-{i}");
+    var messages = new List<Message> { new Message(Guid.NewGuid(), payload) };
+    await client.SendMessagesAsync(
+        Identifier.String(StreamName),
+        Identifier.String(TopicName),
+        partitioning,
+        messages
+    );
+}
+```
+
+### Consumer
+
+```csharp
+using System.Text;
+using Apache.Iggy;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Contracts;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Factory;
+using Apache.Iggy.Kinds;
+
+var client = IggyClientFactory.CreateClient(new IggyClientConfigurator()
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp,
+});
+
+await client.ConnectAsync();
+await client.LoginUser("iggy", "iggy");
+
+var consumer = Consumer.New(1);
+var offset = 0ul;
+uint messagesPerBatch = 10;
+
+while (true)
+{
+    var polledMessages = await client.PollMessagesAsync(
+        Identifier.String("sample-stream"),
+        Identifier.String("sample-topic"),
+        0,
+        consumer,
+        PollingStrategy.Offset(offset),
+        messagesPerBatch,
+        false
+    );
+
+    if (!polledMessages.Messages.Any()) break;
+
+    offset += (ulong)polledMessages.Messages.Count;
+    foreach (var message in polledMessages.Messages)
+    {
+        var payload = Encoding.UTF8.GetString(message.Payload);
+        Console.WriteLine($"Offset: {message.Header.Offset}, Payload: {payload}");
+    }
+}
+```
+
+## Examples
+
+Working examples are available in the [examples/csharp](https://github.com/apache/iggy/tree/master/examples/csharp) directory. The following example sets are included:
+
+- **GettingStarted** - basic producer and consumer
+- **MessageEnvelope** - working with message envelopes
+- **MessageHeaders** - custom message headers
+- **MultiTenant** - multi-tenant streaming setup
+- **TcpTls** - TLS-encrypted TCP connections
+- **StreamBuilder** - stream builder API usage
+
+The solution can be opened with Visual Studio or built with `dotnet build`.

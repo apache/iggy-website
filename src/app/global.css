@@ -24,10 +24,28 @@
 :root {
     --color-fd-primary: hsl(34 100% 51%);
     --color-fd-primary-foreground: hsl(0 0% 0%);
+    --sh-class: #e879f9;
+    --sh-identifier: #e2e8f0;
+    --sh-sign: #b0bec5;
+    --sh-property: #e0f2fe;
+    --sh-entity: #67e8f9;
+    --sh-jsxliterals: #9ca3af;
+    --sh-string: #a5d6ff;
+    --sh-keyword: #ff7b72;
+    --sh-comment: #636b75;
 }
 
 .dark,
 [data-theme="dark"] {
+    --sh-class: #e879f9;
+    --sh-identifier: #e2e8f0;
+    --sh-sign: #b0bec5;
+    --sh-property: #e0f2fe;
+    --sh-entity: #67e8f9;
+    --sh-jsxliterals: #9ca3af;
+    --sh-string: #a5d6ff;
+    --sh-keyword: #ff7b72;
+    --sh-comment: #636b75;
     --color-fd-primary: hsl(34 100% 51%);
     --color-fd-primary-foreground: hsl(0 0% 0%);
     --color-fd-background: hsl(222 55% 6%);
@@ -78,4 +96,51 @@ figure.shiki {
 
 .fd-prose a:hover {
     text-decoration: underline;
+}
+
+/* Architecture diagram animations */
+
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(0.25rem); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+    animation: fade-in 0.3s ease-out both;
+}
+
+@keyframes shard-pulse-kf {
+    0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+    50% { box-shadow: 0 0 0 4px transparent; }
+}
+
+.shard-pulse {
+    animation: shard-pulse-kf 2s ease-in-out infinite;
+}
+
+@keyframes ring-glow-kf {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+    50% { box-shadow: 0 0 0 3px rgba(16, 185, 129, 0); }
+}
+
+.ring-glow {
+    animation: ring-glow-kf 2s ease-in-out infinite;
+}
+
+@keyframes segment-fill-kf {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+}
+
+.segment-fill-active {
+    animation: segment-fill-kf 2s ease-in-out infinite;
+}
+
+@keyframes bench-bar-kf {
+    from { width: 0%; }
+}
+
+.bench-bar {
+    animation: bench-bar-kf 1s ease-out both;
 }

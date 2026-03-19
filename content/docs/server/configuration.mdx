@@ -584,11 +584,60 @@ cert_file = "core/certs/iggy_cert.pem"
 key_file = "core/certs/iggy_key.pem"
 ```
 
+### Environment variables
+
+Every configuration option can be overridden using environment variables with the `IGGY_` prefix. The naming convention follows the TOML structure with underscores:
+
+```bash
+IGGY_TCP_ADDRESS=0.0.0.0:8090
+IGGY_HTTP_ENABLED=true
+IGGY_SYSTEM_PATH=/data/iggy
+IGGY_SYSTEM_SHARDING_CPU_ALLOCATION="Count:4"
+IGGY_ROOT_USERNAME=iggy
+IGGY_ROOT_PASSWORD=my-secret-password
+```
+
+### Command-line arguments
+
+The server binary accepts the following arguments:
+
+| Argument | Description |
+|----------|-------------|
+| `--config-provider file` | Configuration source (default: file) |
+| `--fresh` | Wipe data directory before start |
+| `--with-default-root-credentials` | Set root to iggy/iggy (dev only) |
+| `--follower` | Advertise as follower node (clustering) |
+
 ### Durability
 
 The single node `Iggy` server by default provides low durability guarantees, meaning that in case of a crash or power loss, some of messages might be lost.
-To fix that you can enable `enforce_fsync` option in `system.partition` section together with setting `messages_required_to_save` and `size_of_messages_required_to_save` to lowest allowed values.
-Since `messages_required_to_save` has to be at least 32 and `size_of_messages_required_to_save` at least 512 B, in case if your message size is not big enough, you might want to pad your message to 512 B boundary, or alternatively send messages in batches.
+To fix that you can enable `enforce_fsync` option in `system.partition` section together with setting `messages_required_to_save` and `size_of_messages_required_to_save` to lowest allowed values (minimum of 1 for count, and 512 B for size). In case if your message size is not big enough, you might want to pad your message to 512 B boundary, or alternatively send messages in batches.
+
+For even stronger durability, enable the `message_saver` with `enforce_fsync = true` which provides a background fsync at a configurable interval (default 30s).
+
+### Sharding
+
+The `[system.sharding]` section controls how the server maps shards to CPU cores. This is key to the thread-per-core architecture:
+
+- `"all"` - one shard per available CPU core
+- A numeric value (e.g. `4`) - exactly N shards
+- A range (e.g. `"5..8"`) - shards on cores 5, 6, 7
+- `"numa:auto"` - automatic NUMA-aware allocation
+- `"numa:nodes=0,1;cores=4;no_ht=true"` - fine-grained NUMA control
+
+See [Architecture](/docs/introduction/architecture) for more details on the thread-per-core design.
+
+### Memory pool
+
+The `[system.memory_pool]` section configures the pre-allocated buffer pool used for zero-copy message passing:
+
+- `size` - total pool size (minimum 512 MiB, must be page-aligned to 4096 bytes)
+- `bucket_capacity` - buffers per bucket (must be power of 2, minimum 128)
+- The pool has 32 buckets with buffer sizes from 256 B to 512 MiB
+
+### Clustering
+
+The `[cluster]` section configures multi-node replication using Viewstamped Replication (VSR). See [Clustering](/docs/clustering/vsr) for details. When clustering is enabled, all nodes must share the same cluster `name`.
 
 ### HTTP
 
@@ -600,11 +649,15 @@ To consume the HTTP API from Iggy SDK, you need to make use of the available `Ht
 
 HTTP API is highly performant, however, it's not as performant as TCP, and, since it's a stateless protocol, there's no such thing as the ongoing connection between client and server, thus some of the features such as consumer groups are not available.
 
+The HTTP server also hosts **Prometheus metrics** at `/metrics` (configurable) and the optional **embedded Web UI** at `/ui` (when compiled with `iggy-web` feature and `web_ui = true`).
+
 ### TCP
 
 An optional transport layer, which can be used to connect to the server with any tool or application that supports TCP. It is enabled by default, but you can disable it by setting `enabled` to `false`. The `address` option specifies the address and port to listen on.
 
 TCP provides the highest performance and throughput as it works directly with the binary data without an additional overhead of e.g. HTTP spec along with the JSON serialization.
+
+When `socket_migration` is enabled (default), TCP sockets can be migrated between shards to avoid cross-shard forwarding of data plane operations.
 
 To consume the TCP API from Iggy SDK, you need to make use of the available `TcpClient` component.
 
@@ -612,13 +665,18 @@ To consume the TCP API from Iggy SDK, you need to make use of the available `Tcp
 
 An optional transport layer, which can be used to connect to the server with any tool or application that supports QUIC. It is enabled by default, but you can disable it by setting `enabled` to `false`. The `address` option specifies the address and port to listen on.
 
-Similar to TCP it's a stateful protocol, however, it's not as performant as TCP. QUIC support is built on top of [Quinn](https://github.com/quinn-rs/quinn) library, and all the remaining options are essentially the direct mapping of the options available in Quinn. QUIC and TCP use the same custom binary protocol specification.
+Similar to TCP it's a stateful protocol, however, it's not as performant as TCP. QUIC support is built on top of [Quinn](https://github.com/quinn-rs/quinn) library, and all the remaining options are essentially the direct mapping of the options available in Quinn. QUIC and TCP use the same custom binary protocol specification. QUIC has built-in mandatory TLS encryption.
 
 To consume the QUIC API from Iggy SDK, you need to make use of the available `QuicClient` component.
-
 
 ### WebSocket
 
 An optional transport layer, which can be used to connect to the server with any tool or application that supports WebSocket. It is enabled by default, but you can disable it by setting `enabled` to `false`. The `address` option specifies the address and port to listen on.
 
+WebSocket uses a custom `compio-ws` implementation that bridges tungstenite with compio's completion-based I/O model. It runs on all shards and supports optional TLS.
+
 To consume the WebSocket API from Iggy SDK, you need to make use of the available `WebSocketClient` component.
+
+### Telemetry
+
+The `[telemetry]` section configures OpenTelemetry integration for logs and traces. Supports both gRPC and HTTP transports for sending data to your observability backend (e.g. Jaeger, Grafana Tempo, Loki).

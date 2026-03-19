@@ -1,3 +1,112 @@
 ---
 title: Examples
 ---
+
+## Basic producer
+
+```csharp
+using System.Text;
+using Apache.Iggy;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Exceptions;
+using Apache.Iggy.Factory;
+using Apache.Iggy.Kinds;
+using Apache.Iggy.Messages;
+
+const string StreamName = "dev";
+const string TopicName = "events";
+
+var client = IggyClientFactory.CreateClient(new IggyClientConfigurator()
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp,
+});
+
+await client.ConnectAsync();
+await client.LoginUser("iggy", "iggy");
+
+// Create stream and topic if they don't exist
+try
+{
+    await client.CreateStreamAsync(StreamName);
+}
+catch (InvalidResponseException)
+{
+    Console.WriteLine("Stream already exists.");
+}
+
+try
+{
+    await client.CreateTopicAsync(
+        Identifier.String(StreamName),
+        TopicName,
+        2,
+        CompressionAlgorithm.None
+    );
+}
+catch (InvalidResponseException)
+{
+    Console.WriteLine("Topic already exists.");
+}
+
+// Send messages
+var partitioning = Partitioning.PartitionId(0);
+for (int i = 0; i < 100; i++)
+{
+    var payload = Encoding.UTF8.GetBytes($"Event #{i}");
+    var messages = new List<Message> { new Message(Guid.NewGuid(), payload) };
+    await client.SendMessagesAsync(
+        Identifier.String(StreamName),
+        Identifier.String(TopicName),
+        partitioning,
+        messages
+    );
+}
+
+Console.WriteLine("Sent 100 messages");
+```
+
+## Basic consumer
+
+```csharp
+using System.Text;
+using Apache.Iggy;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Contracts;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Factory;
+using Apache.Iggy.Kinds;
+
+var client = IggyClientFactory.CreateClient(new IggyClientConfigurator()
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp,
+});
+
+await client.ConnectAsync();
+await client.LoginUser("iggy", "iggy");
+
+// Poll messages
+var consumer = Consumer.New(1);
+var offset = 0ul;
+uint messagesPerBatch = 100;
+
+var polledMessages = await client.PollMessagesAsync(
+    Identifier.String("dev"),
+    Identifier.String("events"),
+    0,
+    consumer,
+    PollingStrategy.Offset(offset),
+    messagesPerBatch,
+    false
+);
+
+foreach (var message in polledMessages.Messages)
+{
+    var payload = Encoding.UTF8.GetString(message.Payload);
+    Console.WriteLine($"Offset: {message.Header.Offset}, Payload: {payload}");
+}
+```
+
+For the full source code, see the [examples/csharp](https://github.com/apache/iggy/tree/master/examples/csharp) directory.

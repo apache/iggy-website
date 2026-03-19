@@ -1,5 +1,79 @@
 ---
-title: Intro
+title: Python SDK
 ---
 
-The Iggy Python SDK is a client library that allows you to interact with the Iggy API from your Python application. Repository can be found [here](https://github.com/apache/iggy/tree/master/foreign/python).
+The Iggy Python SDK is a client library that allows you to interact with the Iggy API from your Python application. It is built as a PyO3 wrapper around the Rust SDK, which means it supports TCP, QUIC, and HTTP transports. The repository can be found [here](https://github.com/apache/iggy/tree/master/foreign/python).
+
+## Installation
+
+```bash
+pip install apache-iggy
+```
+
+## Quick start
+
+### Producer
+
+```python
+from apache_iggy import IggyClient
+from apache_iggy import SendMessage as Message
+
+STREAM_NAME = "sample-stream"
+TOPIC_NAME = "sample-topic"
+PARTITION_ID = 0
+
+client = IggyClient.from_connection_string("iggy+tcp://iggy:iggy@localhost:8090")
+await client.connect()
+
+await client.create_stream(name=STREAM_NAME)
+await client.create_topic(
+    stream=STREAM_NAME,
+    name=TOPIC_NAME,
+    partitions_count=1,
+    replication_factor=1,
+)
+
+messages = []
+for i in range(10):
+    payload = f"message-{i}"
+    message = Message(payload)
+    messages.append(message)
+
+await client.send_messages(
+    stream=STREAM_NAME,
+    topic=TOPIC_NAME,
+    partitioning=PARTITION_ID,
+    messages=messages,
+)
+```
+
+### Consumer
+
+```python
+from apache_iggy import IggyClient, PollingStrategy, ReceiveMessage
+
+STREAM_NAME = "sample-stream"
+TOPIC_NAME = "sample-topic"
+PARTITION_ID = 0
+
+client = IggyClient.from_connection_string("iggy+tcp://iggy:iggy@localhost:8090")
+await client.connect()
+
+polled_messages = await client.poll_messages(
+    stream=STREAM_NAME,
+    topic=TOPIC_NAME,
+    partition_id=PARTITION_ID,
+    polling_strategy=PollingStrategy.Next(),
+    count=10,
+    auto_commit=True,
+)
+
+if polled_messages:
+    for message in polled_messages:
+        payload = message.payload().decode("utf-8")
+        print(f"Offset: {message.offset()}, Payload: {payload}")
+```
+
+## Examples
+
+Working examples are available in the [examples/python](https://github.com/apache/iggy/tree/master/examples/python) directory.

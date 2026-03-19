@@ -8,6 +8,8 @@ Currently, there are 2 ways of data representation: JSON (text) and binary - any
 
 The binary format is more compact and efficient, but it is not human-readable - it's being used by TCP and QUIC transports. The JSON format is used by HTTP transport - all the existing endpoints are available in the [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http).
 
+All multi-byte integer fields use **little-endian** encoding throughout.
+
 ## Request schema
 
 All the requests are represented as a binary message. The message consists of 3 parts: length, code and payload:
@@ -44,76 +46,58 @@ graph LR
 ## Request codes
 
 ```bash
-PING = 1;
-GET_STATS = 10;
-GET_SNAPSHOT_FILE = 11;
-GET_ME = 20;
-GET_CLIENT = 21;
-GET_CLIENTS = 22;
-GET_USER = 31;
-GET_USERS = 32;
-CREATE_USER = 33;
-DELETE_USER = 34;
-UPDATE_USER = 35;
-UPDATE_PERMISSIONS = 36;
-CHANGE_PASSWORD = 37;
-LOGIN_USER = 38;
-LOGOUT_USER = 39;
-GET_PERSONAL_ACCESS_TOKENS = 41;
-CREATE_PERSONAL_ACCESS_TOKEN = 42;
-DELETE_PERSONAL_ACCESS_TOKEN = 43;
-LOGIN_WITH_PERSONAL_ACCESS_TOKEN = 44;
-POLL_MESSAGES = 100;
-SEND_MESSAGES = 101;
-FLUSH_UNSAVED_BUFFER = 102;
-GET_CONSUMER_OFFSET = 120;
-STORE_CONSUMER_OFFSET = 121;
-GET_STREAM = 200;
-GET_STREAMS = 201;
-CREATE_STREAM = 202;
-DELETE_STREAM = 203;
-UPDATE_STREAM = 204;
-PURGE_STREAM = 205;
-GET_TOPIC = 300;
-GET_TOPICS = 301;
-CREATE_TOPIC = 302;
-DELETE_TOPIC = 303;
-UPDATE_TOPIC = 304;
-PURGE_TOPIC = 305;
-CREATE_PARTITIONS = 402;
-DELETE_PARTITIONS = 403;
-GET_CONSUMER_GROUP = 600;
-GET_CONSUMER_GROUPS = 601;
-CREATE_CONSUMER_GROUP = 602;
-DELETE_CONSUMER_GROUP = 603;
-JOIN_CONSUMER_GROUP = 604;
-LEAVE_CONSUMER_GROUP = 605;
+PING = 1
+GET_STATS = 10
+GET_SNAPSHOT = 11
+GET_CLUSTER_METADATA = 12
+GET_ME = 20
+GET_CLIENT = 21
+GET_CLIENTS = 22
+GET_USER = 31
+GET_USERS = 32
+CREATE_USER = 33
+DELETE_USER = 34
+UPDATE_USER = 35
+UPDATE_PERMISSIONS = 36
+CHANGE_PASSWORD = 37
+LOGIN_USER = 38
+LOGOUT_USER = 39
+GET_PERSONAL_ACCESS_TOKENS = 41
+CREATE_PERSONAL_ACCESS_TOKEN = 42
+DELETE_PERSONAL_ACCESS_TOKEN = 43
+LOGIN_WITH_PERSONAL_ACCESS_TOKEN = 44
+POLL_MESSAGES = 100
+SEND_MESSAGES = 101
+FLUSH_UNSAVED_BUFFER = 102
+GET_CONSUMER_OFFSET = 120
+STORE_CONSUMER_OFFSET = 121
+DELETE_CONSUMER_OFFSET = 122
+GET_STREAM = 200
+GET_STREAMS = 201
+CREATE_STREAM = 202
+DELETE_STREAM = 203
+UPDATE_STREAM = 204
+PURGE_STREAM = 205
+GET_TOPIC = 300
+GET_TOPICS = 301
+CREATE_TOPIC = 302
+DELETE_TOPIC = 303
+UPDATE_TOPIC = 304
+PURGE_TOPIC = 305
+CREATE_PARTITIONS = 402
+DELETE_PARTITIONS = 403
+DELETE_SEGMENTS = 503
+GET_CONSUMER_GROUP = 600
+GET_CONSUMER_GROUPS = 601
+CREATE_CONSUMER_GROUP = 602
+DELETE_CONSUMER_GROUP = 603
+JOIN_CONSUMER_GROUP = 604
+LEAVE_CONSUMER_GROUP = 605
 ```
 
 ## Shared
 
 ---
-
-### Consumer
-
-```rust
-pub struct Consumer {
-    pub kind: ConsumerKind,
-    pub id: u32,
-}
-
-pub enum ConsumerKind {
-    Consumer,       // Value = 1 (default)
-    ConsumerGroup   // Value = 2
-}
-```
-
-The `Consumer` is a simple structs which represents the type of the consumer. It can be either a consumer or a consumer group. This type is used when interacting with the messages related commands  data such as `PollMessages`, `GetConsumerOffset` and `StoreConsumerOffset`.
-
-**Serialization**
-
-- `kind` - 1 byte
-- `id` - 4 bytes
 
 ### Identifier
 
@@ -125,18 +109,75 @@ pub struct Identifier {
 }
 
 pub enum IdKind {
-    Numeric,      // Value = 1 (default)
-    String        // Value = 2
+    Numeric,  // Value = 1 (default)
+    String    // Value = 2
 }
 ```
 
-The `Identifier` is a struct which represents the identifier of the stream or topic. It consists of the `kind` (numeric or string), `length` (length of the identifier value) and `value` (actual value of the identifier). The `value` is a vector of bytes, which can be either a numeric value (e.g. 1 encoded as const 4 bytes for u32 type) or a string (e.g. "my-stream") with variable length of UTF-8 string, maximum 255 bytes (chars). The total length varies between 3 (string type with a single char) and 257 bytes (string type with 255 chars).
+The `Identifier` is a struct which represents the identifier of a stream, topic, user, or consumer group. It consists of the `kind` (numeric or string), `length` (length of the identifier value) and `value` (actual value of the identifier). The `value` is a vector of bytes, which can be either a numeric value (e.g. 1 encoded as const 4 bytes for u32 type) or a string (e.g. "my-stream") with variable length of UTF-8 string, maximum 255 bytes (chars).
 
 **Serialization**
 
 - `kind` - 1 byte
 - `length` - 1 byte
-- `value` - N bytes
+- `value` - N bytes (4 bytes for numeric, 1-255 bytes for string)
+
+### Consumer
+
+```rust
+pub struct Consumer {
+    pub kind: ConsumerKind,
+    pub id: Identifier,
+}
+
+pub enum ConsumerKind {
+    Consumer,       // Value = 1 (default)
+    ConsumerGroup   // Value = 2
+}
+```
+
+The `Consumer` represents the type of the consumer. It can be either a consumer or a consumer group. This type is used when interacting with the messages related commands such as `PollMessages`, `GetConsumerOffset`, `StoreConsumerOffset` and `DeleteConsumerOffset`.
+
+**Serialization**
+
+- `kind` - 1 byte
+- `id` - variable (Identifier: 2 + N bytes)
+
+### IggyMessage
+
+```rust
+pub struct IggyMessage {
+    pub header: IggyMessageHeader,
+    pub user_headers: Option<Bytes>,
+    pub payload: Bytes,
+}
+
+pub struct IggyMessageHeader {
+    pub checksum: u64,
+    pub id: u128,
+    pub offset: u64,
+    pub timestamp: u64,
+    pub origin_timestamp: u64,
+    pub user_headers_length: u32,
+    pub payload_length: u32,
+    pub reserved: u64,
+}
+```
+
+Each message consists of a fixed 64-byte header followed by optional user headers and the payload.
+
+**Serialization (64-byte header + variable data)**
+
+- `checksum` - 8 bytes (u64, xxHash3)
+- `id` - 16 bytes (u128, UUIDv4)
+- `offset` - 8 bytes (u64)
+- `timestamp` - 8 bytes (u64, server-assigned)
+- `origin_timestamp` - 8 bytes (u64, client-provided)
+- `user_headers_length` - 4 bytes (u32)
+- `payload_length` - 4 bytes (u32)
+- `reserved` - 8 bytes (u64, must be 0)
+- `user_headers` - N bytes (length from `user_headers_length`)
+- `payload` - N bytes (length from `payload_length`)
 
 ### PolledMessages
 
@@ -144,53 +185,24 @@ The `Identifier` is a struct which represents the identifier of the stream or to
 pub struct PolledMessages {
     pub partition_id: u32,
     pub current_offset: u64,
-    pub messages: Vec<Message>,
+    pub count: u32,
+    pub messages: Vec<IggyMessage>,
 }
 ```
 
-The `PolledMessages` is a struct returned by the `PollMessages` command. It consists of the `partition_id`, `current_offset` and `messages` fields. The `messages` field is a vector of `Message` structs.
-
+The `PolledMessages` is returned by the `PollMessages` command.
 
 **Serialization**
 
 - `partition_id` - 4 bytes
 - `current_offset` - 8 bytes
-- `messages_count` - 4 bytes (hidden field)
-- `messages` - N bytes
-
-
-### Message
-
-```rust
-pub struct Message {
-    pub offset: u64,
-    pub state: MessageState,
-    pub timestamp: u64,
-    pub id: u128,
-    pub checksum: u32,
-    pub headers: Option<HashMap<HeaderKey, HeaderValue>>,
-    pub length: u32,
-    pub payload: Bytes,
-}
-```
-
-The `Message` consists of the `offset` (offset of the message in the partition), `state` (state of the message), `timestamp` (timestamp of the message), `id` (unique identifier of the message), `checksum` (checksum of the message), `headers` (optional headers of the message), `length` (length of the payload) and `payload` (actual payload of the message).
-
-**Serialization**
-
-- `offset` - 8 bytes
-- `state` - 1 byte
-- `timestamp` - 8 bytes
-- `id` - 16 bytes
-- `checksum` - 4 bytes
-- `headers` - N bytes
-- `length` - 4 bytes
-- `payload` - N bytes
+- `count` - 4 bytes
+- `messages` - N bytes (each message is 64-byte header + variable data)
 
 
 ### ConsumerOffsetInfo
 
-The `ConsumerOffsetInfo` is a struct returned by the `GetConsumerOffset` command. It consists of the `partition_id`, `current_offset` and `stored_offset` fields.
+Returned by the `GetConsumerOffset` command.
 
 ```rust
 pub struct ConsumerOffsetInfo {
@@ -206,254 +218,9 @@ pub struct ConsumerOffsetInfo {
 - `current_offset` - 8 bytes
 - `stored_offset` - 8 bytes
 
-
-## Streams
-
----
-
-### Get stream
+### HeaderKey and HeaderValue
 
 ```rust
-pub struct GetStream {
-    pub stream_id: Identifier
-}
-```
-
-**Code: 200**
-
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-
-### Get streams
-
-```rust
-pub struct GetStreams {}
-```
-
-**Code: 201**
-
-**Serialization**
-
-- Empty bytes
-
-
-### Create stream
-
-```rust
-pub struct CreateStream {
-    pub stream_id: u32,
-    pub name: String
-}
-```
-
-**Code: 202**
-
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-- `name_length` - 1 byte (hidden field)
-- `name` - 1-255 bytes
-
-
-### Delete stream
-
-```rust
-pub struct DeleteStream {
-    pub stream_id: Identifier
-}
-```
-
-**Code: 203**
-
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-
-## Topics
-
----
-
-### Get topic
-
-```rust
-pub struct GetTopic {
-    pub stream_id: Identifier,
-    pub topic_id: Identifier
-}
-```
-
-**Code: 300**
-
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-
-### Get topics
-
-```rust
-pub struct GetTopics {
-    pub stream_id: Identifier
-}
-```
-
-**Code: 301**
-
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-
-### Create topic
-
-```rust
-pub struct CreateTopic {
-    pub stream_id: Identifier,
-    pub topic_id: u32,
-    pub partitions_count: u32,
-    pub message_expiry: Option<u32>,
-    pub name: String,
-}
-```
-
-**Code: 302**
-
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `partitions_count` - 4 bytes
-- `name_length` - 1 byte (hidden field)
-- `name` - 1-255 bytes
-
-### Delete topic
-
-```rust
-pub struct DeleteTopic {
-    pub stream_id: Identifier,
-    pub topic_id: Identifier
-}
-```
-
-**Code: 303**
-
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-
-## Partitions
-
----
-
-### Create partitions
-
-```rust
-pub struct CreatePartitions {
-    pub stream_id: Identifier,
-    pub topic_id: Identifier,
-    pub partitions_count: u32
-}
-```
-
-**Code: 402**
-
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `partitions_count` - 4 bytes
-
-### Delete partitions
-
-```rust
-pub struct DeletePartitions {
-    pub stream_id: Identifier,
-    pub topic_id: Identifier,
-    pub partitions_count: u32
-}
-```
-
-**Code: 403**
-
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `partitions_count` - 4 bytes
-
-## Messages
-
----
-
-### Poll messages
-
-```rust
-pub struct PollMessages {
-    pub consumer: Consumer,
-    pub stream_id: Identifier,
-    pub topic_id: Identifier,
-    pub partition_id: u32,
-    pub strategy: PollingStrategy,
-    pub count: u32,
-    pub auto_commit: bool,
-}
-
-pub struct PollingStrategy {
-    pub kind: PollingKind,
-    pub value: u64,
-}
-
-pub enum PollingKind {
-    Offset,     // Value = 1 (default)
-    Timestamp,  // Value = 2
-    First,      // Value = 3
-    Last,       // Value = 4
-    Next,       // Value = 5
-}
-```
-
-**Code: 100**
-
-**Serialization**
-
-- `consumer` - 5 bytes
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `partition_id` - 4 bytes
-- `strategy` - 9 bytes
-- `count` - 4 bytes
-- `auto_commit` - 1 byte
-
-### Send messages
-
-```rust
-pub struct SendMessages {
-    pub stream_id: Identifier,
-    pub topic_id: Identifier,
-    pub partitioning: Partitioning,
-    pub messages: Vec<Message>
-}
-
-pub struct Partitioning {
-    pub kind: PartitioningKind,
-    pub length: u8,
-    pub value: Vec<u8>
-}
-
-pub enum PartitioningKind {
-    Balanced,     // Value = 1 (default)
-    PartitionId,  // Value = 2
-    MessagesKey   // Value = 3
-}
-
-pub struct Message {
-    pub id: u128,
-    pub length: u32,
-    pub payload: Bytes // Memory-optimized vector of bytes
-    pub headers: Option<HashMap<HeaderKey, HeaderValue>> // Optional headers, see the changelog for more details
-}
-
 pub struct HeaderKey(String);
 
 pub struct HeaderValue {
@@ -480,14 +247,381 @@ pub enum HeaderKind {
 }
 ```
 
+## System
+
+---
+
+### Ping
+
+**Code: 1** - Empty payload
+
+### Get stats
+
+**Code: 10** - Empty payload
+
+### Get snapshot
+
+**Code: 11** - Empty payload
+
+### Get cluster metadata
+
+**Code: 12** - Empty payload
+
+### Get me
+
+**Code: 20** - Empty payload
+
+### Get client
+
+```rust
+pub struct GetClient {
+    pub client_id: u32
+}
+```
+
+**Code: 21**
+
+- `client_id` - 4 bytes
+
+### Get clients
+
+**Code: 22** - Empty payload
+
+## Streams
+
+---
+
+### Get stream
+
+```rust
+pub struct GetStream {
+    pub stream_id: Identifier
+}
+```
+
+**Code: 200**
+
+- `stream_id` - variable (Identifier)
+
+### Get streams
+
+**Code: 201** - Empty payload
+
+
+### Create stream
+
+```rust
+pub struct CreateStream {
+    pub name: String
+}
+```
+
+**Code: 202**
+
+- `name_length` - 1 byte
+- `name` - 1-255 bytes
+
+
+### Delete stream
+
+```rust
+pub struct DeleteStream {
+    pub stream_id: Identifier
+}
+```
+
+**Code: 203**
+
+- `stream_id` - variable (Identifier)
+
+### Update stream
+
+```rust
+pub struct UpdateStream {
+    pub stream_id: Identifier,
+    pub name: String
+}
+```
+
+**Code: 204**
+
+- `stream_id` - variable (Identifier)
+- `name_length` - 1 byte
+- `name` - 1-255 bytes
+
+### Purge stream
+
+```rust
+pub struct PurgeStream {
+    pub stream_id: Identifier
+}
+```
+
+**Code: 205**
+
+- `stream_id` - variable (Identifier)
+
+## Topics
+
+---
+
+### Get topic
+
+```rust
+pub struct GetTopic {
+    pub stream_id: Identifier,
+    pub topic_id: Identifier
+}
+```
+
+**Code: 300**
+
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+
+### Get topics
+
+```rust
+pub struct GetTopics {
+    pub stream_id: Identifier
+}
+```
+
+**Code: 301**
+
+- `stream_id` - variable (Identifier)
+
+### Create topic
+
+```rust
+pub struct CreateTopic {
+    pub stream_id: Identifier,
+    pub partitions_count: u32,
+    pub compression_algorithm: CompressionAlgorithm,
+    pub message_expiry: IggyExpiry,
+    pub max_topic_size: MaxTopicSize,
+    pub replication_factor: Option<u8>,
+    pub name: String,
+}
+
+pub enum CompressionAlgorithm {
+    None,   // Value = 1
+    Gzip,   // Value = 2
+    Lz4,    // Value = 3
+    Zstd,   // Value = 4
+}
+```
+
+**Code: 302**
+
+- `stream_id` - variable (Identifier)
+- `partitions_count` - 4 bytes (u32)
+- `compression_algorithm` - 1 byte
+- `message_expiry` - 8 bytes (u64, 0 = no expiry)
+- `max_topic_size` - 8 bytes (u64, 0 = unlimited)
+- `replication_factor` - 1 byte (0 = none)
+- `name_length` - 1 byte
+- `name` - 1-255 bytes
+
+### Delete topic
+
+```rust
+pub struct DeleteTopic {
+    pub stream_id: Identifier,
+    pub topic_id: Identifier
+}
+```
+
+**Code: 303**
+
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+
+### Update topic
+
+```rust
+pub struct UpdateTopic {
+    pub stream_id: Identifier,
+    pub topic_id: Identifier,
+    pub compression_algorithm: CompressionAlgorithm,
+    pub message_expiry: IggyExpiry,
+    pub max_topic_size: MaxTopicSize,
+    pub replication_factor: Option<u8>,
+    pub name: String,
+}
+```
+
+**Code: 304**
+
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `compression_algorithm` - 1 byte
+- `message_expiry` - 8 bytes (u64)
+- `max_topic_size` - 8 bytes (u64)
+- `replication_factor` - 1 byte
+- `name_length` - 1 byte
+- `name` - 1-255 bytes
+
+### Purge topic
+
+```rust
+pub struct PurgeTopic {
+    pub stream_id: Identifier,
+    pub topic_id: Identifier
+}
+```
+
+**Code: 305**
+
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+
+## Partitions
+
+---
+
+### Create partitions
+
+```rust
+pub struct CreatePartitions {
+    pub stream_id: Identifier,
+    pub topic_id: Identifier,
+    pub partitions_count: u32
+}
+```
+
+**Code: 402**
+
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `partitions_count` - 4 bytes
+
+### Delete partitions
+
+```rust
+pub struct DeletePartitions {
+    pub stream_id: Identifier,
+    pub topic_id: Identifier,
+    pub partitions_count: u32
+}
+```
+
+**Code: 403**
+
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `partitions_count` - 4 bytes
+
+## Segments
+
+---
+
+### Delete segments
+
+```rust
+pub struct DeleteSegments {
+    pub stream_id: Identifier,
+    pub topic_id: Identifier,
+    pub partition_id: u32,
+    pub segments_count: u32
+}
+```
+
+**Code: 503**
+
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `partition_id` - 4 bytes
+- `segments_count` - 4 bytes
+
+## Messages
+
+---
+
+### Poll messages
+
+```rust
+pub struct PollMessages {
+    pub consumer: Consumer,
+    pub stream_id: Identifier,
+    pub topic_id: Identifier,
+    pub partition_id: Option<u32>,
+    pub strategy: PollingStrategy,
+    pub count: u32,
+    pub auto_commit: bool,
+}
+
+pub struct PollingStrategy {
+    pub kind: PollingKind,
+    pub value: u64,
+}
+
+pub enum PollingKind {
+    Offset,     // Value = 1 (default)
+    Timestamp,  // Value = 2
+    First,      // Value = 3
+    Last,       // Value = 4
+    Next,       // Value = 5
+}
+```
+
+**Code: 100**
+
+- `consumer` - variable (Consumer)
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `partition_id` - 5 bytes (1 byte flag + 4 bytes u32; flag: 1=Some, 0=None)
+- `strategy` - 9 bytes (1 byte kind + 8 bytes u64 value)
+- `count` - 4 bytes
+- `auto_commit` - 1 byte
+
+### Send messages
+
+```rust
+pub struct SendMessages {
+    pub stream_id: Identifier,
+    pub topic_id: Identifier,
+    pub partitioning: Partitioning,
+    pub messages: Vec<IggyMessage>
+}
+
+pub struct Partitioning {
+    pub kind: PartitioningKind,
+    pub length: u8,
+    pub value: Vec<u8>
+}
+
+pub enum PartitioningKind {
+    Balanced,     // Value = 1 (default)
+    PartitionId,  // Value = 2
+    MessagesKey   // Value = 3
+}
+```
+
 **Code: 101**
 
-**Serialization**
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `partitioning` - variable (1 byte kind + 1 byte length + N bytes value)
+- `messages` - each message: 64-byte header + user_headers + payload
 
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `partitioning` - 3-257 bytes
-- `messages` - 16 + 4 + N bytes per single message
+### Flush unsaved buffer
+
+```rust
+pub struct FlushUnsavedBuffer {
+    pub stream_id: Identifier,
+    pub topic_id: Identifier,
+    pub partition_id: u32,
+    pub fsync: bool,
+}
+```
+
+**Code: 102**
+
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `partition_id` - 4 bytes
+- `fsync` - 1 byte (1=true, 0=false)
 
 ## Consumer offsets
 
@@ -500,18 +634,16 @@ pub struct GetConsumerOffset {
     pub consumer: Consumer,
     pub stream_id: Identifier,
     pub topic_id: Identifier,
-    pub partition_id: u32
+    pub partition_id: Option<u32>
 }
 ```
 
 **Code: 120**
 
-**Serialization**
-
-- `consumer` - 5 bytes
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `partition_id` - 4 bytes
+- `consumer` - variable (Consumer)
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `partition_id` - 5 bytes (1 byte flag + 4 bytes u32)
 
 ### Store consumer offset
 
@@ -520,20 +652,36 @@ pub struct StoreConsumerOffset {
     pub consumer: Consumer,
     pub stream_id: Identifier,
     pub topic_id: Identifier,
-    pub partition_id: u32,
+    pub partition_id: Option<u32>,
     pub offset: u64
 }
 ```
 
 **Code: 121**
 
-**Serialization**
-
-- `consumer` - 5 bytes
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `partition_id` - 4 bytes
+- `consumer` - variable (Consumer)
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `partition_id` - 5 bytes (1 byte flag + 4 bytes u32)
 - `offset` - 8 bytes
+
+### Delete consumer offset
+
+```rust
+pub struct DeleteConsumerOffset {
+    pub consumer: Consumer,
+    pub stream_id: Identifier,
+    pub topic_id: Identifier,
+    pub partition_id: Option<u32>
+}
+```
+
+**Code: 122**
+
+- `consumer` - variable (Consumer)
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `partition_id` - 5 bytes (1 byte flag + 4 bytes u32)
 
 ## Consumer groups
 
@@ -545,17 +693,15 @@ pub struct StoreConsumerOffset {
 pub struct GetConsumerGroup {
     pub stream_id: Identifier,
     pub topic_id: Identifier,
-    pub consumer_group_id: u32
+    pub group_id: Identifier
 }
 ```
 
 **Code: 600**
 
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `consumer_group_id` - 4 bytes
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `group_id` - variable (Identifier)
 
 ### Get consumer groups
 
@@ -568,10 +714,8 @@ pub struct GetConsumerGroups {
 
 **Code: 601**
 
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
 
 ### Create consumer group
 
@@ -579,17 +723,16 @@ pub struct GetConsumerGroups {
 pub struct CreateConsumerGroup {
     pub stream_id: Identifier,
     pub topic_id: Identifier,
-    pub consumer_group_id: u32
+    pub name: String,
 }
 ```
 
 **Code: 602**
 
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `consumer_group_id` - 4 bytes
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `name_length` - 1 byte
+- `name` - 1-255 bytes
 
 ### Delete consumer group
 
@@ -597,17 +740,15 @@ pub struct CreateConsumerGroup {
 pub struct DeleteConsumerGroup {
     pub stream_id: Identifier,
     pub topic_id: Identifier,
-    pub consumer_group_id: u32
+    pub group_id: Identifier
 }
 ```
 
 **Code: 603**
 
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `consumer_group_id` - 4 bytes
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `group_id` - variable (Identifier)
 
 ### Join consumer group
 
@@ -615,17 +756,15 @@ pub struct DeleteConsumerGroup {
 pub struct JoinConsumerGroup {
     pub stream_id: Identifier,
     pub topic_id: Identifier,
-    pub consumer_group_id: u32
+    pub group_id: Identifier
 }
 ```
 
 **Code: 604**
 
-**Serialization**
-
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `consumer_group_id` - 4 bytes
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `group_id` - variable (Identifier)
 
 ### Leave consumer group
 
@@ -633,69 +772,198 @@ pub struct JoinConsumerGroup {
 pub struct LeaveConsumerGroup {
     pub stream_id: Identifier,
     pub topic_id: Identifier,
-    pub consumer_group_id: u32
+    pub group_id: Identifier
 }
 ```
 
 **Code: 605**
 
-**Serialization**
+- `stream_id` - variable (Identifier)
+- `topic_id` - variable (Identifier)
+- `group_id` - variable (Identifier)
 
-- `stream_id` - 3-257 bytes
-- `topic_id` - 3-257 bytes
-- `consumer_group_id` - 4 bytes
-
-## System
+## Users
 
 ---
 
-### Get me
+### Get user
 
 ```rust
-pub struct GetMe {}
-```
-
-**Code: 20**
-
-**Serialization**
-
-- Empty bytes
-
-### Get client
-
-```rust
-pub struct GetClient {
-    pub client_id: u32
+pub struct GetUser {
+    pub user_id: Identifier
 }
 ```
 
-**Code: 21**
+**Code: 31**
 
-**Serialization**
+- `user_id` - variable (Identifier)
 
-- `client_id` - 4 bytes
+### Get users
 
+**Code: 32** - Empty payload
 
-### Get clients
-
-```rust
-pub struct GetClients {}
-```
-
-**Code: 22**
-
-**Serialization**
-
-- Empty bytes
-
-### Get stats
+### Create user
 
 ```rust
-pub struct GetStats {}
+pub struct CreateUser {
+    pub username: String,
+    pub password: String,
+    pub status: u8,
+    pub permissions: Option<Permissions>,
+}
 ```
 
-**Code: 10**
+**Code: 33**
 
-**Serialization**
+- `username_length` - 1 byte
+- `username` - 1-255 bytes
+- `password_length` - 1 byte
+- `password` - 1-255 bytes
+- `status` - 1 byte
+- `has_permissions` - 1 byte (1=present, 0=absent)
+- `permissions_length` - 4 bytes (u32, always present, 0 when no permissions)
+- `permissions` - N bytes (only when `has_permissions=1` and `permissions_length > 0`)
 
-- Empty bytes
+### Delete user
+
+```rust
+pub struct DeleteUser {
+    pub user_id: Identifier
+}
+```
+
+**Code: 34**
+
+- `user_id` - variable (Identifier)
+
+### Update user
+
+```rust
+pub struct UpdateUser {
+    pub user_id: Identifier,
+    pub username: Option<String>,
+    pub status: Option<u8>,
+}
+```
+
+**Code: 35**
+
+- `user_id` - variable (Identifier)
+- `has_username` - 1 byte (1=present, 0=absent)
+- `username_length` - 1 byte (only when present)
+- `username` - N bytes (only when present)
+- `has_status` - 1 byte (1=present, 0=absent)
+- `status` - 1 byte (only when present)
+
+### Update permissions
+
+```rust
+pub struct UpdatePermissions {
+    pub user_id: Identifier,
+    pub permissions: Option<Permissions>,
+}
+```
+
+**Code: 36**
+
+- `user_id` - variable (Identifier)
+- `has_permissions` - 1 byte (1=present, 0=absent)
+- `permissions_length` - 4 bytes (u32, always present)
+- `permissions` - N bytes (only when `has_permissions=1`)
+
+### Change password
+
+```rust
+pub struct ChangePassword {
+    pub user_id: Identifier,
+    pub current_password: String,
+    pub new_password: String,
+}
+```
+
+**Code: 37**
+
+- `user_id` - variable (Identifier)
+- `current_password_length` - 1 byte
+- `current_password` - N bytes
+- `new_password_length` - 1 byte
+- `new_password` - N bytes
+
+## Authentication
+
+---
+
+### Login user
+
+```rust
+pub struct LoginUser {
+    pub username: String,
+    pub password: String,
+    pub version: Option<String>,
+    pub context: Option<String>,
+}
+```
+
+**Code: 38**
+
+- `username_length` - 1 byte
+- `username` - N bytes
+- `password_length` - 1 byte
+- `password` - N bytes
+- `version_length` - 4 bytes (u32, 0 = absent)
+- `version` - N bytes (only when `version_length > 0`)
+- `context_length` - 4 bytes (u32, 0 = absent)
+- `context` - N bytes (only when `context_length > 0`)
+
+### Logout user
+
+**Code: 39** - Empty payload
+
+## Personal access tokens
+
+---
+
+### Get personal access tokens
+
+**Code: 41** - Empty payload
+
+### Create personal access token
+
+```rust
+pub struct CreatePersonalAccessToken {
+    pub name: String,
+    pub expiry: u64,
+}
+```
+
+**Code: 42**
+
+- `name_length` - 1 byte
+- `name` - 1-255 bytes
+- `expiry` - 8 bytes (u64, 0 = no expiry)
+
+### Delete personal access token
+
+```rust
+pub struct DeletePersonalAccessToken {
+    pub name: String,
+}
+```
+
+**Code: 43**
+
+- `name_length` - 1 byte
+- `name` - 1-255 bytes
+
+### Login with personal access token
+
+```rust
+pub struct LoginWithPersonalAccessToken {
+    pub token: String,
+}
+```
+
+**Code: 44**
+
+- `token_length` - 1 byte
+- `token` - 1-255 bytes

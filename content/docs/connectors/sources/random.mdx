@@ -1,0 +1,39 @@
+---
+title: Random Source
+---
+
+The random source connector generates random messages and sends them to Iggy streams. This is useful for testing, benchmarking, and verifying that your connector pipeline is working correctly without needing an external data source.
+
+## Configuration
+
+```toml
+type = "source"
+key = "random-source"
+enabled = true
+version = 1
+name = "Random Source"
+path = "/path/to/librandom_source.so"
+verbose = false
+
+[[streams]]
+stream = "my-stream"
+topic = "my-topic"
+schema = "json"
+batch_length = 100
+linger_time = "100ms"
+
+[plugin_config]
+interval = "100ms"
+max_count = 0
+messages_range = [1, 10]
+payload_size = 256
+```
+
+## Plugin config options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `interval` | string | `"100ms"` | Delay between message generation batches |
+| `max_count` | u64 | `0` | Maximum number of messages to generate (0 = unlimited) |
+| `messages_range` | [u32, u32] | `[1, 10]` | Min/max messages per batch (random within range) |
+| `payload_size` | u32 | `256` | Size of each generated payload in bytes |

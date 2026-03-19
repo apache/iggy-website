@@ -1,0 +1,57 @@
+---
+title: C++ SDK (WIP)
+---
+
+The Iggy C++ SDK is a work in progress. It wraps the Rust SDK via CXX/FFI, which means it can access all transport protocols (TCP, QUIC, HTTP, WebSocket) through connection strings. The source code is available at [github.com/apache/iggy/tree/master/foreign/cpp](https://github.com/apache/iggy/tree/master/foreign/cpp).
+
+This SDK is not yet published to any package registry. To use it, build from source using CMake.
+
+## Quick start
+
+```cpp
+#include "lib.rs.h"
+
+// Connect via connection string (supports all transports)
+auto* client = iggy::ffi::new_connection(
+    "iggy://iggy:iggy@localhost:8090"
+);
+client->connect();
+client->login_user("iggy", "iggy");
+
+// Create a stream
+client->create_stream("my-stream");
+
+// Build an identifier for the stream
+iggy::ffi::Identifier stream_id;
+stream_id.kind = "string";
+stream_id.length = 9;
+for (char c : std::string("my-stream"))
+    stream_id.value.push_back(static_cast<uint8_t>(c));
+
+// Create a topic with 2 partitions
+client->create_topic(stream_id, "my-topic", 2);
+
+// Cleanup
+iggy::ffi::delete_connection(client);
+```
+
+## Connection strings
+
+The C++ SDK supports the same connection string format as the Rust SDK:
+
+```
+iggy://user:pass@host:port           (TCP, default)
+iggy+quic://user:pass@host:port      (QUIC)
+iggy+http://user:pass@host:port      (HTTP)
+iggy+ws://user:pass@host:port        (WebSocket)
+```
+
+When an empty string or plain address is passed to `new_connection()`, it defaults to TCP.
+
+## Building from source
+
+The C++ SDK uses CMake and depends on the Rust SDK being compiled first (via CXX bridge). See the [build instructions](https://github.com/apache/iggy/tree/master/foreign/cpp) in the repository for details.
+
+## Current status
+
+The SDK provides low-level access to stream, topic, and client management operations. Message sending and polling, consumer groups, and higher-level abstractions are being developed. Contributions are welcome.

@@ -2,11 +2,53 @@
 title: Iggy Web UI
 ---
 
-Iggy Web UI provides a comprehensive dashboard for Iggy server. It allows you to monitor the server's health, streams, topics, browse the messages, users and more. The dashboard is built with Svelte and is available as [open-source repository](https://github.com/apache/iggy/tree/master/web) as well as the Docker image on [Docker Hub](https://hub.docker.com/r/apache/iggy-web-ui).
+Iggy Web UI provides a comprehensive dashboard for Iggy server. It allows you to monitor the server's health, streams, topics, browse the messages, users and more. The dashboard is built with SvelteKit and TypeScript and is available as [open-source](https://github.com/apache/iggy/tree/master/web) as well as the Docker image on [Docker Hub](https://hub.docker.com/r/apache/iggy-web-ui).
 
 ![Web UI](/img/iggy_web_ui.png)
 
-Here's the full example of the `docker-compose.yml` file that starts the Iggy server, initializes it with the `my-stream` stream and `my-topic` topic with the help of [Iggy CLI](../cli/start.md), and eventually starts the Iggy Web UI:
+## Running modes
+
+### Embedded mode
+
+The Web UI can be compiled directly into the Iggy server binary using the `iggy-web` feature flag. When enabled, it is served at the `/ui` endpoint:
+
+```toml
+[http]
+enabled = true
+web_ui = true   # Enable embedded Web UI at /ui
+```
+
+This mode requires the server to be built with the `iggy-web` feature. If the server is compiled without it and `web_ui = true`, a warning is logged but the server continues to run normally.
+
+### Standalone mode
+
+Run the Web UI as a separate container:
+
+```bash
+docker pull apache/iggy-web-ui
+docker run -e PUBLIC_IGGY_API_URL=http://iggy-server:3000 -p 3050:3050 apache/iggy-web-ui
+```
+
+## Features
+
+The Web UI provides the following pages and functionality:
+
+- **Dashboard** - server health overview and key metrics
+- **Streams** - list, create, and manage streams
+- **Topics** - manage topics per stream (create, update, delete, purge)
+- **Partitions** - view partition details per topic
+- **Messages** - browse messages per partition with built-in decoders:
+  - JSON decoder (formatted JSON output)
+  - String decoder (UTF-8 text)
+  - XML decoder
+- **Clients** - list connected clients and their sessions
+- **Logs** - real-time server log viewer
+- **Users** - user management (create, update, delete, permissions)
+- **Settings** - server configuration overview, terminal access, and Web UI preferences
+
+## Docker Compose example
+
+Here's the full example of the `docker-compose.yml` file that starts the Iggy server, initializes it with the `my-stream` stream and `my-topic` topic with the help of [Iggy CLI](/docs/cli/start), and starts the Iggy Web UI:
 
 ```yaml
 iggy:
@@ -59,7 +101,7 @@ init-iggy:
 
     echo 'Creating my-stream topics...'
     iggy --tcp-server-address iggy:3000 --username iggy --password Secret123 topic create my-stream my-topic 1 none 7d
-    echo 'Created my-stream topics`
+    echo 'Created my-stream topics'
     "
 
 iggy-web-ui:

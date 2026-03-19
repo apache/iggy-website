@@ -97,7 +97,7 @@ All SDKs now have **auto-publishing** enabled — edge and RC versions are autom
 
 - [Rust](https://crates.io/crates/iggy) — improved high-level producer/consumer with ordered sharding, graceful `shutdown()`, and message loss prevention; fixed `max_in_flight` permit acquisition and client reconnection after disconnect
 - [C#](https://www.nuget.org/packages/Apache.Iggy/) — .NET 10 support, `DeleteSegments` and `GetSnapshot` methods, `TimeSpan`-based expiry handling, source link for debugging
-- [Java](https://mvnrepository.com/artifact/org.apache.iggy/iggy-java-sdk) — fluent builder API (`Iggy.tcpClientBuilder().blocking()`), semantic exception hierarchy, BDD tests with Cucumber, user headers support, TLS for HTTP, memory leak detection in CI
+- [Java](https://mvnrepository.com/artifact/org.apache.iggy/iggy) — fluent builder API (`Iggy.tcpClientBuilder().blocking()`), semantic exception hierarchy, BDD tests with Cucumber, user headers support, TLS for HTTP, memory leak detection in CI
 - [Python](https://pypi.org/project/apache-iggy/) — `AsyncIterator` interface for `IggyConsumer`, `message_expiry` parameter in `create_topic`, Windows build support
 - [Node.js (TypeScript)](https://www.npmjs.com/package/apache-iggy) — comprehensive JSDoc comments for improved API documentation and IDE support
 - [Go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) — leader redirection for cluster failover handling

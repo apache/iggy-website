@@ -1,0 +1,139 @@
+---
+title: Networking
+---
+
+Iggy supports four transport protocols simultaneously, each optimized for different use cases. All stateful protocols (TCP, QUIC, WebSocket) use the same custom binary wire protocol, while HTTP provides a standard REST API.
+
+<ShardDiagram />
+
+## Transport protocols
+
+| Protocol | Default Address | Implementation | Best for |
+|----------|----------------|----------------|----------|
+| TCP | `127.0.0.1:8090` | compio + custom binary framing | Highest throughput, lowest latency |
+| QUIC | `127.0.0.1:8080` | compio-quic (quinn) | Secure connections, multiplexing |
+| HTTP | `127.0.0.1:3000` | axum | REST API, web integrations |
+| WebSocket | `127.0.0.1:8092` | compio-ws | Browser clients, bidirectional streaming |
+
+**Performance ranking** (lowest to highest overhead): TCP > QUIC > WebSocket > HTTP
+
+## Binary protocol
+
+TCP, QUIC, and WebSocket all use the same binary protocol format. Each request/response frame consists of:
+
+```
+┌──────────────────┬────────────────────┬──────────────────┐
+│ Command Code     │ Payload Length     │ Payload          │
+│ (4 bytes, LE)    │ (4 bytes, LE)      │ (N bytes)        │
+└──────────────────┴────────────────────┴──────────────────┘
+```
+
+The `iggy_binary_protocol` crate provides zero-copy serialization for all protocol frames. Foreign SDKs implement this protocol natively.
+
+## Protocol distribution across shards
+
+The transport servers are distributed across shards based on their requirements:
+
+- **Shard 0**: HTTP server (axum) and QUIC server
+- **All shards**: TCP and WebSocket servers
+
+This distribution means TCP and WebSocket connections can be served by any shard, which works well with TCP socket migration.
+
+## TCP
+
+TCP provides the highest performance as it works directly with binary data without the overhead of HTTP or TLS handshakes (unless TLS is enabled). Key features:
+
+- **Socket migration**: when enabled (default), TCP sockets can be migrated between shards. If a client's request targets a partition owned by a different shard, the socket moves to the owning shard instead of forwarding the request, eliminating cross-shard hops on the data path.
+- **IPv6 support**: configurable via `ipv6 = true`
+- **Socket tuning**: configurable buffer sizes, keepalive, nodelay (Nagle algorithm), and linger timeout
+
+```toml
+[tcp]
+enabled = true
+address = "127.0.0.1:8090"
+socket_migration = true
+ipv6 = false
+
+[tcp.tls]
+enabled = false
+self_signed = true
+cert_file = "core/certs/iggy_cert.pem"
+key_file = "core/certs/iggy_key.pem"
+
+[tcp.socket]
+override_defaults = false
+recv_buffer_size = "100 KB"
+send_buffer_size = "100 KB"
+keepalive = false
+nodelay = false
+linger = "0 s"
+```
+
+## QUIC
+
+QUIC provides built-in TLS encryption and stream multiplexing. It uses the same binary protocol as TCP but runs over UDP. QUIC support is built on top of the quinn library. While not quite as fast as TCP, QUIC provides better security out of the box (TLS is mandatory).
+
+```toml
+[quic]
+enabled = true
+address = "127.0.0.1:8080"
+max_concurrent_bidi_streams = 10_000
+datagram_send_buffer_size = "100 KB"
+initial_mtu = "8 KB"
+send_window = "100 KB"
+receive_window = "100 KB"
+keep_alive_interval = "5 s"
+max_idle_timeout = "10 s"
+
+[quic.certificate]
+self_signed = true
+cert_file = "core/certs/iggy_cert.pem"
+key_file = "core/certs/iggy_key.pem"
+```
+
+## HTTP
+
+The HTTP API is built on [axum](https://github.com/tokio-rs/axum) and provides a standard REST interface. It includes JWT authentication, Prometheus metrics, CORS configuration, and optional TLS.
+
+HTTP is the most accessible protocol but has the highest overhead due to JSON serialization and the stateless nature of HTTP (no persistent connections for consumer groups). You can find all the available endpoints in the [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http) file.
+
+The HTTP server also hosts:
+- **Prometheus metrics** at `/metrics` (configurable endpoint)
+- **Embedded Web UI** at `/ui` (when compiled with `iggy-web` feature)
+
+## WebSocket
+
+WebSocket provides bidirectional streaming over HTTP upgrade. Iggy uses a custom `compio-ws` implementation that bridges the gap between tungstenite's poll-based model and compio's completion-based model.
+
+The challenge was fundamental: traditional WebSocket libraries expect `std::io::Read` (caller owns the buffer), while compio's `AsyncRead` takes ownership of the buffer (kernel owns it temporarily). The solution is a `GrowableSyncStream` that dynamically grows from a 128 KB base, with linear growth in base capacity increments, a 64 MB cap, and auto-shrink when the buffer exceeds 4x the base and data is consumed.
+
+WebSocket runs on all shards (not just shard 0) and supports optional TLS.
+
+**Benchmark comparison** (AWS i3en.3xlarge, fsync per message, 4 producers, 40M messages):
+- Producer avg latency: TCP 2.61ms vs WebSocket 3.43ms (+31%)
+- Consumer avg latency: TCP 0.70ms vs WebSocket 1.44ms (+106%)
+
+## TLS
+
+All transport protocols support TLS encryption:
+
+| Transport | TLS Mechanism |
+|-----------|---------------|
+| TCP | Optional, via rustls |
+| QUIC | Built-in, mandatory (part of QUIC spec) |
+| HTTP | Optional HTTPS |
+| WebSocket | Inherits from its transport |
+
+All protocols support self-signed certificate generation when `self_signed = true` and the cert files don't exist. For production, provide proper certificate files via the `cert_file` and `key_file` settings.
+
+## Heartbeat
+
+An optional heartbeat mechanism can verify client liveness:
+
+```toml
+[heartbeat]
+enabled = false
+interval = "5 s"
+```
+
+When enabled, the server expects periodic heartbeat messages from connected clients. Clients that miss heartbeats may be disconnected.

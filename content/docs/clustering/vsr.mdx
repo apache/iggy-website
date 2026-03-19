@@ -1,0 +1,136 @@
+---
+title: Viewstamped Replication
+---
+
+Iggy is building clustering support based on **Viewstamped Replication (VSR)**, a consensus protocol for state machine replication. You can read the original [Viewstamped Replication Revisited](https://sands.kaust.edu.sa/classes/CS240/F21/papers/vr-revisited.pdf) paper for the full protocol specification. This work is actively in progress and represents a major milestone for production readiness. The building blocks are already implemented in the `core/consensus/` crate.
+
+## What is Viewstamped Replication?
+
+VSR is a consensus protocol (similar in purpose to Raft or Paxos) that ensures a group of replicas agree on the same sequence of operations, even in the presence of failures. It was chosen for Iggy because of its simplicity and proven track record in high-performance distributed systems.
+
+The protocol operates in three main phases:
+
+1. **Normal operation** - the primary (leader) receives client requests, assigns them sequence numbers, replicates them to backups, and commits once a quorum acknowledges
+2. **View change** - if the primary fails, the remaining replicas elect a new primary by transitioning to a higher view number
+3. **Recovering** - a replica that fell behind can catch up by receiving a snapshot and replay log from the primary
+
+## Architecture
+
+The VSR implementation in Iggy is split into two planes, each handling different types of operations:
+
+The VSR implementation splits replicated operations into two planes:
+
+**Control Plane** (routed through shard 0):
+- Stream operations: CreateStream, UpdateStream, DeleteStream, PurgeStream
+- Topic operations: CreateTopic, UpdateTopic, DeleteTopic, PurgeTopic
+- User operations: CreateUser, UpdateUser, DeleteUser, ChangePassword, UpdatePermissions
+- Other: CreatePartitions, DeletePartitions, CreateConsumerGroup, DeleteConsumerGroup, CreatePersonalAccessToken, DeletePersonalAccessToken
+
+**Data Plane** (routed to owning shard):
+- SendMessages, StoreConsumerOffset, DeleteSegments
+
+- **Control Plane (`IggyMetadata`)** - metadata operations replicated through shard 0. These include creating/deleting streams, topics, partitions, users, consumer groups, and managing permissions and access tokens.
+- **Data Plane (`IggyPartitions`)** - partition operations replicated on all shards via namespaced pipelines. These include sending messages and storing consumer offsets.
+
+## Core concepts
+
+### Replica state
+
+Each replica tracks the following state:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `replica_id` | u8 | Unique identifier for this replica |
+| `view` | u32 | Current view number (incremented on leader change) |
+| `log_view` | u32 | View when status was last normal |
+| `op` | u64 | Operation counter (monotonically increasing) |
+| `commit` | u64 | Latest committed operation number |
+| `status` | enum | Normal, ViewChange, or Recovering |
+
+### Message types
+
+The consensus protocol uses the following message types:
+
+| Message | Direction | Purpose |
+|---------|-----------|---------|
+| `Ping` / `Pong` | Bidirectional | Health checking between replicas |
+| `PingClient` / `PongClient` | Bidirectional | Health checking between client and replica |
+| `Request` | Client -> Primary | Client submitting an operation |
+| `Prepare` | Primary -> Backups | Replicate operation to backups |
+| `PrepareOk` | Backup -> Primary | Acknowledge replication |
+| `Reply` | Primary -> Client | Operation result |
+| `Commit` | Primary -> Backups | Confirm operation is committed |
+| `StartViewChange` | Any -> All | Initiate view change |
+| `DoViewChange` | Any -> New Primary | Transfer state for view change |
+| `StartView` | New Primary -> All | Announce new view |
+
+### Consensus header
+
+Each consensus message carries a 256-byte header (`#[repr(C)]`, zero-copy via `bytemuck`):
+
+| Field | Size | Description |
+|-------|------|-------------|
+| checksum | 16 bytes | Message integrity (u128) |
+| checksum_body | 16 bytes | Body integrity (u128) |
+| cluster | 16 bytes | Cluster identifier (u128) |
+| size | 4 bytes | Message size |
+| view | 4 bytes | View number |
+| release | 4 bytes | Software release version |
+| command | 1 byte | Message type |
+| replica | 1 byte | Sender replica ID |
+| reserved | remaining | Reserved for future use |
+
+### Quorum
+
+Operations are committed once a **quorum** of replicas (majority) acknowledges. The quorum is tracked using a `BitSet` per operation, which efficiently tracks which replicas have acknowledged.
+
+## Timeout management
+
+The VSR implementation uses **deterministic tick-based** timeouts (10ms per tick) for all timing-sensitive operations:
+
+| Timeout Type | Default Ticks | Purpose |
+|-------------|---------------|---------|
+| Ping | 100 (1s) | Health check interval |
+| Prepare | 25 (250ms) | Replication timeout |
+| CommitMessage | 50 (500ms) | Commit notification |
+| NormalHeartbeat | 500 (5s) | Leader heartbeat |
+| StartViewChange | 50 (500ms) | View change initiation |
+| ViewChangeStatus | 500 (5s) | View change monitoring |
+| DoViewChange | 50 (500ms) | View change vote |
+| RequestStartView | 100 (1s) | Request new view from primary |
+
+Timeouts support **exponential backoff** with PRNG-based jitter to avoid thundering herd effects during view changes.
+
+## Deterministic simulation testing
+
+The `core/simulator/` crate provides a network simulator for testing the VSR protocol deterministically. It simulates network conditions (delays, drops, partitions) and allows replaying exact scenarios. This includes modules for: bus, client, network, packet, ready queue, and replica simulation.
+
+## Cluster configuration
+
+Clustering is configured in the `[cluster]` section of `config.toml`:
+
+```toml
+[cluster]
+enabled = false
+name = "iggy-cluster"
+
+[cluster.node.current]
+name = "iggy-node-1"
+ip = "127.0.0.1"
+
+[[cluster.node.others]]
+name = "iggy-node-2"
+ip = "192.168.1.101"
+ports = { tcp = 8091, quic = 8081, http = 3001, websocket = 8093 }
+
+[[cluster.node.others]]
+name = "iggy-node-3"
+ip = "192.168.1.102"
+ports = { tcp = 8092, quic = 8082, http = 3002, websocket = 8094 }
+```
+
+All nodes in the same cluster must share the same `name` to prevent accidental cross-cluster communication. Each node's `ports` field is optional and defaults to the current node's configured ports.
+
+## Current status
+
+The VSR implementation includes the core consensus protocol, view change mechanism, deterministic timeout management, quorum tracking, shard-level plane multiplexing, and a network simulator for testing. Clustering is not yet production-ready but the foundational building blocks are in place and being actively developed. The server can be started as a follower node using the `--follower` flag.

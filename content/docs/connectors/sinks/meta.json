@@ -1,1 +1,1 @@
-{"title": "Sinks", "pages": ["sink", "elasticsearch", "postgres", "quickwit", "iceberg"]}
+{"title": "Sinks", "pages": ["sink", "elasticsearch", "postgres", "mongodb", "quickwit", "iceberg", "stdout"]}

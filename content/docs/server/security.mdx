@@ -1,0 +1,192 @@
+---
+title: Security
+---
+
+Iggy provides multiple layers of security covering authentication, authorization, transport encryption, and data encryption at rest.
+
+## Authentication
+
+Iggy supports two authentication mechanisms:
+
+### Username and password
+
+Users authenticate with a username and password via `login_user()`. Passwords are hashed using **Argon2id** (a memory-hard hashing algorithm). On first startup, the server generates a random password for the `root` user and logs it to the console. You can override this by setting environment variables:
+
+```bash
+IGGY_ROOT_USERNAME=iggy
+IGGY_ROOT_PASSWORD=my-secret-password
+```
+
+Or use the `--with-default-root-credentials` flag for development (sets root credentials to `iggy`/`iggy`).
+
+**Important**: once the data directory exists, environment variable credentials are ignored. To reset credentials, you must use the `--fresh` flag (which deletes all data).
+
+### Personal Access Tokens (PAT)
+
+PATs provide programmatic access with optional expiry. Each user can have up to `max_tokens_per_user` (default 100) active tokens. Tokens are hashed before storage and can be revoked at any time.
+
+```bash
+# Create a PAT via CLI
+iggy -u iggy -p secret pat create my-token 7d
+
+# Use the PAT for authentication
+iggy -t my-token-value stream list
+```
+
+An automatic cleaner removes expired tokens at a configurable interval.
+
+## Authorization
+
+Iggy provides granular permissions at three levels:
+
+1. **Global permissions** - system-wide operations (manage servers, manage users, read servers)
+2. **Stream permissions** - per-stream operations (manage stream, read stream, manage topics, read topics, poll messages, send messages)
+3. **Topic permissions** - per-topic operations within a stream (manage topic, read topic, poll messages, send messages)
+
+The root user has full access to everything and bypasses all permission checks. Other users can be assigned specific permissions using the CLI, SDK, or Web UI.
+
+### Permission hierarchy
+
+Permissions are organized in a tree structure. At the top level, the `Permissions` struct holds both global and per-stream settings:
+
+```rust
+pub struct Permissions {
+    pub global: GlobalPermissions,
+    pub streams: Option<HashMap<usize, StreamPermissions>>,
+}
+```
+
+The `global` field controls system-wide operations, while `streams` is an optional map keyed by stream ID that lets you grant fine-grained access to individual streams.
+
+### Global permissions
+
+`GlobalPermissions` contains boolean fields that govern server-wide operations:
+
+```rust
+pub struct GlobalPermissions {
+    pub manage_servers: bool,  // manage servers (superset of read_servers)
+    pub read_servers: bool,    // get stats, get clients
+    pub manage_users: bool,    // create/update/delete users (superset of read_users)
+    pub read_users: bool,      // get user, get users
+    pub manage_streams: bool,  // create/update/delete streams (superset of read_streams + manage_topics)
+    pub read_streams: bool,    // get streams (superset of read_topics)
+    pub manage_topics: bool,   // create/update/delete topics (superset of read_topics)
+    pub read_topics: bool,     // get topics, manage consumer groups (superset of poll_messages)
+    pub poll_messages: bool,   // poll messages from all streams/topics
+    pub send_messages: bool,   // send messages to all streams/topics
+}
+```
+
+Note that "manage" permissions are always supersets of their "read" counterparts. For example, if `manage_streams` is `true`, the user can also read streams, even if `read_streams` is `false`. Similarly, `read_topics` is a superset of `poll_messages`, so granting `read_topics` implicitly allows polling messages too.
+
+### Stream permissions
+
+When you need to restrict a user to specific streams rather than granting global access, use `StreamPermissions`:
+
+```rust
+pub struct StreamPermissions {
+    pub manage_stream: bool,
+    pub read_stream: bool,
+    pub manage_topics: bool,
+    pub read_topics: bool,
+    pub poll_messages: bool,
+    pub send_messages: bool,
+    pub topics: Option<HashMap<usize, TopicPermissions>>,
+}
+```
+
+The `topics` field works just like the `streams` field one level up. It is an optional map keyed by topic ID that lets you drill down even further.
+
+### Topic permissions
+
+At the most granular level, `TopicPermissions` controls access to a single topic within a stream:
+
+```rust
+pub struct TopicPermissions {
+    pub manage_topic: bool,
+    pub read_topic: bool,
+    pub poll_messages: bool,
+    pub send_messages: bool,
+}
+```
+
+### How permissions cascade
+
+Permissions are checked from top to bottom: global, then stream, then topic. If a permission is granted at a higher level, it covers everything below it. For instance:
+
+- Setting `global.poll_messages = true` lets the user poll messages from **all** streams and topics.
+- Setting `stream[1].poll_messages = true` lets the user poll messages from **all topics** in stream 1, but not from other streams.
+- Setting `stream[1].topics[5].poll_messages = true` lets the user poll messages only from topic 5 in stream 1.
+
+If the `streams` map is `None` (or a specific stream ID is absent from it), the user has no stream-level overrides and only global permissions apply. The same logic holds for the `topics` map within a stream.
+
+### Example: read-only user for a specific stream
+
+Suppose you want to create a user that can only poll messages from stream 42, with no other access. You would set up their permissions like this:
+
+```rust
+Permissions {
+    global: GlobalPermissions {
+        manage_servers: false,
+        read_servers: false,
+        manage_users: false,
+        read_users: false,
+        manage_streams: false,
+        read_streams: false,
+        manage_topics: false,
+        read_topics: false,
+        poll_messages: false,
+        send_messages: false,
+    },
+    streams: Some(HashMap::from([(
+        42,
+        StreamPermissions {
+            manage_stream: false,
+            read_stream: true,
+            manage_topics: false,
+            read_topics: true,
+            poll_messages: true,
+            send_messages: false,
+            topics: None, // allow all topics in this stream
+        },
+    )])),
+}
+```
+
+This user can read stream 42, list its topics, and poll messages from any topic within it, but cannot send messages, create topics, or access any other stream.
+
+## Transport encryption (TLS)
+
+All transport protocols support TLS encryption:
+
+- **TCP**: Optional TLS via rustls. Enable with `tcp.tls.enabled = true`.
+- **QUIC**: TLS is mandatory (built into the QUIC protocol). Uses self-signed certificates by default.
+- **HTTP**: Optional HTTPS. Enable with `http.tls.enabled = true`.
+- **WebSocket**: Optional TLS. Enable with `websocket.tls.enabled = true`.
+
+All protocols support automatic self-signed certificate generation when `self_signed = true` and the certificate files don't exist. For production deployments, provide proper certificates via `cert_file` and `key_file`.
+
+## Data encryption at rest
+
+Iggy supports optional **AES-256-GCM** encryption for message payloads and state commands. When enabled, all data is encrypted before being written to disk and decrypted when read. The encryption key must be a 32-byte base64-encoded string.
+
+```toml
+[system.encryption]
+enabled = false
+key = ""  # 32-byte base64-encoded key
+```
+
+## JWT (HTTP API)
+
+The HTTP API uses JWT (JSON Web Tokens) for session management. Tokens are signed with HS256 by default and have configurable expiry, clock skew tolerance, and audience/issuer validation.
+
+```toml
+[http.jwt]
+algorithm = "HS256"
+issuer = "iggy.apache.org"
+audience = "iggy.apache.org"
+access_token_expiry = "1 h"
+clock_skew = "5 s"
+```
+
+**Important**: change the default `encoding_secret` and `decoding_secret` values in production.

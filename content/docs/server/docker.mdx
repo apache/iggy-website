@@ -1,13 +1,14 @@
 ---
-title: Docker
+title: Docker & Helm
 ---
+
+## Docker
 
 You can easily run the Iggy server with Docker - the official images can be found [here](https://hub.docker.com/r/apache/iggy), simply type `docker pull apache/iggy`.
 
 Below is an example of the `docker-compose.yml` file which additionally overrides the default configuration (described in the section below) with the environment variables. If you prefer using the configuration file, you can mount it as a volume and provide the path to it with the `IGGY_CONFIG_PATH` environment variable.
 
-When running the container, **make sure to include the additional capabilities**, as you can find in [docker-compose](https://github.com/apache/iggy/blob/master/docker-compose.yml) file:
-
+When running the container, **make sure to include the additional capabilities** required by `io_uring` and CPU affinity:
 
 ```yaml
 iggy:
@@ -52,4 +53,91 @@ Or when running with `docker run`:
 
 ```
 docker run --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 apache/iggy:edge
+```
+
+### Why these capabilities?
+
+- **`SYS_NICE`** - required for setting CPU affinity (`sched_setaffinity`) in the thread-per-core architecture
+- **`seccomp:unconfined`** - required for `io_uring` syscalls which are blocked by Docker's default seccomp profile
+- **`memlock: -1`** - `io_uring` needs to lock memory pages shared between user space and kernel
+
+### Available images
+
+| Image | Description |
+|-------|-------------|
+| `apache/iggy` | Server + CLI |
+| `apache/iggy-web-ui` | Standalone Web UI |
+| `apache/iggy-connect` | Connectors runtime |
+| `apache/iggy-mcp` | MCP server |
+
+Images tagged `latest` are based on stable releases. Images tagged `edge` are built from the latest `master` branch.
+
+### Building from source
+
+The Dockerfile uses a multi-stage build: Rust compilation (including the Web UI via npm), then a minimal Debian slim image. To build:
+
+```bash
+docker build -t iggy .
+```
+
+Or use `docker compose up` directly from the repository root.
+
+### Running the CLI inside the container
+
+```bash
+docker exec -it iggy-server /iggy -u iggy -p iggy stream list
+```
+
+## Helm charts
+
+Helm charts for Kubernetes deployment are available in the [repository](https://github.com/apache/iggy/tree/master/helm/charts/iggy).
+
+### Quick start
+
+```bash
+helm install iggy ./helm/charts/iggy
+```
+
+### Chart components
+
+The chart includes templates for:
+
+- **Deployment** - the Iggy server pod with required security context (SYS_NICE, seccomp unconfined, unlimited memlock)
+- **Service** - exposes TCP (8090), QUIC (8080), HTTP (3000), and WebSocket (8092) ports
+- **ServiceAccount** - dedicated service account
+- **PersistentVolumeClaim** - persistent storage for `local_data`
+- **HPA** - Horizontal Pod Autoscaler (optional)
+- **Ingress** - optional ingress for HTTP access
+- **ServiceMonitor** - Prometheus ServiceMonitor for metrics collection (optional)
+- **Secret** - root user credentials
+
+### Key values
+
+```yaml
+# values.yaml (excerpt)
+replicaCount: 1
+
+image:
+  repository: apache/iggy
+  tag: latest
+
+persistence:
+  enabled: true
+  size: 10Gi
+
+resources:
+  limits:
+    memory: 8Gi
+  requests:
+    cpu: 2
+    memory: 4Gi
+
+serviceMonitor:
+  enabled: false
+```
+
+Customize the values file for your environment and deploy with:
+
+```bash
+helm install iggy ./helm/charts/iggy -f my-values.yaml
 ```
