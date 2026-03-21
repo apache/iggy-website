@@ -136,6 +136,7 @@ export default function HomePage() {
           backgroundImage: `url(/img/hero-main.webp), radial-gradient(circle closest-side at 35% 48%, #ff910314, #070c1700 60%), radial-gradient(circle closest-side at 68% 52%, #111d35, #070c1700 63%), radial-gradient(circle farthest-side at 20% 0%, #0e1f42, #070c17 21%)`,
           backgroundPosition: "50% 29%, 0 0, 0 0, 0 0",
           backgroundRepeat: "no-repeat, repeat, repeat, repeat",
+          backgroundSize: "min(100%, 1440px) auto, auto, auto, auto",
         }}
       >
         <div className="mx-auto max-w-6xl text-center">
