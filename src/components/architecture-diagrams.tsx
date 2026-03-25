@@ -20,6 +20,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Logo } from "@/components/logo";
 
 export function MessageFlowDiagram() {
   const [step, setStep] = useState(0);
@@ -1140,7 +1141,7 @@ export function DocsHero() {
 
       <div className="relative z-10">
         <div className="flex flex-col items-center text-center mb-8">
-          <img src="/img/apache-iggy-color-darkbg0.5x.png" alt="Apache Iggy" width={200} className="mb-5" />
+          <Logo className="mb-5" />
           <h2 className="text-2xl md:text-3xl font-bold text-fd-foreground m-0 mb-2">
             <span className="text-fd-primary">Hyper-Efficient</span> Message Streaming
           </h2>
