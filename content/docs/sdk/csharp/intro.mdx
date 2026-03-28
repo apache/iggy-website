@@ -2,7 +2,7 @@
 title: C# SDK
 ---
 
-The Iggy SDK for C# is a library that allows you to interact with the Iggy API from your .NET applications. It communicates with the Iggy server over TCP using the binary protocol. The repository can be found [here](https://github.com/apache/iggy/tree/master/foreign/csharp).
+The Iggy SDK for C# is a library that allows you to interact with the Iggy API from your .NET applications. It supports TCP and HTTP transports. The package is available on [NuGet](https://www.nuget.org/packages/Apache.Iggy/) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/master/foreign/csharp).
 
 ## Installation
 
@@ -109,10 +109,10 @@ while (true)
 Working examples are available in the [examples/csharp](https://github.com/apache/iggy/tree/master/examples/csharp) directory. The following example sets are included:
 
 - **GettingStarted** - basic producer and consumer
+- **Basic** - producer and consumer with settings
+- **NewSdk** - new high-level SDK API patterns
 - **MessageEnvelope** - working with message envelopes
 - **MessageHeaders** - custom message headers
-- **MultiTenant** - multi-tenant streaming setup
 - **TcpTls** - TLS-encrypted TCP connections
-- **StreamBuilder** - stream builder API usage
 
 The solution can be opened with Visual Studio or built with `dotnet build`.

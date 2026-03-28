@@ -33,6 +33,7 @@ export function BenchmarkSection() {
 
   const wrAvg = CY(1.01);
   const wrP99 = CY(2.05);
+  const rdAvg = CY(1.19);
 
   return (
     <div ref={ref}>
@@ -120,13 +121,15 @@ export function BenchmarkSection() {
               <path d={READ_PATH} fill="none" stroke="#38bdf8" strokeWidth="1.5" strokeLinejoin="round" className="iggy-line iggy-line-rd" />
 
               <g className="iggy-label">
-                <line x1="0" y1={wrAvg} x2="600" y2={wrAvg} stroke="#ff9103" strokeOpacity="0.25" strokeDasharray="4 3" />
-                <rect x="540" y={wrAvg - 11} width="56" height="18" rx="4" fill="#ff9103" fillOpacity="0.12" />
-                <text x="568" y={wrAvg + 2} textAnchor="middle" fill="#ff9103" fontSize="10" fontFamily="monospace" fontWeight="600">AVG</text>
+                <line x1="0" y1={wrAvg} x2="600" y2={wrAvg} stroke="#ff9103" strokeOpacity="0.3" strokeDasharray="6 6" strokeWidth="1" />
+                <rect x="539" y={wrAvg - 11} width="58" height="22" rx="4" fill="#060a12" />
+                <rect x="539" y={wrAvg - 11} width="58" height="22" rx="4" fill="#ff9103" fillOpacity="0.15" stroke="#ff9103" strokeOpacity="0.4" strokeWidth="0.5" />
+                <text x="568" y={wrAvg + 4} textAnchor="middle" fill="#ff9103" fontSize="11" fontFamily="monospace" fontWeight="bold">AVG</text>
 
-                <line x1="0" y1={wrP99} x2="600" y2={wrP99} stroke="#ff9103" strokeOpacity="0.15" strokeDasharray="4 3" />
-                <rect x="540" y={wrP99 - 11} width="56" height="18" rx="4" fill="#ff9103" fillOpacity="0.08" />
-                <text x="568" y={wrP99 + 2} textAnchor="middle" fill="#ff9103" fontSize="10" fontFamily="monospace" fillOpacity="0.7">P99</text>
+                <line x1="0" y1={wrP99} x2="600" y2={wrP99} stroke="#ff9103" strokeOpacity="0.2" strokeDasharray="6 6" strokeWidth="1" />
+                <rect x="539" y={wrP99 - 11} width="58" height="22" rx="4" fill="#060a12" />
+                <rect x="539" y={wrP99 - 11} width="58" height="22" rx="4" fill="#ff9103" fillOpacity="0.1" stroke="#ff9103" strokeOpacity="0.3" strokeWidth="0.5" />
+                <text x="568" y={wrP99 + 4} textAnchor="middle" fill="#ff9103" fontSize="11" fontFamily="monospace" fontWeight="bold">P99</text>
               </g>
             </svg>
           </div>

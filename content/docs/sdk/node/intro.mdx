@@ -2,7 +2,7 @@
 title: Node.js SDK
 ---
 
-The Iggy Node.js SDK is a client library that allows you to interact with the Iggy API from your Node.js and TypeScript applications. It communicates with the Iggy server over TCP using the binary protocol. The repository can be found [here](https://github.com/apache/iggy/tree/master/foreign/node).
+The Iggy Node.js SDK is a client library that allows you to interact with the Iggy API from your Node.js and TypeScript applications. It communicates with the Iggy server over TCP using the binary protocol. The package is available on [npm](https://www.npmjs.com/package/apache-iggy) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/master/foreign/node).
 
 ## Installation
 
@@ -87,9 +87,10 @@ if (polledMessages && polledMessages.messages.length > 0) {
 Working examples are available in the [examples/node](https://github.com/apache/iggy/tree/master/examples/node) directory, written in TypeScript. The following example sets are included:
 
 - **getting-started** - basic producer and consumer
-- **async** - asynchronous message processing
+- **basic** - producer and consumer with utilities
 - **message-envelope** - working with message envelopes
 - **message-headers** - custom message headers
 - **multi-tenant** - multi-tenant streaming setup
 - **tcp-tls** - TLS-encrypted TCP connections
 - **stream-builder** - stream builder API usage
+- **sink-data-producer** - bulk data generation for sink connectors

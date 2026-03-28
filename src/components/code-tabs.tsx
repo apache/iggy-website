@@ -22,6 +22,16 @@
 import { useState } from "react";
 import { highlight } from "sugar-high";
 
+const pkgInfo: Record<string, { install: string; url: string; label: string }> = {
+  "Rust": { install: "cargo add iggy", url: "https://crates.io/crates/iggy", label: "crates.io" },
+  "Python": { install: "pip install apache-iggy", url: "https://pypi.org/project/apache-iggy/", label: "PyPI" },
+  "Java": { install: "org.apache.iggy:iggy", url: "https://mvnrepository.com/artifact/org.apache.iggy/iggy", label: "Maven Central" },
+  "Go": { install: "go get github.com/apache/iggy/foreign/go", url: "https://pkg.go.dev/github.com/apache/iggy/foreign/go", label: "pkg.go.dev" },
+  "Node.js": { install: "npm install apache-iggy", url: "https://www.npmjs.com/package/apache-iggy", label: "npm" },
+  "C#": { install: "dotnet add package Apache.Iggy", url: "https://www.nuget.org/packages/Apache.Iggy/", label: "NuGet" },
+  "C++ (WIP)": { install: "git clone https://github.com/apache/iggy", url: "https://github.com/apache/iggy/tree/master/foreign/cpp", label: "GitHub" },
+};
+
 const snippets = [
   {
     lang: "Rust",
@@ -39,7 +49,7 @@ let producer = client
     .direct(
         DirectConfig::builder()
             .batch_length(100)
-            .build(),
+            .build()
     )
     .partitioning(Partitioning::balanced())
     .build();
@@ -232,43 +242,75 @@ iggy::ffi::delete_connection(client);`,
 
 export function LandingCodeTabs() {
   const [active, setActive] = useState(0);
+  const [copied, setCopied] = useState(false);
   const s = snippets[active];
+  const pkg = pkgInfo[s.lang];
 
   return (
-    <div className="rounded-2xl border border-white/[0.08] bg-[#0c1220] overflow-hidden">
-      <div className="flex items-center border-b border-white/[0.06] overflow-x-auto">
-        {snippets.map((sn, i) => (
-          <button
-            key={sn.lang}
-            onClick={() => setActive(i)}
-            className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors ${
-              i === active
-                ? "text-[#ff9103] border-b-2 border-[#ff9103] bg-white/[0.03]"
-                : "text-[#636b75] hover:text-[#aaafb6]"
-            }`}
-          >
-            {sn.lang}
-          </button>
-        ))}
-      </div>
-      <div className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
-            <div className="w-3 h-3 rounded-full bg-[#febc2e]" />
-            <div className="w-3 h-3 rounded-full bg-[#28c840]" />
-            <span className="ml-2 text-xs text-[#636b75] font-mono">{s.file}</span>
-          </div>
-          <a
-            href={s.href}
-            className="text-[10px] text-[#ff9103] no-underline hover:underline"
-          >
-            SDK docs →
-          </a>
+    <div>
+      <div className="rounded-2xl border border-white/[0.08] bg-[#0c1220] overflow-hidden">
+        <div className="flex items-center border-b border-white/[0.06] overflow-x-auto">
+          {snippets.map((sn, i) => (
+            <button
+              key={sn.lang}
+              onClick={() => setActive(i)}
+              className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                i === active
+                  ? "text-[#ff9103] border-b-2 border-[#ff9103] bg-white/[0.03]"
+                  : "text-[#636b75] hover:text-[#aaafb6]"
+              }`}
+            >
+              {sn.lang}
+            </button>
+          ))}
         </div>
-        <pre className="text-[13px] leading-relaxed font-mono overflow-x-auto m-0 whitespace-pre">
-          <code dangerouslySetInnerHTML={{ __html: highlight(s.code) }} />
-        </pre>
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+              <div className="w-3 h-3 rounded-full bg-[#febc2e]" />
+              <div className="w-3 h-3 rounded-full bg-[#28c840]" />
+              <span className="ml-2 text-xs text-[#636b75] font-mono">{s.file}</span>
+            </div>
+            <a
+              href={s.href}
+              className="text-[10px] text-[#ff9103] no-underline hover:underline"
+            >
+              SDK docs →
+            </a>
+          </div>
+          <pre className="text-[13px] leading-relaxed font-mono overflow-x-auto m-0 whitespace-pre min-h-[360px]">
+            <code dangerouslySetInnerHTML={{ __html: highlight(s.code) }} />
+          </pre>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(pkg.install);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}
+          className="group flex cursor-pointer items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-2 transition-colors hover:border-white/[0.15]"
+        >
+          <code className="font-mono text-xs text-[#aaafb6]">{pkg.install}</code>
+          <svg className="h-3.5 w-3.5 shrink-0 text-[#636b75] transition-colors group-hover:text-[#aaafb6]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            {copied ? (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            )}
+          </svg>
+        </button>
+        <a
+          href={pkg.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-[#ff9103]/80 no-underline transition-colors hover:text-[#ff9103]"
+        >
+          {pkg.label} →
+        </a>
       </div>
     </div>
   );

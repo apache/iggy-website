@@ -1,3 +1,100 @@
 ---
 title: Examples
 ---
+
+Working examples are available in the [examples/java](https://github.com/apache/iggy/tree/master/examples/java) directory as a Gradle project. The following example sets are included:
+
+- **gettingstarted** - basic blocking TCP producer and consumer
+- **async** - asynchronous producer and consumer
+- **messageenvelope** - JSON message envelope pattern
+- **messageheaders** - custom message headers
+- **multitenant** - multi-tenant isolation with per-tenant streams
+- **tcptls** - TLS-encrypted TCP connections
+- **sinkdataproducer** - bulk random data generation
+- **streambuilder** - combined producer and consumer in one class
+
+## Producer
+
+```java
+import org.apache.iggy.client.blocking.tcp.IggyTcpClient;
+import org.apache.iggy.identifier.StreamId;
+import org.apache.iggy.identifier.TopicId;
+import org.apache.iggy.message.Message;
+import org.apache.iggy.message.Partitioning;
+import org.apache.iggy.topic.CompressionAlgorithm;
+import java.math.BigInteger;
+import java.util.List;
+import static java.util.Optional.empty;
+
+public class Producer {
+    public static void main(String[] args) {
+        try (var client = IggyTcpClient.builder()
+                .host("localhost")
+                .port(8090)
+                .credentials("iggy", "iggy")
+                .buildAndLogin()) {
+
+            var streamId = StreamId.of("sample-stream");
+            var topicId = TopicId.of("sample-topic");
+
+            client.streams().createStream("sample-stream");
+            client.topics().createTopic(
+                    streamId, 1L,
+                    CompressionAlgorithm.None,
+                    BigInteger.ZERO, BigInteger.ZERO,
+                    empty(), "sample-topic");
+
+            var partitioning = Partitioning.partitionId(0L);
+            var messages = List.of(Message.of("hello world"));
+            client.messages().sendMessages(
+                    streamId, topicId,
+                    partitioning, messages);
+        }
+    }
+}
+```
+
+## Consumer
+
+```java
+import org.apache.iggy.client.blocking.tcp.IggyTcpClient;
+import org.apache.iggy.consumergroup.Consumer;
+import org.apache.iggy.identifier.StreamId;
+import org.apache.iggy.identifier.TopicId;
+import org.apache.iggy.message.Message;
+import org.apache.iggy.message.PolledMessages;
+import org.apache.iggy.message.PollingStrategy;
+import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.util.Optional;
+
+public class ConsumerExample {
+    public static void main(String[] args) {
+        try (var client = IggyTcpClient.builder()
+                .host("localhost")
+                .port(8090)
+                .credentials("iggy", "iggy")
+                .buildAndLogin()) {
+
+            var streamId = StreamId.of("sample-stream");
+            var topicId = TopicId.of("sample-topic");
+            var consumer = Consumer.of(0L);
+
+            PolledMessages polled = client.messages()
+                    .pollMessages(
+                            streamId, topicId,
+                            Optional.of(0L), consumer,
+                            PollingStrategy.offset(BigInteger.ZERO),
+                            10L, false);
+
+            for (Message message : polled.messages()) {
+                String payload = new String(
+                        message.payload(), StandardCharsets.UTF_8);
+                System.out.println("Payload: " + payload);
+            }
+        }
+    }
+}
+```
+
+For the full source code, see the [examples/java](https://github.com/apache/iggy/tree/master/examples/java) directory.

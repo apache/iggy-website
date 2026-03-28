@@ -5,7 +5,11 @@ title: Examples
 In the core repository, you can find the following [examples](https://github.com/apache/iggy/tree/master/examples/rust/src) using the Rust SDK:
 
 - **Getting started** - the basic example which is discussed in the [getting started](/docs/introduction/getting-started) guide.
-- **Message envelope** - the example of how to send a message with a custom envelope e.g. to differentiate between different types of messages.
-- **Message headers** - the example of how to send a message with custom headers e.g. to differentiate between different types of messages.
-- **Multi-tenant** - the comprehensive example of how to structure your application to support multiple tenants (separated by the unique streams) with the different users, permissions, topics etc.
+- **Basic** - producer and consumer using the low-level `Client` trait with CLI args for transport selection (TCP/QUIC/HTTP).
 - **New SDK** - an introduction to the high-level SDK as discussed in the [dedicated guide](/docs/sdk/rust/high-level-sdk).
+- **Stream builder** - examples using the `IggyStream`, `IggyStreamProducer`, and `IggyStreamConsumer` builder APIs as discussed in the [stream builder guide](/docs/sdk/rust/stream-builder).
+- **Message envelope** - the example of how to send a message with a custom envelope e.g. to differentiate between different types of messages.
+- **Message headers** - the example of how to send a message with custom headers (typed headers, message type discrimination, client-side compression).
+- **Multi-tenant** - the comprehensive example of how to structure your application to support multiple tenants (separated by the unique streams) with the different users, permissions, topics etc.
+- **TCP TLS** - TLS-encrypted TCP connections with custom CA certificates.
+- **Sink data producer** - generating random JSON records in bulk batches for sink connector testing.
