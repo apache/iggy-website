@@ -1,0 +1,179 @@
+---
+title: HTTP Sink
+---
+
+<Callout type="info">
+  This page is a curated subset of the HTTP Sink documentation. The canonical reference — including deployment patterns, performance tuning, and the full set of configuration options and limitations — is the upstream [`http_sink/README.md`](https://github.com/apache/iggy/tree/master/core/connectors/sinks/http_sink) in the `apache/iggy` repository.
+</Callout>
+
+The HTTP Sink connector consumes messages from Iggy streams and delivers them to any HTTP endpoint — webhooks, REST APIs, serverless functions, or SaaS integrations. It is generic by design: you bring the URL, headers, and batching strategy, and the sink handles transport, retries, and metadata wrapping.
+
+## Configuration
+
+```toml
+[[streams]]
+stream = "events"
+topics = ["notifications"]
+schema = "json"
+batch_length = 50
+poll_interval = "100ms"
+consumer_group = "http_sink"
+
+[plugin_config]
+url = "https://api.example.com/ingest"
+batch_mode = "ndjson"
+```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `url` | string | **required** | Target URL for HTTP requests |
+| `method` | string | `POST` | HTTP method: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` |
+| `timeout` | string | `30s` | Request timeout (e.g. `10s`, `500ms`) |
+| `max_payload_size_bytes` | u64 | `10485760` | Max body size in bytes (10MB). `0` to disable |
+| `batch_mode` | string | `individual` | `individual`, `ndjson`, `json_array`, or `raw` |
+| `include_metadata` | bool | `true` | Wrap payload in metadata envelope |
+| `include_checksum` | bool | `false` | Add message checksum to metadata |
+| `include_origin_timestamp` | bool | `false` | Add origin timestamp to metadata |
+| `health_check_enabled` | bool | `false` | Send health check request in `open()` |
+| `health_check_method` | string | `HEAD` | HTTP method for health check |
+| `max_retries` | u32 | `3` | Retry attempts for transient errors |
+| `retry_delay` | string | `1s` | Base delay between retries |
+| `retry_backoff_multiplier` | u32 | `2` | Exponential backoff multiplier (min 1) |
+| `max_retry_delay` | string | `30s` | Maximum retry delay cap |
+| `success_status_codes` | [u16] | `[200, 201, 202, 204]` | Status codes considered successful |
+| `tls_danger_accept_invalid_certs` | bool | `false` | Skip TLS certificate validation |
+| `max_connections` | usize | `10` | Max idle connections per host |
+| `verbose_logging` | bool | `false` | Log request/response details at debug level |
+| `headers` | table | `{}` | Custom HTTP headers (e.g. `Authorization`) |
+
+## Batch Modes
+
+The `batch_mode` option controls how messages from one poll cycle are delivered to the endpoint.
+
+- **`individual`** (default): one HTTP request per message. Best for webhooks and endpoints that accept single events. With `batch_length = 50`, this produces 50 sequential round trips per poll cycle.
+- **`ndjson`**: all messages in one request, [newline-delimited JSON](https://github.com/ndjson/ndjson-spec). Best for bulk-ingestion endpoints. `Content-Type: application/x-ndjson`.
+- **`json_array`**: all messages as a single JSON array. Best for APIs that expect array payloads. `Content-Type: application/json`.
+- **`raw`**: raw bytes, one request per message. For non-JSON payloads (Protobuf, FlatBuffers, binary). The metadata envelope is not applied. `Content-Type: application/octet-stream`.
+
+For production throughput, prefer `ndjson` or `json_array` over `individual` — they collapse N round trips per poll cycle into one.
+
+## Metadata Envelope
+
+When `include_metadata = true` (default), the JSON-mode payload is wrapped:
+
+```json
+{
+  "metadata": {
+    "iggy_id": "0123456789abcdef0123456789abcdef",
+    "iggy_offset": 42,
+    "iggy_timestamp": 1710064800000000,
+    "iggy_stream": "my_stream",
+    "iggy_topic": "my_topic",
+    "iggy_partition_id": 0
+  },
+  "payload": { ... }
+}
+```
+
+- `iggy_id` is a 32-character lowercase hex string (no dashes).
+- For non-JSON payloads (`raw`, `flatbuffer`, `proto` schemas), the payload is base64-encoded and an `iggy_payload_encoding: "base64"` field is added.
+- Set `include_metadata = false` to send the raw payload without wrapping (useful when the downstream service expects bare JSON, e.g. Slack webhooks).
+
+The connector does not require any particular message structure on input. The envelope is applied on the way out, not expected on the way in — your producers can publish whatever they like.
+
+## Authentication
+
+The HTTP sink supports authentication via custom headers under `[plugin_config.headers]`. All headers are sent with every request, including health checks.
+
+```toml
+# Bearer token
+[plugin_config.headers]
+Authorization = "Bearer eyJhbGciOiJSUzI1NiIs..."
+
+# API key
+[plugin_config.headers]
+x-api-key = "my-secret-api-key"
+
+# Basic auth (base64 of "username:password")
+[plugin_config.headers]
+Authorization = "Basic dXNlcm5hbWU6cGFzc3dvcmQ="
+```
+
+Multiple headers are supported and combined per request. For secrets, prefer environment variable overrides at the process level (see the upstream README) to keep tokens out of `config.toml`.
+
+## Retry & Delivery Semantics
+
+Failed requests use `reqwest-middleware` with exponential backoff: `retry_delay`, then `retry_delay * retry_backoff_multiplier`, capped at `max_retry_delay`.
+
+- **Transient errors** (retried): network errors, HTTP 429, 500, 502, 503, 504.
+- **Non-transient errors** (fail immediately): HTTP 400, 401, 403, 404, 405, etc.
+- **HTTP 429 `Retry-After`**: the header is logged but not honored; the middleware uses computed backoff.
+- **Partial delivery** (`individual`/`raw` modes): after 3 consecutive HTTP failures, the remainder of the batch is aborted to avoid hammering a dead endpoint.
+
+The connector runtime commits consumer-group offsets *before* `consume()` is called and does not inspect its return value, so the effective delivery guarantee is **at-most-once** at the runtime level. The sink's internal retry loop provides best-effort delivery within each `consume()` call.
+
+## Example Configurations
+
+### Webhook (Slack)
+
+```toml
+[plugin_config]
+url = "https://hooks.slack.com/services/T00/B00/xxx"
+batch_mode = "individual"
+include_metadata = false   # Slack expects bare JSON payload
+max_retries = 5
+```
+
+### Bulk REST API Ingestion
+
+```toml
+[plugin_config]
+url = "https://analytics.example.com/v1/events"
+batch_mode = "ndjson"
+max_connections = 20
+timeout = "60s"
+include_metadata = true    # downstream routes by iggy_stream/iggy_topic
+
+[plugin_config.headers]
+Authorization = "Bearer my-api-token"
+```
+
+### IoT / Sensor Relay (binary payloads)
+
+```toml
+[[streams]]
+stream = "sensors"
+topics = ["temperature", "pressure"]
+schema = "raw"
+batch_length = 200
+poll_interval = "50ms"
+consumer_group = "sensor_relay"
+
+[plugin_config]
+url = "https://iot-gateway.example.com/ingest"
+batch_mode = "raw"
+max_retries = 5
+timeout = "5s"
+```
+
+## Deployment & Performance
+
+A connector instance is a single OS process: one `iggy-connectors` binary loading one shared library with one `[plugin_config]` block — and therefore one destination URL. To send to multiple destinations, deploy multiple connector instances (separate processes, separate configs). For fan-out from a single topic to multiple endpoints, run multiple instances against the same topic with different `consumer_group` names so each maintains its own offset.
+
+Throughput is dominated by batch-mode choice: the runtime calls `consume()` sequentially within each topic task, so `individual` mode performs N round trips per poll cycle while `ndjson`/`json_array` collapse the same batch into one request. Connection pooling and HTTP keep-alive are enabled by default; tune `max_connections` and `batch_length` together for high-throughput targets.
+
+For multi-instance deployment patterns (Docker, Kubernetes, fan-out topologies), connection pool tuning, and full performance analysis, see the upstream [`http_sink/README.md`](https://github.com/apache/iggy/tree/master/core/connectors/sinks/http_sink).
+
+## Known Limitations
+
+- **No `Retry-After` honoring**: the header is logged but doesn't influence retry timing.
+- **No dead-letter queue**: failed messages are logged at `error!` level but not persisted.
+- **No request signing**: AWS SigV4, HMAC, and similar schemes are not supported. Use custom headers or a signing proxy.
+- **No per-topic URL routing**: all topics in one connector instance share the same `url`. For routing, deploy multiple instances.
+- **No OAuth2 / OIDC token refresh**: bearer tokens are static. Use an auth proxy for services that require token rotation.
+- **No mTLS client certificates**: terminate mTLS at a sidecar proxy for production use.
+- **Plaintext secrets in config**: header values are stored verbatim in `config.toml`. Use environment variable overrides at the process level for sensitive values.
+
+For the complete list and implementation context, see the upstream [`http_sink/README.md`](https://github.com/apache/iggy/tree/master/core/connectors/sinks/http_sink#known-limitations).
