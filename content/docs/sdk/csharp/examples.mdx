@@ -2,111 +2,186 @@
 title: Examples
 ---
 
-## Basic producer
+These samples use the [High-level SDK](/docs/sdk/csharp/high-level-sdk) — the recommended way to build producers and consumers. For the low-level, per-call equivalents, see the [Guide](/docs/sdk/csharp/guide).
+
+## Producer
+
+A publisher that creates the stream and topic if missing, batches sends in the background, and retries failures:
 
 ```csharp
 using System.Text;
 using Apache.Iggy;
 using Apache.Iggy.Configuration;
 using Apache.Iggy.Enums;
-using Apache.Iggy.Exceptions;
+using Apache.Iggy.Extensions;
 using Apache.Iggy.Factory;
-using Apache.Iggy.Kinds;
 using Apache.Iggy.Messages;
 
-const string StreamName = "dev";
-const string TopicName = "events";
-
-var client = IggyClientFactory.CreateClient(new IggyClientConfigurator()
+var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
 {
     BaseAddress = "127.0.0.1:8090",
-    Protocol = Protocol.Tcp,
+    Protocol = Protocol.Tcp
 });
 
 await client.ConnectAsync();
-await client.LoginUser("iggy", "iggy");
+await client.LoginUserAsync("iggy", "iggy");
 
-// Create stream and topic if they don't exist
-try
-{
-    await client.CreateStreamAsync(StreamName);
-}
-catch (InvalidResponseException)
-{
-    Console.WriteLine("Stream already exists.");
-}
+var publisher = client.CreatePublisherBuilder(
+        Identifier.String("dev"),
+        Identifier.String("events"))
+    .CreateStreamIfNotExists("dev")
+    .CreateTopicIfNotExists("events", topicPartitionsCount: 2)
+    .WithBackgroundSending(batchSize: 100, flushInterval: TimeSpan.FromMilliseconds(100))
+    .WithRetry(maxAttempts: 3)
+    .Build();
 
-try
-{
-    await client.CreateTopicAsync(
-        Identifier.String(StreamName),
-        TopicName,
-        2,
-        CompressionAlgorithm.None
-    );
-}
-catch (InvalidResponseException)
-{
-    Console.WriteLine("Topic already exists.");
-}
+await publisher.InitAsync();
 
-// Send messages
-var partitioning = Partitioning.PartitionId(0);
-for (int i = 0; i < 100; i++)
+for (var i = 0; i < 100; i++)
 {
     var payload = Encoding.UTF8.GetBytes($"Event #{i}");
-    var messages = new List<Message> { new Message(Guid.NewGuid(), payload) };
-    await client.SendMessagesAsync(
-        Identifier.String(StreamName),
-        Identifier.String(TopicName),
-        partitioning,
-        messages
-    );
+    await publisher.SendMessagesAsync(new List<Message> { new(Guid.NewGuid(), payload) });
 }
+
+// Drain the background queue before exiting
+await publisher.WaitUntilAllSendsAsync();
+await publisher.DisposeAsync();
 
 Console.WriteLine("Sent 100 messages");
 ```
 
-## Basic consumer
+## Consumer group
+
+A consumer that creates and joins a consumer group, commits offsets after each received message, and surfaces polling errors:
 
 ```csharp
 using System.Text;
 using Apache.Iggy;
 using Apache.Iggy.Configuration;
-using Apache.Iggy.Contracts;
+using Apache.Iggy.Consumers;
 using Apache.Iggy.Enums;
+using Apache.Iggy.Extensions;
 using Apache.Iggy.Factory;
 using Apache.Iggy.Kinds;
 
-var client = IggyClientFactory.CreateClient(new IggyClientConfigurator()
+var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
 {
     BaseAddress = "127.0.0.1:8090",
-    Protocol = Protocol.Tcp,
+    Protocol = Protocol.Tcp
 });
 
 await client.ConnectAsync();
-await client.LoginUser("iggy", "iggy");
+await client.LoginUserAsync("iggy", "iggy");
 
-// Poll messages
-var consumer = Consumer.New(1);
-var offset = 0ul;
-uint messagesPerBatch = 100;
+var consumer = client.CreateConsumerBuilder(
+        Identifier.String("dev"),
+        Identifier.String("events"),
+        Consumer.Group("event-processors"))
+    .WithConsumerGroup("event-processors", createIfNotExists: true, joinGroup: true)
+    .WithPollingStrategy(PollingStrategy.Next())
+    .WithBatchSize(20)
+    .WithAutoCommitMode(AutoCommitMode.AfterReceive)
+    .SubscribeOnPollingError(e =>
+    {
+        Console.WriteLine($"Polling error: {e.Exception.Message}");
+        return Task.CompletedTask;
+    })
+    .Build();
 
-var polledMessages = await client.PollMessagesAsync(
-    Identifier.String("dev"),
-    Identifier.String("events"),
-    0,
-    consumer,
-    PollingStrategy.Offset(offset),
-    messagesPerBatch,
-    false
-);
+await consumer.InitAsync();
 
-foreach (var message in polledMessages.Messages)
+await foreach (var message in consumer.ReceiveAsync())
 {
-    var payload = Encoding.UTF8.GetString(message.Payload);
-    Console.WriteLine($"Offset: {message.Header.Offset}, Payload: {payload}");
+    var payload = Encoding.UTF8.GetString(message.Message.Payload);
+    Console.WriteLine($"Partition {message.PartitionId}, offset {message.CurrentOffset}: {payload}");
 }
 ```
 
-For the full source code, see the [examples/csharp](https://github.com/apache/iggy/tree/master/examples/csharp) directory.
+Run several instances of the consumer to see the group load-balance partitions between members.
+
+## Typed messages
+
+A typed publisher/consumer pair that (de)serializes a record as JSON. Note that the typed builders are configured via statements rather than one fluent chain — the `With*` methods return the untyped base builder, so `Build()` must be called on the typed builder variable (see [Typed consumer](/docs/sdk/csharp/high-level-sdk#typed-consumer)):
+
+```csharp
+using System.Buffers;
+using System.Text.Json;
+using Apache.Iggy;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Consumers;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Factory;
+using Apache.Iggy.Kinds;
+using Apache.Iggy.Publishers;
+
+var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp
+});
+
+await client.ConnectAsync();
+await client.LoginUserAsync("iggy", "iggy");
+
+// Publish typed messages
+var publisherBuilder = IggyPublisherBuilder<OrderEvent>.Create(
+    client,
+    Identifier.String("orders"),
+    Identifier.String("created"),
+    new OrderSerializer()
+);
+publisherBuilder.CreateStreamIfNotExists("orders");
+publisherBuilder.CreateTopicIfNotExists("created");
+
+var publisher = publisherBuilder.Build();
+await publisher.InitAsync();
+
+await publisher.SendAsync(new OrderEvent(Guid.NewGuid(), 99.90m));
+await publisher.DisposeAsync();
+
+// Consume them
+var consumerBuilder = IggyConsumerBuilder<OrderEvent>.Create(
+    client,
+    Identifier.String("orders"),
+    Identifier.String("created"),
+    Consumer.New(1),
+    new OrderDeserializer()
+);
+consumerBuilder.WithPollingStrategy(PollingStrategy.Next());
+consumerBuilder.WithAutoCommitMode(AutoCommitMode.AfterReceive);
+
+var consumer = consumerBuilder.Build();
+await consumer.InitAsync();
+
+await foreach (var message in consumer.ReceiveDeserializedAsync())
+{
+    if (message.Status == MessageStatus.Success)
+    {
+        Console.WriteLine($"Order {message.Data!.OrderId}, amount {message.Data.Amount}");
+    }
+}
+
+record OrderEvent(Guid OrderId, decimal Amount);
+
+class OrderSerializer : ISerializer<OrderEvent>
+{
+    public void Serialize(OrderEvent data, IBufferWriter<byte> writer) =>
+        writer.Write(JsonSerializer.SerializeToUtf8Bytes(data));
+}
+
+class OrderDeserializer : IDeserializer<OrderEvent>
+{
+    public OrderEvent Deserialize(ReadOnlyMemory<byte> data) =>
+        JsonSerializer.Deserialize<OrderEvent>(data.Span)!;
+}
+```
+
+## More examples
+
+The [examples/csharp](https://github.com/apache/iggy/tree/master/examples/csharp) directory in the Iggy repository contains complete, runnable projects:
+
+- **Basic** / **GettingStarted** — low-level producer and consumer
+- **NewSdk** — high-level `IggyPublisher` / `IggyConsumer` (like the samples above)
+- **MessageEnvelope** — envelope pattern (message type + JSON payload) over the low-level client
+- **MessageHeaders** — user-defined message headers
+- **TcpTls** — TLS-encrypted TCP connection

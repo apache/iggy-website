@@ -2,7 +2,9 @@
 title: C# SDK
 ---
 
-The Iggy SDK for C# is a library that allows you to interact with the Iggy API from your .NET applications. It supports TCP and HTTP transports. The package is available on [NuGet](https://www.nuget.org/packages/Apache.Iggy/) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/master/foreign/csharp).
+The Iggy SDK for C# is a modern, async-first client library for interacting with an Iggy message streaming server from your .NET applications. It supports TCP and HTTP transports. The package is available on [NuGet](https://www.nuget.org/packages/Apache.Iggy/) and the source code lives on [GitHub](https://github.com/apache/iggy/tree/master/foreign/csharp).
+
+The SDK is built around the `IIggyClient` interface, which aggregates every feature (publishing, consuming, stream/topic management, users, offsets, consumer groups, and system operations). For the low-level per-call API and the full configuration reference, see the [Guide](/docs/sdk/csharp/guide). For the ergonomic, batteries-included producer/consumer abstractions, see the [High-level SDK](/docs/sdk/csharp/high-level-sdk).
 
 ## Installation
 
@@ -10,7 +12,59 @@ The Iggy SDK for C# is a library that allows you to interact with the Iggy API f
 dotnet add package Apache.Iggy
 ```
 
+## Supported protocols
+
+The SDK supports two transport protocols:
+
+- **TCP** — binary protocol for optimal performance and lower latency (recommended)
+- **HTTP** — RESTful JSON API for stateless operations
+
+Some operations are TCP-only and throw `FeatureUnavailableException` on HTTP: joining/leaving a consumer group, `GetMeAsync`, and `DeleteSegmentsAsync`.
+
+## Creating a client
+
+Create a client with `IggyClientFactory.CreateClient`, then call `ConnectAsync`:
+
+```csharp
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Factory;
+
+var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp
+});
+
+await client.ConnectAsync();
+await client.LoginUserAsync("iggy", "iggy");
+```
+
+Optionally, provide an `ILoggerFactory` for diagnostics (defaults to `NullLoggerFactory.Instance`):
+
+```csharp
+using Microsoft.Extensions.Logging;
+
+var loggerFactory = LoggerFactory.Create(builder =>
+{
+    builder
+        .AddFilter("Apache.Iggy", LogLevel.Information)
+        .AddConsole();
+});
+
+var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp,
+    LoggerFactory = loggerFactory
+});
+```
+
+`IggyClientConfigurator` also exposes buffer sizes, TLS, automatic reconnection with exponential backoff, auto-login (so you can skip the explicit `LoginUserAsync` call), and client-side message encryption. See [Client configuration](/docs/sdk/csharp/guide#client-configuration) for the full reference.
+
 ## Quick start
+
+These samples use the [High-level SDK](/docs/sdk/csharp/high-level-sdk) — the recommended way to build producers and consumers. For the equivalent low-level, per-call flow, see the [Guide](/docs/sdk/csharp/guide).
 
 ### Producer
 
@@ -19,42 +73,35 @@ using System.Text;
 using Apache.Iggy;
 using Apache.Iggy.Configuration;
 using Apache.Iggy.Enums;
+using Apache.Iggy.Extensions;
 using Apache.Iggy.Factory;
-using Apache.Iggy.Kinds;
 using Apache.Iggy.Messages;
 
-const string StreamName = "sample-stream";
-const string TopicName = "sample-topic";
-
-var client = IggyClientFactory.CreateClient(new IggyClientConfigurator()
+var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
 {
     BaseAddress = "127.0.0.1:8090",
-    Protocol = Protocol.Tcp,
+    Protocol = Protocol.Tcp
 });
 
 await client.ConnectAsync();
-await client.LoginUser("iggy", "iggy");
+await client.LoginUserAsync("iggy", "iggy");
 
-await client.CreateStreamAsync(StreamName);
-await client.CreateTopicAsync(
-    Identifier.String(StreamName),
-    TopicName,
-    1,
-    CompressionAlgorithm.None
-);
+var publisher = client.CreatePublisherBuilder(
+        Identifier.String("sample-stream"),
+        Identifier.String("sample-topic"))
+    .CreateStreamIfNotExists("sample-stream")
+    .CreateTopicIfNotExists("sample-topic")
+    .Build();
 
-var partitioning = Partitioning.PartitionId(0);
-for (int i = 0; i < 10; i++)
+await publisher.InitAsync();
+
+for (var i = 0; i < 10; i++)
 {
     var payload = Encoding.UTF8.GetBytes($"message-{i}");
-    var messages = new List<Message> { new Message(Guid.NewGuid(), payload) };
-    await client.SendMessagesAsync(
-        Identifier.String(StreamName),
-        Identifier.String(TopicName),
-        partitioning,
-        messages
-    );
+    await publisher.SendMessagesAsync(new List<Message> { new(Guid.NewGuid(), payload) });
 }
+
+await publisher.DisposeAsync();
 ```
 
 ### Consumer
@@ -63,56 +110,42 @@ for (int i = 0; i < 10; i++)
 using System.Text;
 using Apache.Iggy;
 using Apache.Iggy.Configuration;
-using Apache.Iggy.Contracts;
+using Apache.Iggy.Consumers;
 using Apache.Iggy.Enums;
+using Apache.Iggy.Extensions;
 using Apache.Iggy.Factory;
 using Apache.Iggy.Kinds;
 
-var client = IggyClientFactory.CreateClient(new IggyClientConfigurator()
+var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
 {
     BaseAddress = "127.0.0.1:8090",
-    Protocol = Protocol.Tcp,
+    Protocol = Protocol.Tcp
 });
 
 await client.ConnectAsync();
-await client.LoginUser("iggy", "iggy");
+await client.LoginUserAsync("iggy", "iggy");
 
-var consumer = Consumer.New(1);
-var offset = 0ul;
-uint messagesPerBatch = 10;
-
-while (true)
-{
-    var polledMessages = await client.PollMessagesAsync(
+var consumer = client.CreateConsumerBuilder(
         Identifier.String("sample-stream"),
         Identifier.String("sample-topic"),
-        0,
-        consumer,
-        PollingStrategy.Offset(offset),
-        messagesPerBatch,
-        false
-    );
+        Consumer.New(1))
+    .WithPollingStrategy(PollingStrategy.Next())
+    .WithAutoCommitMode(AutoCommitMode.AfterReceive)
+    .Build();
 
-    if (!polledMessages.Messages.Any()) break;
+await consumer.InitAsync();
 
-    offset += (ulong)polledMessages.Messages.Count;
-    foreach (var message in polledMessages.Messages)
-    {
-        var payload = Encoding.UTF8.GetString(message.Payload);
-        Console.WriteLine($"Offset: {message.Header.Offset}, Payload: {payload}");
-    }
+await foreach (var message in consumer.ReceiveAsync())
+{
+    var payload = Encoding.UTF8.GetString(message.Message.Payload);
+    Console.WriteLine($"Offset {message.CurrentOffset}: {payload}");
 }
 ```
 
-## Examples
+`ReceiveAsync` polls indefinitely — pass a `CancellationToken` or `break` out of the loop to stop.
 
-Working examples are available in the [examples/csharp](https://github.com/apache/iggy/tree/master/examples/csharp) directory. The following example sets are included:
+## Next steps
 
-- **GettingStarted** - basic producer and consumer
-- **Basic** - producer and consumer with settings
-- **NewSdk** - new high-level SDK API patterns
-- **MessageEnvelope** - working with message envelopes
-- **MessageHeaders** - custom message headers
-- **TcpTls** - TLS-encrypted TCP connections
-
-The solution can be opened with Visual Studio or built with `dotnet build`.
+- [Guide](/docs/sdk/csharp/guide) — client configuration reference and the full API surface: auth, streams, topics, partitions, publishing, consuming, offsets, consumer groups, system operations
+- [High-level SDK](/docs/sdk/csharp/high-level-sdk) — `IggyPublisher` / `IggyConsumer` with background sending, retries, auto-commit, typed (de)serialization, and pooled (rented) buffers for allocation-free hot paths
+- [Examples](/docs/sdk/csharp/examples) — producer, consumer-group, and typed-message samples, plus links to runnable projects
