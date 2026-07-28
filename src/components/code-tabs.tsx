@@ -29,6 +29,7 @@ const pkgInfo: Record<string, { install: string; url: string; label: string }> =
   "Go": { install: "go get github.com/apache/iggy/foreign/go", url: "https://pkg.go.dev/github.com/apache/iggy/foreign/go", label: "pkg.go.dev" },
   "Node.js": { install: "npm install apache-iggy", url: "https://www.npmjs.com/package/apache-iggy", label: "npm" },
   "C#": { install: "dotnet add package Apache.Iggy", url: "https://www.nuget.org/packages/Apache.Iggy/", label: "NuGet" },
+  "PHP": { install: "cargo php install --release --yes", url: "https://github.com/apache/iggy/tree/master/foreign/php", label: "GitHub" },
   "C++ (WIP)": { install: "git clone https://github.com/apache/iggy", url: "https://github.com/apache/iggy/tree/master/foreign/cpp", label: "GitHub" },
 };
 
@@ -213,6 +214,36 @@ await client.SendMessagesAsync(
 );`,
   },
   {
+    lang: "PHP",
+    file: "producer.php",
+    href: "https://github.com/apache/iggy/tree/master/foreign/php",
+    code: `<?php
+
+$client = new \\Iggy\\Client(
+    '127.0.0.1:8090'
+);
+$client->connect();
+$client->loginUser('iggy', 'iggy');
+
+$client->createStream('orders');
+$client->createTopic(
+    'orders',
+    'events',
+    3,
+    null,
+    null,
+    null,
+    null
+);
+
+$client->sendMessages(
+    'orders',
+    'events',
+    0,
+    [new \\Iggy\\SendMessage('order-123')]
+);`,
+  },
+  {
     lang: "C++ (WIP)",
     file: "producer.cpp",
     href: "/docs/sdk/cpp/intro",
@@ -247,9 +278,9 @@ export function LandingCodeTabs() {
   const pkg = pkgInfo[s.lang];
 
   return (
-    <div>
-      <div className="rounded-2xl border border-white/[0.08] bg-[#0c1220] overflow-hidden">
-        <div className="flex items-center border-b border-white/[0.06] overflow-x-auto">
+    <div className="min-w-0 max-w-full">
+      <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0c1220]">
+        <div className="flex max-w-full items-center overflow-x-auto border-b border-white/[0.06]">
           {snippets.map((sn, i) => (
             <button
               key={sn.lang}
@@ -257,45 +288,49 @@ export function LandingCodeTabs() {
               className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors ${
                 i === active
                   ? "text-[#ff9103] border-b-2 border-[#ff9103] bg-white/[0.03]"
-                  : "text-[#636b75] hover:text-[#aaafb6]"
+                  : "text-[#8c959f] hover:text-[#c4c9cf]"
               }`}
             >
               {sn.lang}
             </button>
           ))}
         </div>
-        <div className="p-5">
+        <div className="min-w-0 p-5">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
               <div className="w-3 h-3 rounded-full bg-[#febc2e]" />
               <div className="w-3 h-3 rounded-full bg-[#28c840]" />
-              <span className="ml-2 text-xs text-[#636b75] font-mono">{s.file}</span>
+              <span className="ml-2 text-xs text-[#8c959f] font-mono">{s.file}</span>
             </div>
             <a
               href={s.href}
+              target={s.href.startsWith("http") ? "_blank" : undefined}
+              rel={
+                s.href.startsWith("http") ? "noopener noreferrer" : undefined
+              }
               className="text-[10px] text-[#ff9103] no-underline hover:underline"
             >
               SDK docs →
             </a>
           </div>
-          <pre className="text-[13px] leading-relaxed font-mono overflow-x-auto m-0 whitespace-pre min-h-[360px]">
+          <pre className="m-0 min-h-[360px] max-w-full overflow-x-auto whitespace-pre font-mono text-[13px] leading-relaxed">
             <code dangerouslySetInnerHTML={{ __html: highlight(s.code) }} />
           </pre>
         </div>
       </div>
 
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3">
         <button
           onClick={() => {
             navigator.clipboard.writeText(pkg.install);
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}
-          className="group flex cursor-pointer items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-2 transition-colors hover:border-white/[0.15]"
+          className="group flex min-w-0 max-w-full cursor-pointer items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-2 transition-colors hover:border-white/[0.15]"
         >
           <code className="font-mono text-xs text-[#aaafb6]">{pkg.install}</code>
-          <svg className="h-3.5 w-3.5 shrink-0 text-[#636b75] transition-colors group-hover:text-[#aaafb6]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="h-3.5 w-3.5 shrink-0 text-[#8c959f] transition-colors group-hover:text-[#c4c9cf]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             {copied ? (
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             ) : (

@@ -24,7 +24,7 @@ import { LandingCodeTabs } from "@/components/code-tabs";
 import { BenchmarkSection } from "@/components/benchmark-chart";
 
 export const metadata: Metadata = {
-  title: "Apache Iggy (Incubating) — Hyper-Efficient Message Streaming",
+  title: "Apache Iggy (Incubating) | Hyper-Efficient Message Streaming",
   description:
     "Apache Iggy (Incubating) is a high-performance, persistent message streaming platform written in Rust, capable of processing millions of messages per second with ultra-low latency.",
 };
@@ -41,7 +41,7 @@ const heroStats = [
     gradient: "from-[#5f87fd] to-[#7d44e0]",
   },
   {
-    value: "6",
+    value: "7",
     label: "Language SDKs",
     gradient: "from-[#9d44e0] to-[#e55efa]",
   },
@@ -71,7 +71,7 @@ const features = [
   {
     title: "Multi-Language SDKs",
     description:
-      "Client libraries available for Rust, C#, Java, Go, Python, Node.js and C++ with more languages coming for best developer experience.",
+      "Client libraries available for Rust, C#, Java, Go, Python, Node.js and PHP, with C++ coming soon.",
   },
   {
     title: "Consumer Groups & Partitioning",
@@ -140,7 +140,7 @@ export default function HomePage() {
         }}
       >
         <div className="mx-auto max-w-6xl text-center">
-          <h1 className="mb-6 text-5xl leading-[1.05] font-bold tracking-tight text-[#fffaeb] md:text-7xl lg:text-[clamp(5rem,6vw,7rem)]">
+          <h1 className="mb-6 text-4xl leading-[1.05] font-bold tracking-tight text-[#fffaeb] sm:text-5xl md:text-7xl lg:text-[clamp(5rem,6vw,7rem)]">
             Hyper-Efficient
             <br />
             <span className="bg-gradient-to-r from-[#f9923f] via-[#5f87fd] to-[#fa5e8a] bg-clip-text text-transparent">
@@ -160,15 +160,20 @@ export default function HomePage() {
           </p>
 
           {/* Stats Grid */}
-          <div className="mx-auto mt-12 grid max-w-4xl grid-cols-2 gap-6 md:grid-cols-4">
+          <div className="mx-auto mt-12 grid min-w-0 max-w-4xl grid-cols-2 gap-4 sm:gap-6 md:grid-cols-4">
             {heroStats.map((stat) => (
-              <div key={stat.label} className="p-4 text-center">
+              <div
+                key={stat.label}
+                className="min-w-0 p-2 text-center sm:p-4"
+              >
                 <div
                   className={`bg-gradient-to-r ${stat.gradient} mb-2 bg-clip-text text-3xl font-bold text-transparent md:text-4xl`}
                 >
                   {stat.value}
                 </div>
-                <p className="text-sm text-[#838d95]">{stat.label}</p>
+                <p className="break-words text-xs text-[#aeb5bd] sm:text-sm">
+                  {stat.label}
+                </p>
               </div>
             ))}
           </div>
@@ -201,7 +206,7 @@ export default function HomePage() {
 
       {/* Built for performance - with architecture visualization */}
       <section
-        className="px-6 py-20"
+        className="overflow-hidden px-6 py-20"
         style={{
           backgroundImage:
             "radial-gradient(circle farthest-side at 50% 10%, #0e1930, #070c17 65%)",
@@ -209,10 +214,10 @@ export default function HomePage() {
       >
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto mb-14 max-w-3xl text-center">
-            <h2 className="mb-5 text-4xl font-bold tracking-tight text-[#fffaeb] md:text-5xl">
+            <h2 className="mb-5 text-3xl font-bold tracking-tight text-[#fffaeb] sm:text-4xl md:text-5xl">
               Built for <span className="text-[#ff9103]">performance</span>
             </h2>
-            <p className="text-lg font-light leading-relaxed text-[#838d95]">
+            <p className="text-lg font-light leading-relaxed text-[#aeb5bd]">
               Designed from the ground up with{" "}
               <span className="text-[#fffaeb]">
                 io_uring and thread-per-core, shared nothing architecture
@@ -220,6 +225,61 @@ export default function HomePage() {
               . Each CPU core runs its own shard, pinned and NUMA-aware.
               No locks on the hot path, no GC pauses, no thread contention.
             </p>
+          </div>
+
+          <div className="mx-auto mb-14 max-w-5xl border-y border-white/[0.1]">
+            <div className="grid gap-5 py-6 md:grid-cols-[auto_1fr_auto] md:items-center md:gap-7">
+              <span className="w-fit rounded-md border border-[#38bdf8]/30 bg-[#38bdf8]/10 px-2.5 py-1 font-mono text-xs font-semibold uppercase text-[#7dd3fc]">
+                Experimental
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-[#fffaeb]">
+                  VSR clustering is coming soon
+                </h3>
+                <p className="mt-1 text-sm leading-relaxed text-[#aeb5bd]">
+                  Viewstamped Replication Revisited is already implemented in
+                  the{" "}
+                  <span className="font-mono text-[#d7dce1]">server-ng</span>{" "}
+                  module on main. Its deterministic simulation testing (DST)
+                  exercises failures, delays, restarts and network partitions to
+                  validate consensus. Together, VSR and DST provide the
+                  foundation for highly available, fault-tolerant and reliable
+                  Iggy clusters.
+                </p>
+              </div>
+              <Link
+                href="/docs/clustering/vsr"
+                className="text-sm font-semibold text-[#ff9f22] no-underline hover:underline"
+              >
+                Explore VSR →
+              </Link>
+            </div>
+
+            <div className="grid gap-5 border-t border-white/[0.1] py-6 md:grid-cols-[auto_1fr_auto] md:items-center md:gap-7">
+              <span className="w-fit rounded-md border border-[#ff9103]/30 bg-[#ff9103]/10 px-2.5 py-1 font-mono text-xs font-semibold uppercase text-[#ffb454]">
+                In development
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-[#fffaeb]">
+                  Kafka Gateway for compatible clients and easier migrations
+                </h3>
+                <p className="mt-1 text-sm leading-relaxed text-[#aeb5bd]">
+                  The upcoming Kafka wire-protocol proxy will bridge existing
+                  Kafka producers and consumers to Iggy, enabling gradual
+                  migration with minimal client-side changes. Core APIs,
+                  consumer groups, admin operations and authentication are
+                  tracked in a phased public roadmap.
+                </p>
+              </div>
+              <Link
+                href="https://github.com/apache/iggy/discussions/3253"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-semibold text-[#ff9f22] no-underline hover:underline"
+              >
+                Track the epic ↗
+              </Link>
+            </div>
           </div>
 
           {/* Architecture visualization */}
@@ -236,7 +296,7 @@ export default function HomePage() {
                 <h3 className="mb-3 text-lg font-semibold text-[#d6d7d7] transition-colors group-hover:text-[#fffaeb]">
                   {feature.title}
                 </h3>
-                <p className="text-sm font-light leading-relaxed text-[#838d95]">
+                <p className="text-sm font-light leading-relaxed text-[#aeb5bd]">
                   {feature.description}
                 </p>
               </div>
@@ -258,7 +318,7 @@ export default function HomePage() {
             <h2 className="mb-5 text-4xl font-bold tracking-tight text-[#fffaeb] md:text-5xl">
               How it <span className="text-[#ff9103]">works</span>
             </h2>
-            <p className="text-lg font-light leading-relaxed text-[#838d95]">
+            <p className="text-lg font-light leading-relaxed text-[#aeb5bd]">
               Messages flow from producers through streams and topics into
               partitioned, append-only segment files on disk. Pick your language
               and start streaming in minutes.
@@ -266,7 +326,7 @@ export default function HomePage() {
           </div>
 
           <div className="grid gap-6 md:grid-cols-2 items-start">
-            <div className="space-y-4">
+            <div className="min-w-0 space-y-4">
               {[
                 {
                   step: "1",
@@ -296,11 +356,11 @@ export default function HomePage() {
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#ff9103]/10 text-[#ff9103] text-sm font-bold">
                     {item.step}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h4 className="text-base font-semibold text-[#fffaeb] mb-1">
                       {item.title}
                     </h4>
-                    <p className="text-sm font-light leading-relaxed text-[#838d95] m-0">
+                    <p className="text-sm font-light leading-relaxed text-[#aeb5bd] m-0">
                       {item.desc}
                     </p>
                   </div>
@@ -326,7 +386,7 @@ export default function HomePage() {
             <h2 className="mb-5 text-4xl font-bold tracking-tight text-[#fffaeb] md:text-5xl">
               Complete <span className="text-[#ff9103]">ecosystem</span>
             </h2>
-            <p className="text-lg font-light leading-relaxed text-[#838d95]">
+            <p className="text-lg font-light leading-relaxed text-[#aeb5bd]">
               Iggy is more than a server. Integrate with external systems, manage
               everything from your browser or terminal, and connect LLMs to your
               streaming infrastructure.
@@ -349,7 +409,7 @@ export default function HomePage() {
                     {item.title}
                   </h3>
                 </div>
-                <p className="text-sm font-light leading-relaxed text-[#838d95] mb-4">
+                <p className="text-sm font-light leading-relaxed text-[#aeb5bd] mb-4">
                   {item.description}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -383,7 +443,7 @@ export default function HomePage() {
                 <li>
                   <Link
                     href="/docs"
-                    className="text-[#838d95] transition-colors hover:text-[#fffaeb]"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
                   >
                     Documentation
                   </Link>
@@ -398,7 +458,7 @@ export default function HomePage() {
                 <li>
                   <Link
                     href="https://www.linkedin.com/company/apache-iggy/"
-                    className="text-[#838d95] transition-colors hover:text-[#fffaeb]"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
                   >
                     LinkedIn
                   </Link>
@@ -406,7 +466,7 @@ export default function HomePage() {
                 <li>
                   <Link
                     href="https://discord.gg/apache-iggy"
-                    className="text-[#838d95] transition-colors hover:text-[#fffaeb]"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
                   >
                     Discord
                   </Link>
@@ -414,7 +474,7 @@ export default function HomePage() {
                 <li>
                   <Link
                     href="https://x.com/ApacheIggy"
-                    className="text-[#838d95] transition-colors hover:text-[#fffaeb]"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
                   >
                     X
                   </Link>
@@ -422,7 +482,7 @@ export default function HomePage() {
                 <li>
                   <Link
                     href="https://bsky.app/profile/iggy.rs"
-                    className="text-[#838d95] transition-colors hover:text-[#fffaeb]"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
                   >
                     Bluesky
                   </Link>
@@ -437,7 +497,7 @@ export default function HomePage() {
                 <li>
                   <Link
                     href="/blogs"
-                    className="text-[#838d95] transition-colors hover:text-[#fffaeb]"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
                   >
                     Blogs
                   </Link>
@@ -445,7 +505,7 @@ export default function HomePage() {
                 <li>
                   <Link
                     href="https://github.com/apache/iggy"
-                    className="text-[#838d95] transition-colors hover:text-[#fffaeb]"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
                   >
                     GitHub
                   </Link>
@@ -453,7 +513,7 @@ export default function HomePage() {
                 <li>
                   <Link
                     href="https://benchmarks.iggy.apache.org"
-                    className="text-[#838d95] transition-colors hover:text-[#fffaeb]"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
                   >
                     Benchmarks
                   </Link>
