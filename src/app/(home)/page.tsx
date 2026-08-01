@@ -151,8 +151,8 @@ export default function HomePage() {
           </h1>
 
           <p className="mx-auto mt-8 max-w-3xl text-lg font-normal leading-relaxed text-[#aaafb6] md:text-xl">
-            Apache Iggy (Incubating) is a high-performance, persistent message
-            streaming platform written in Rust, capable of processing{" "}
+            Apache Iggy&trade; (Incubating) is a high-performance, persistent
+            message streaming platform written in Rust, capable of processing{" "}
             <span className="font-medium text-[#ff9103]">
               millions of messages per second
             </span>{" "}
