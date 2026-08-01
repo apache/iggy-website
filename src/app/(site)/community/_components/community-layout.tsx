@@ -26,9 +26,9 @@ export const communityPages = [
     description: "Meet the people stewarding Apache Iggy.",
   },
   {
-    title: "Brand Kit",
-    href: "/community/brand-kit",
-    description: "Use Apache Iggy names and marks correctly.",
+    title: "How to Contribute",
+    href: "/community/how-to-contribute",
+    description: "Find the right first issue, discussion or doc task.",
   },
   {
     title: "Become a Committer",
@@ -36,14 +36,19 @@ export const communityPages = [
     description: "Understand the path from contributor to committer.",
   },
   {
-    title: "How to Contribute",
-    href: "/community/how-to-contribute",
-    description: "Find the right first issue, discussion or doc task.",
-  },
-  {
     title: "How to Release",
     href: "/community/how-to-release",
     description: "Follow the release-manager checklist.",
+  },
+  {
+    title: "Graduation Checklist",
+    href: "/community/graduation-checklist",
+    description: "Track Apache Iggy's maturity assessment for graduation.",
+  },
+  {
+    title: "Brand Kit",
+    href: "/community/brand-kit",
+    description: "Use Apache Iggy names and marks correctly.",
   },
 ];
 

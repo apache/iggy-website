@@ -27,6 +27,7 @@ export const communityLinks = [
   { text: "How to Contribute", url: "/community/how-to-contribute" },
   { text: "Become a Committer", url: "/community/become-a-committer" },
   { text: "How to Release", url: "/community/how-to-release" },
+  { text: "Graduation Checklist", url: "/community/graduation-checklist" },
   { text: "Brand Kit", url: "/community/brand-kit" },
 ];
 
