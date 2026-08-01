@@ -75,6 +75,24 @@ export default function BecomeACommitterPage() {
         </ExternalLink>{" "}
         page.
       </p>
+
+      <h2 className="mb-4 mt-12 text-2xl font-bold text-fd-foreground">
+        Path to PMC Membership
+      </h2>
+      <p className="max-w-3xl text-base leading-relaxed text-fd-muted-foreground">
+        <p>
+          The Project Management Committee (PMC or PPMC during incubation) is the official controlling body of the project. PMC members “must” be able to perform the official responsibilities of the PMC (verify releases and growth of committers/PMC). We “want” them to be people that have a vision for Iggy, technology and community wise.
+        </p><br/>
+        <p>
+          For the avoidance of doubt, not every PMC member needs to know all details of how exactly Iggy’s release process works (it is okay to understand the gist and how to find the details). Likewise, not every PMC member needs to be a visionary. We strive to build a PMC that covers all parts well, understanding that each member brings different strengths.
+        </p>
+        <br />
+        <p>
+          Ideally, we find candidates among active community members that have shown initiative to shape the direction of Iggy (technology and community) and have shown willingness to learn the official processes, such as how to create or verify for releases.
+        </p>
+        <br />
+        For more details on PMC roles and responsibilities, see <ExternalLink href="https://www.apache.org/foundation/how-it-works/#pmc">Apache PMC Guide</ExternalLink>.
+      </p>
     </CommunityLayout>
   );
 }
