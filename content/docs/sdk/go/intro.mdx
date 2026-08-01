@@ -16,43 +16,83 @@ go get github.com/apache/iggy/foreign/go
 package main
 
 import (
-    "fmt"
-    "log"
-    iggy "github.com/apache/iggy/foreign/go"
+	"context"
+	"errors"
+	"log"
+
+	"github.com/apache/iggy/foreign/go/client"
+	"github.com/apache/iggy/foreign/go/client/tcp"
+	iggcon "github.com/apache/iggy/foreign/go/contracts"
+	ierror "github.com/apache/iggy/foreign/go/errors"
 )
 
 func main() {
-    client, err := iggy.NewClient("localhost:8090")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer client.Close()
+	cli, err := client.NewIggyClient(
+		client.WithTcp(tcp.WithServerAddress("127.0.0.1:8090")),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err := cli.Close(); err != nil {
+			log.Printf("Error closing client: %v", err)
+		}
+	}()
 
-    err = client.Login("iggy", "iggy")
-    if err != nil {
-        log.Fatal(err)
-    }
+	ctx := context.Background()
+	if err := cli.Connect(ctx); err != nil {
+		log.Fatal(err)
+	}
 
-    // Create a stream
-    err = client.CreateStream("my-stream")
-    if err != nil {
-        log.Fatal(err)
-    }
+	if _, err := cli.LoginUser(ctx, "iggy", "iggy"); err != nil {
+		log.Fatal(err)
+	}
 
-    // Create a topic with 2 partitions
-    err = client.CreateTopic("my-stream", "my-topic", 2)
-    if err != nil {
-        log.Fatal(err)
-    }
+	// Re-running this example is fine: an existing stream or topic is not an error.
+	if _, err := cli.CreateStream(ctx, "sample-stream"); err != nil &&
+		!errors.Is(err, ierror.ErrStreamNameAlreadyExists) {
+		log.Fatal(err)
+	}
 
-    // Send a message
-    err = client.SendMessages("my-stream", "my-topic", 1,
-        [][]byte{[]byte("Hello from Go!")})
-    if err != nil {
-        log.Fatal(err)
-    }
+	streamId, err := iggcon.NewIdentifier("sample-stream")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    fmt.Println("Message sent successfully")
+	if _, err := cli.CreateTopic(
+		ctx,
+		streamId,
+		"sample-topic",
+		1,
+		iggcon.CompressionAlgorithmNone,
+		iggcon.IggyExpiryNeverExpire,
+		0,
+		nil,
+	); err != nil && !errors.Is(err, ierror.ErrTopicNameAlreadyExists) {
+		log.Fatal(err)
+	}
+
+	topicId, err := iggcon.NewIdentifier("sample-topic")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	message, err := iggcon.NewIggyMessage([]byte("Hello from Go!"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := cli.SendMessages(
+		ctx,
+		streamId,
+		topicId,
+		iggcon.None(),
+		[]iggcon.IggyMessage{message},
+	); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("Message sent")
 }
 ```
 

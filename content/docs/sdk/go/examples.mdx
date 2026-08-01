@@ -12,12 +12,15 @@ A complete getting-started example is available in the [examples/go](https://git
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/apache/iggy/foreign/go/client"
 	"github.com/apache/iggy/foreign/go/client/tcp"
 	iggcon "github.com/apache/iggy/foreign/go/contracts"
+	ierror "github.com/apache/iggy/foreign/go/errors"
 )
 
 var (
@@ -36,19 +39,26 @@ func main() {
 	}
 	defer cli.Close()
 
-	// Log in
-	if _, err := cli.LoginUser("iggy", "iggy"); err != nil {
+	ctx := context.Background()
+	if err := cli.Connect(ctx); err != nil {
 		panic(err)
 	}
 
-	// Create a stream
-	if _, err := cli.CreateStream("sample-stream"); err != nil {
+	// Log in
+	if _, err := cli.LoginUser(ctx, "iggy", "iggy"); err != nil {
+		panic(err)
+	}
+
+	// Create a stream. Re-running this example is fine: an existing stream is not an error.
+	if _, err := cli.CreateStream(ctx, "sample-stream"); err != nil &&
+		!errors.Is(err, ierror.ErrStreamNameAlreadyExists) {
 		panic(err)
 	}
 
 	// Create a topic with 1 partition, no compression, no expiry
 	streamIdentifier, _ := iggcon.NewIdentifier(StreamId)
 	if _, err := cli.CreateTopic(
+		ctx,
 		streamIdentifier,
 		"sample-topic",
 		1,                                  // partitions count
@@ -56,7 +66,7 @@ func main() {
 		iggcon.IggyExpiryNeverExpire,
 		0,                                  // max topic size
 		nil,                                // replication factor
-	); err != nil {
+	); err != nil && !errors.Is(err, ierror.ErrTopicNameAlreadyExists) {
 		panic(err)
 	}
 
@@ -69,6 +79,7 @@ func main() {
 		streamIdentifier, _ := iggcon.NewIdentifier(StreamId)
 		topicIdentifier, _ := iggcon.NewIdentifier(TopicId)
 		if err := cli.SendMessages(
+			ctx,
 			streamIdentifier,
 			topicIdentifier,
 			partitioning,
@@ -76,6 +87,7 @@ func main() {
 		); err != nil {
 			panic(err)
 		}
+		fmt.Printf("Sent: %s\n", payload)
 		time.Sleep(500 * time.Millisecond)
 	}
 }
@@ -87,6 +99,7 @@ func main() {
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -111,8 +124,13 @@ func main() {
 	}
 	defer cli.Close()
 
+	ctx := context.Background()
+	if err := cli.Connect(ctx); err != nil {
+		panic(err)
+	}
+
 	// Log in
-	if _, err := cli.LoginUser("iggy", "iggy"); err != nil {
+	if _, err := cli.LoginUser(ctx, "iggy", "iggy"); err != nil {
 		panic(err)
 	}
 
@@ -124,6 +142,7 @@ func main() {
 		streamIdentifier, _ := iggcon.NewIdentifier(StreamID)
 		topicIdentifier, _ := iggcon.NewIdentifier(TopicID)
 		pollMessages, err := cli.PollMessages(
+			ctx,
 			streamIdentifier,
 			topicIdentifier,
 			consumer,
