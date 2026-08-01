@@ -434,7 +434,7 @@ export default function HomePage() {
         style={{ backgroundColor: "#070c17" }}
       >
         <div className="mx-auto max-w-6xl">
-          <div className="grid gap-10 sm:grid-cols-3">
+          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <h4 className="mb-4 text-sm font-semibold tracking-wide text-[#ff9103] uppercase">
                 Docs
@@ -516,6 +516,83 @@ export default function HomePage() {
                     className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
                   >
                     Benchmarks
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="mb-4 text-sm font-semibold tracking-wide text-[#ff9103] uppercase">
+                Apache
+              </h4>
+              <ul className="space-y-2.5 text-sm">
+                <li>
+                  <Link
+                    href="https://www.apache.org/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
+                  >
+                    Foundation
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="https://www.apache.org/licenses/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
+                  >
+                    License
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="https://events.apache.org/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
+                  >
+                    Events
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="https://www.apache.org/foundation/contributing.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
+                  >
+                    Donate
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="https://www.apache.org/foundation/sponsorship.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
+                  >
+                    Sponsors
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="https://www.apache.org/security/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
+                  >
+                    Security
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="https://privacy.apache.org/policies/privacy-policy-public.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
+                  >
+                    Privacy
                   </Link>
                 </li>
               </ul>

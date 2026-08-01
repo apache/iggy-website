@@ -258,11 +258,6 @@ shasum -a 512 -c iggy-0.8.0-incubating-src.tar.gz.sha512`}</code>
           .
         </p>
 
-        <div className="mt-16 border-t border-fd-border pt-8 text-xs text-fd-muted-foreground/60">
-          &copy; {new Date().getFullYear()} The Apache Software Foundation.
-          Apache, Apache Iggy, the Apache feather logo, and related marks are
-          trademarks of the ASF.
-        </div>
       </div>
     </main>
   );
