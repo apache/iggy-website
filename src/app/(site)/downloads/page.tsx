@@ -31,7 +31,7 @@ const releases = [
     latest: true,
     date: "2026-04-22",
     archive:
-      "https://downloads.apache.org/incubator/iggy/0.8.0/iggy-0.8.0-incubating-src.tar.gz",
+      "https://www.apache.org/dyn/closer.lua/incubator/iggy/0.8.0/iggy-0.8.0-incubating-src.tar.gz",
     asc: "https://downloads.apache.org/incubator/iggy/0.8.0/iggy-0.8.0-incubating-src.tar.gz.asc",
     sha: "https://downloads.apache.org/incubator/iggy/0.8.0/iggy-0.8.0-incubating-src.tar.gz.sha512",
     changelog: "/blogs/2026/04/22/release-0.8.0",
@@ -41,7 +41,7 @@ const releases = [
     latest: false,
     date: "2026-02-24",
     archive:
-      "https://downloads.apache.org/incubator/iggy/0.7.0/iggy-0.7.0-incubating-src.tar.gz",
+      "https://www.apache.org/dyn/closer.lua/incubator/iggy/0.7.0/iggy-0.7.0-incubating-src.tar.gz",
     asc: "https://downloads.apache.org/incubator/iggy/0.7.0/iggy-0.7.0-incubating-src.tar.gz.asc",
     sha: "https://downloads.apache.org/incubator/iggy/0.7.0/iggy-0.7.0-incubating-src.tar.gz.sha512",
     changelog: "/blogs/2026/02/24/release-0.7.0",
@@ -51,7 +51,7 @@ const releases = [
     latest: false,
     date: "2025-12-09",
     archive:
-      "https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz",
+      "https://www.apache.org/dyn/closer.lua/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz",
     asc: "https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz.asc",
     sha: "https://downloads.apache.org/incubator/iggy/0.6.0/iggy-0.6.0-incubating-src.tar.gz.sha512",
     changelog: "/blogs/2025/12/09/release-0.6.0",
@@ -61,7 +61,7 @@ const releases = [
     latest: false,
     date: "2025-08-10",
     archive:
-      "https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz",
+      "https://www.apache.org/dyn/closer.lua/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz",
     asc: "https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.asc",
     sha: "https://downloads.apache.org/incubator/iggy/0.5.0/iggy-0.5.0-incubating-src.tar.gz.sha512",
     changelog: "/blogs/2025/08/10/release-0.5.0",
@@ -71,7 +71,7 @@ const releases = [
     latest: false,
     date: "2025-04-15",
     archive:
-      "https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz",
+      "https://www.apache.org/dyn/closer.lua/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz",
     asc: "https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz.asc",
     sha: "https://downloads.apache.org/incubator/iggy/0.4.300/iggy-0.4.300-incubating-src.tar.gz.sha512",
     changelog: "https://github.com/apache/iggy/releases/tag/server-0.4.300",
@@ -205,6 +205,17 @@ export default function DownloadsPage() {
               KEYS
             </Link>{" "}
             file contains all public keys used to sign Iggy releases.
+          </li>
+          <li>
+            For background on why and how to check releases, see the ASF guide
+            to{" "}
+            <Link
+              href="https://www.apache.org/dyn/closer.cgi#verify"
+              className="text-fd-primary hover:underline"
+            >
+              verifying Apache downloads
+            </Link>
+            .
           </li>
           <li>
             Because Iggy is still in the Apache Incubator, releases are{" "}
