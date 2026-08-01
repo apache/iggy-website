@@ -23,11 +23,29 @@ import { Logo } from "@/components/logo";
 import { GitHubStars } from "@/components/github-stars";
 import { ASFDropdown } from "@/components/asf-dropdown";
 import { ASFMobileLinks } from "@/components/asf-mobile-links";
+import {
+  CommunityDropdown,
+  communityLinks,
+} from "@/components/community-dropdown";
+
+const communityMobileMenu = {
+  type: "menu" as const,
+  text: "Community",
+  url: "/community",
+  on: "menu" as const,
+  items: communityLinks,
+};
 
 const sharedLinks: BaseLayoutProps["links"] = [
   { text: "Docs", url: "/docs" },
   { text: "Blogs", url: "/blogs" },
   { text: "Downloads", url: "/downloads" },
+  {
+    type: "custom",
+    on: "nav",
+    children: <CommunityDropdown />,
+  },
+  communityMobileMenu,
   {
     text: "Benchmarks",
     url: "https://benchmarks.iggy.apache.org",
@@ -96,6 +114,12 @@ export function docsOptions(): BaseLayoutProps {
       { text: "Home", url: "/" },
       { text: "Blogs", url: "/blogs" },
       { text: "Downloads", url: "/downloads" },
+      {
+        type: "custom",
+        on: "nav",
+        children: <CommunityDropdown />,
+      },
+      communityMobileMenu,
       {
         type: "custom",
         on: "nav",
