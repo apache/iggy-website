@@ -34,7 +34,6 @@ import org.apache.iggy.message.Message;
 import org.apache.iggy.message.Partitioning;
 import org.apache.iggy.topic.CompressionAlgorithm;
 import java.math.BigInteger;
-import java.util.ArrayList;
 import java.util.List;
 import static java.util.Optional.empty;
 
@@ -47,20 +46,25 @@ public class Producer {
 
     public static void main(String[] args) {
         try (var client = IggyTcpClient.builder()
-                .host("localhost")
+                .host("127.0.0.1")
                 .port(8090)
                 .credentials("iggy", "iggy")
                 .buildAndLogin()) {
 
-            client.streams().createStream(STREAM_NAME);
-            client.topics().createTopic(
-                    STREAM_ID,
-                    1L,
-                    CompressionAlgorithm.None,
-                    BigInteger.ZERO,
-                    BigInteger.ZERO,
-                    empty(),
-                    TOPIC_NAME);
+            // Re-running this example is fine: only create what is missing.
+            if (client.streams().getStream(STREAM_ID).isEmpty()) {
+                client.streams().createStream(STREAM_NAME);
+            }
+            if (client.topics().getTopic(STREAM_ID, TOPIC_ID).isEmpty()) {
+                client.topics().createTopic(
+                        STREAM_ID,
+                        1L,
+                        CompressionAlgorithm.None,
+                        BigInteger.ZERO,
+                        BigInteger.ZERO,
+                        empty(),
+                        TOPIC_NAME);
+            }
 
             Partitioning partitioning = Partitioning.partitionId(0L);
             for (int i = 0; i < 10; i++) {
@@ -70,6 +74,7 @@ public class Producer {
                         TOPIC_ID,
                         partitioning,
                         List.of(Message.of(payload)));
+                System.out.println("Sent: " + payload);
             }
         }
     }
@@ -97,7 +102,7 @@ public class SampleConsumer {
 
     public static void main(String[] args) {
         try (var client = IggyTcpClient.builder()
-                .host("localhost")
+                .host("127.0.0.1")
                 .port(8090)
                 .credentials("iggy", "iggy")
                 .buildAndLogin()) {
@@ -118,9 +123,9 @@ public class SampleConsumer {
                 if (polledMessages.messages().isEmpty()) {
                     break;
                 }
-                for (Message msg : polledMessages.messages()) {
-                    String payload = new String(msg.payload(), StandardCharsets.UTF_8);
-                    System.out.printf("Offset: %d, Payload: %s%n", offset, payload);
+                for (Message message : polledMessages.messages()) {
+                    String payload = new String(message.payload(), StandardCharsets.UTF_8);
+                    System.out.printf("Offset: %d, Payload: %s%n", message.header().offset(), payload);
                 }
                 offset = offset.add(BigInteger.valueOf(polledMessages.messages().size()));
             }
