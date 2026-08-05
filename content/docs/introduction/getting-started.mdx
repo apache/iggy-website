@@ -18,9 +18,24 @@ The completed sample can be found in the [repository](https://github.com/apache/
 
 ## Starting the Iggy server
 
-For our purpose, we will focus on the basic scenario in order to keep things simple. Before we begin implementing the consumer and producer apps, we need to start the Iggy streaming server first - since there's no official package to be downloaded yet, the only way to get things up and running is by cloning the [repository](https://github.com/apache/iggy) and then starting the server by running the following command: `cargo r --bin iggy-server` or by building & running the Docker image via `docker compose up`. The official images can be found [here](https://hub.docker.com/r/apache/iggy), simply type `docker pull apache/iggy`. All the data used by the server, will be persisted under `local_data` directory, unless specified differently in the configuration.
+For our purpose, we will focus on the basic scenario in order to keep things simple. Before we begin implementing the consumer and producer apps, we need to start the Iggy streaming server.
 
-As long as the Iggy server is running, we're good to go. If you'd like to play with the configuration (e.g. change the addresses, ports, caching or so) you will find the `server.toml` under `configs` directory in the root of the repository.
+The quickest way is Docker, using the [official images](https://hub.docker.com/r/apache/iggy):
+
+```bash
+docker run --rm \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -p 8090:8090 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  apache/iggy:latest
+```
+
+`SYS_NICE`, the seccomp setting and the memlock limit are all required by `io_uring` and the thread-per-core architecture; see [Docker & Helm](/docs/server/docker) for the details. `IGGY_TCP_ADDRESS` is needed because the server binds to `127.0.0.1` inside the container by default, which a published port cannot reach. Setting the root credentials explicitly means the username and password used later in this guide will work.
+
+Alternatively, build from source by cloning the [repository](https://github.com/apache/iggy) and running `cargo r --bin iggy-server`. All the data used by the server will be persisted under the `local_data` directory, unless specified differently in the configuration.
+
+As long as the Iggy server is running, we're good to go. If you'd like to play with the configuration (e.g. change the addresses, ports, caching or so) you will find `config.toml` under `core/server` in the repository.
 
 ## Setting up the project
 
@@ -88,7 +103,7 @@ let client = IggyClient::default();
 client.connect().await?;
 ```
 
-The default server address being `127.0.0.1:8090` is configured on the server side, and can be easily adjusted by updating the `server.toml` (the default configuration) or `server.json` file in `configs` directory.
+The default server address being `127.0.0.1:8090` is configured on the server side, and can be easily adjusted by updating `config.toml` in the `core/server` directory.
 
 We could make use of more advanced components such as [`ClientProvider`](https://github.com/apache/iggy/blob/master/core/sdk/src/client_provider.rs), pass the custom configuration built via console args to choose between the different protocols as all the available clients implement the same [Client](https://github.com/apache/iggy/blob/master/core/sdk/src/clients/client.rs) trait and so on.
 
