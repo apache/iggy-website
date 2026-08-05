@@ -118,7 +118,7 @@ const checklist = [
         description:
           "Releases consist of source code distributed using standard archive formats.",
         status:
-          "YES. Source release is distributed via dist.apache.org and linked from Downloads page on iggy.apache.org website.",
+          "YES. Source releases are distributed via downloads.apache.org and linked from the Downloads page on iggy.apache.org.",
       },
       {
         id: "RE20",
@@ -139,7 +139,7 @@ const checklist = [
         description:
           "Convenience binaries are clearly distinguished from Apache releases.",
         status:
-          "YES. Users can easily build binaries from source code, and we do not provide binaries as Apache Releases.",
+          "YES. The source release is the official Apache release. Convenience binaries are published to Docker Hub, crates.io, npm, PyPI, Maven Central and NuGet, and are not ASF releases.",
       },
       {
         id: "RE50",
@@ -171,7 +171,7 @@ const checklist = [
         description:
           "The project provides a documented channel for reporting security issues.",
         status:
-          "YES. We encourage users to report issues on GitHub and Security page link provided under ASF menu on the website iggy.apache.org",
+          "YES. Security issues are reported privately to security@apache.org, as described at https://www.apache.org/security/ and linked from the website. Public channels such as GitHub issues must not be used for undisclosed vulnerabilities.",
       },
       {
         id: "QU40",
