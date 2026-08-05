@@ -17,30 +17,48 @@ npm install apache-iggy
 ```typescript
 import { Client, Partitioning } from 'apache-iggy';
 
+const STREAM_NAME = 'sample-stream';
+const TOPIC_NAME = 'sample-topic';
+
 const client = new Client({
   transport: 'TCP',
-  options: {
-    port: 8090,
-    host: '127.0.0.1',
-  },
-  credentials: {
-    username: 'iggy',
-    password: 'iggy',
-  },
+  options: { port: 8090, host: '127.0.0.1' },
+  credentials: { username: 'iggy', password: 'iggy' },
 });
 
-const messages = Array.from({ length: 10 }).map((_, i) => ({
+// Re-running this example is fine: only create what is missing.
+const streams = await client.stream.list();
+const stream =
+  streams.find((s) => s.name === STREAM_NAME) ??
+  (await client.stream.create({ name: STREAM_NAME }));
+
+const topics = await client.topic.list({ streamId: stream.id });
+const topic =
+  topics.find((t) => t.name === TOPIC_NAME) ??
+  (await client.topic.create({
+    streamId: stream.id,
+    name: TOPIC_NAME,
+    partitionCount: 1,
+    compressionAlgorithm: 1,
+    replicationFactor: 1,
+  }));
+
+const messages = Array.from({ length: 10 }, (_, i) => ({
   id: i + 1,
   headers: [],
   payload: `message-${i + 1}`,
 }));
 
 await client.message.send({
-  streamId: 1,
-  topicId: 1,
+  streamId: stream.id,
+  topicId: topic.id,
   messages,
-  partition: Partitioning.PartitionId(1),
+  partition: Partitioning.Balanced,
 });
+
+console.log(`Sent ${messages.length} message(s)`);
+
+await client.destroy();
 ```
 
 ### Consumer
@@ -48,38 +66,34 @@ await client.message.send({
 ```typescript
 import { Client, PollingStrategy, Consumer } from 'apache-iggy';
 
+const STREAM_NAME = 'sample-stream';
+const TOPIC_NAME = 'sample-topic';
+const PARTITION_ID = 0;
+
 const client = new Client({
   transport: 'TCP',
-  options: {
-    port: 8090,
-    host: '127.0.0.1',
-  },
-  credentials: {
-    username: 'iggy',
-    password: 'iggy',
-  },
+  options: { port: 8090, host: '127.0.0.1' },
+  credentials: { username: 'iggy', password: 'iggy' },
 });
 
-const STREAM_ID = 1;
-const TOPIC_ID = 1;
-const PARTITION_ID = 1;
-
+// Next with autocommit continues from this consumer's last committed offset,
+// so each run picks up where the previous one finished.
 const polledMessages = await client.message.poll({
-  streamId: STREAM_ID,
-  topicId: TOPIC_ID,
+  streamId: STREAM_NAME,
+  topicId: TOPIC_NAME,
   consumer: Consumer.Single,
   partitionId: PARTITION_ID,
-  pollingStrategy: PollingStrategy.Offset(BigInt(0)),
+  pollingStrategy: PollingStrategy.Next,
   count: 10,
-  autocommit: false,
+  autocommit: true,
 });
 
-if (polledMessages && polledMessages.messages.length > 0) {
-  for (const message of polledMessages.messages) {
-    const payload = message.payload.toString('utf8');
-    console.log(`Offset: ${message.headers.offset}, Payload: ${payload}`);
-  }
+for (const message of polledMessages.messages) {
+  const payload = message.payload.toString('utf8');
+  console.log(`Offset: ${message.headers.offset}, Payload: ${payload}`);
 }
+
+await client.destroy();
 ```
 
 ## Examples
