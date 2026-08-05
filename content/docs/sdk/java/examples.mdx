@@ -27,28 +27,44 @@ import java.util.List;
 import static java.util.Optional.empty;
 
 public class Producer {
+
+    static final String STREAM_NAME = "sample-stream";
+    static final StreamId STREAM_ID = StreamId.of(STREAM_NAME);
+    static final String TOPIC_NAME = "sample-topic";
+    static final TopicId TOPIC_ID = TopicId.of(TOPIC_NAME);
+
     public static void main(String[] args) {
         try (var client = IggyTcpClient.builder()
-                .host("localhost")
+                .host("127.0.0.1")
                 .port(8090)
                 .credentials("iggy", "iggy")
                 .buildAndLogin()) {
 
-            var streamId = StreamId.of("sample-stream");
-            var topicId = TopicId.of("sample-topic");
+            // Re-running this example is fine: only create what is missing.
+            if (client.streams().getStream(STREAM_ID).isEmpty()) {
+                client.streams().createStream(STREAM_NAME);
+            }
+            if (client.topics().getTopic(STREAM_ID, TOPIC_ID).isEmpty()) {
+                client.topics().createTopic(
+                        STREAM_ID,
+                        1L,
+                        CompressionAlgorithm.None,
+                        BigInteger.ZERO,
+                        BigInteger.ZERO,
+                        empty(),
+                        TOPIC_NAME);
+            }
 
-            client.streams().createStream("sample-stream");
-            client.topics().createTopic(
-                    streamId, 1L,
-                    CompressionAlgorithm.None,
-                    BigInteger.ZERO, BigInteger.ZERO,
-                    empty(), "sample-topic");
-
-            var partitioning = Partitioning.partitionId(0L);
-            var messages = List.of(Message.of("hello world"));
-            client.messages().sendMessages(
-                    streamId, topicId,
-                    partitioning, messages);
+            Partitioning partitioning = Partitioning.partitionId(0L);
+            for (int i = 0; i < 10; i++) {
+                String payload = "message-" + i;
+                client.messages().sendMessages(
+                        STREAM_ID,
+                        TOPIC_ID,
+                        partitioning,
+                        List.of(Message.of(payload)));
+                System.out.println("Sent: " + payload);
+            }
         }
     }
 }
@@ -69,28 +85,38 @@ import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 public class ConsumerExample {
+
+    static final StreamId STREAM_ID = StreamId.of("sample-stream");
+    static final TopicId TOPIC_ID = TopicId.of("sample-topic");
+
     public static void main(String[] args) {
         try (var client = IggyTcpClient.builder()
-                .host("localhost")
+                .host("127.0.0.1")
                 .port(8090)
                 .credentials("iggy", "iggy")
                 .buildAndLogin()) {
 
-            var streamId = StreamId.of("sample-stream");
-            var topicId = TopicId.of("sample-topic");
-            var consumer = Consumer.of(0L);
+            BigInteger offset = BigInteger.ZERO;
+            Consumer consumer = Consumer.of(0L);
 
-            PolledMessages polled = client.messages()
-                    .pollMessages(
-                            streamId, topicId,
-                            Optional.of(0L), consumer,
-                            PollingStrategy.offset(BigInteger.ZERO),
-                            10L, false);
+            while (true) {
+                PolledMessages polledMessages = client.messages().pollMessages(
+                        STREAM_ID,
+                        TOPIC_ID,
+                        Optional.of(0L),
+                        consumer,
+                        PollingStrategy.offset(offset),
+                        10L,
+                        false);
 
-            for (Message message : polled.messages()) {
-                String payload = new String(
-                        message.payload(), StandardCharsets.UTF_8);
-                System.out.println("Payload: " + payload);
+                if (polledMessages.messages().isEmpty()) {
+                    break;
+                }
+                for (Message message : polledMessages.messages()) {
+                    String payload = new String(message.payload(), StandardCharsets.UTF_8);
+                    System.out.printf("Offset: %d, Payload: %s%n", message.header().offset(), payload);
+                }
+                offset = offset.add(BigInteger.valueOf(polledMessages.messages().size()));
             }
         }
     }
