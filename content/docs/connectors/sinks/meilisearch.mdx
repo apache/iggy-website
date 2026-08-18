@@ -1,0 +1,68 @@
+---
+title: Meilisearch Sink
+---
+
+The Meilisearch sink connector consumes messages from Iggy streams and indexes them as documents in a Meilisearch index through the official Rust SDK. It can create the index on startup and waits for Meilisearch indexing tasks to complete by default, so task failures surface as connector errors.
+
+This page is a curated subset of the documentation. The canonical reference is the upstream [meilisearch_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/meilisearch_sink) in the `apache/iggy` repository.
+
+## Configuration
+
+```toml
+type = "sink"
+key = "meilisearch"
+enabled = true
+version = 0
+name = "Meilisearch sink"
+path = "target/release/libiggy_connector_meilisearch_sink"
+plugin_config_format = "toml"
+
+[[streams]]
+stream = "events"
+topics = ["search_events"]
+schema = "json"
+batch_length = 1000
+poll_interval = "5ms"
+consumer_group = "meilisearch_sink"
+
+[plugin_config]
+url = "https://meilisearch.example.com"
+index = "iggy_messages"
+api_key = "replace_with_secret_key"
+primary_key = "iggy_id"
+document_action = "replace"
+batch_size = 1000
+```
+
+### Common Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `url` | string | **required** | Meilisearch base URL; paths and query strings are ignored |
+| `index` | string | **required** | Target index UID |
+| `api_key` | string | none | API key sent as `Authorization: Bearer`; use HTTPS for non-local hosts |
+| `primary_key` | string | `iggy_id` | Index primary key field |
+| `document_action` | string | `replace` | `replace` (add-or-replace) or `update` (add-or-update) |
+| `create_index_if_not_exists` | bool | `true` | Create the index during startup when missing |
+| `include_metadata` | bool | `true` | Add reserved `iggy_*` provenance fields to each document |
+| `batch_size` | usize | `1000` | Maximum documents per Meilisearch request |
+| `wait_for_tasks` | bool | `true` | Poll Meilisearch tasks to a terminal state before returning |
+| `timeout` | string | `30s` | Request timeout |
+
+Further options cover task polling (`task_timeout` `30s`, `task_poll_interval` `100ms`) and transient retries (`max_retries` `3`, `retry_delay` `500ms`, `max_retry_delay` `5s`, `max_open_retries` `5`). See the upstream [meilisearch_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/meilisearch_sink) for details.
+
+## Document Mapping
+
+JSON object payloads are indexed as documents directly. JSON arrays and scalars are wrapped in a `value` field, since Meilisearch documents must be objects. Raw payloads are parsed as JSON when possible and otherwise indexed as base64 data; text payloads land in a `text` field. Records with unsupported payload schemas are skipped with a warning and counted as errors.
+
+When the configured primary key is absent from a document, the connector injects a stable value derived from the stream, topic, partition, offset, and message ID, avoiding Meilisearch primary-key inference failures. If your payloads carry their own primary key, its values must be unique, otherwise add-or-replace semantics collapse distinct messages into one document.
+
+With `include_metadata = true`, reserved `iggy_*` fields (stream, topic, partition, offset, checksum, timestamps) are written after payload parsing and overwrite same-named payload fields.
+
+## Delivery Semantics
+
+The runtime commits consumer offsets when messages are polled and does not gate commits on `consume()`'s result, so the effective guarantee is **at-most-once** on sink errors; the retry settings provide best-effort retries within a single batch. Setting `wait_for_tasks = false` makes indexing fire-and-forget: submission succeeds before Meilisearch confirms indexing, and later task failures are neither observed nor retried.
+
+## Transforms
+
+Transforms can be applied before indexing into Meilisearch. See the [transforms documentation](/docs/connectors/transforms) for the available types and their configuration.

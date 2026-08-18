@@ -4,9 +4,62 @@ title: SDK
 
 SDK provides the commonly used structs and traits such as `Sink` and `Source`, along with the `sink_connector` and `source_connector` macros to be used when developing connectors.
 
-Moreover, it contains both, the `decoders` and `encoders` modules, implementing either `StreamDecoder` or `StreamEncoder` traits, which are used when consuming or producing data from/to Iggy streams.
+Moreover, it contains both, the `decoders` and `encoders` modules, implementing either `StreamDecoder` or `StreamEncoder` traits, which are used when consuming or producing data from/to Iggy streams. All the supported schemas - **JSON**, **Raw bytes**, **Text**, **Protocol Buffers**, **FlatBuffers**, and **Avro** - have both a decoder and an encoder.
 
-SDK is WiP, and it'd certainly benefit from having the support of multiple format schemas, such as Avro, Flatbuffers etc. including decoding/encoding the data between the different formats (when applicable) and supporting the data transformations whenever possible (easy for JSON, but complex for Bincode for example).
+## Traits
+
+A source produces messages to the configured stream and topic, a sink consumes messages from the configured stream(s) and topic(s):
+
+```rust
+#[async_trait]
+pub trait Source: Send + Sync {
+    async fn open(&mut self) -> Result<(), Error>;
+    async fn poll(&self) -> Result<ProducedMessages, Error>;
+    async fn close(&mut self) -> Result<(), Error>;
+}
+
+#[async_trait]
+pub trait Sink: Send + Sync {
+    async fn open(&mut self) -> Result<(), Error>;
+    async fn consume(
+        &self,
+        topic_metadata: &TopicMetadata,
+        messages_metadata: MessagesMetadata,
+        messages: Vec<ConsumedMessage>,
+    ) -> Result<(), Error>;
+    async fn close(&mut self) -> Result<(), Error>;
+}
+```
+
+Expose the implementation to the runtime with the matching macro, and provide the expected `new()` constructor:
+
+```rust
+sink_connector!(MySink);
+
+impl MySink {
+    pub fn new(id: u32, config: MySinkConfig) -> Self { /* ... */ }
+}
+```
+
+```rust
+source_connector!(MySource);
+
+impl MySource {
+    pub fn new(id: u32, config: MySourceConfig, state: Option<ConnectorState>) -> Self { /* ... */ }
+}
+```
+
+The macros generate the C FFI symbols loaded by the runtime: `iggy_sink_open`, `iggy_sink_consume`, `iggy_sink_close`, and `iggy_sink_version` for sinks, and `iggy_source_open`, `iggy_source_handle`, `iggy_source_close`, and `iggy_source_version` for sources. Data crossing the FFI boundary is serialized using postcard, and each plugin receives its own Tokio runtime inside the SDK.
+
+## State
+
+Source connectors can persist their position between restarts. Each batch of `ProducedMessages` may carry an optional `ConnectorState` - the runtime saves it to a file after the batch is sent to Iggy, and passes the last saved state to `new()` on the next startup. `ConnectorState` wraps raw bytes and provides `serialize`/`deserialize` helpers backed by MessagePack. Sinks do not manage state - their offsets are tracked by Iggy consumer groups. See the **[Observability page](/docs/connectors/observability)** for where and how state files are stored.
+
+## Retry utilities
+
+The `retry` module ships helpers for connectors talking to flaky external systems: a `CircuitBreaker`, an `HttpRetryMiddleware` for `reqwest`-based clients, and a `build_retry_client` factory that wraps a reqwest client with the retry middleware (the circuit breaker is wired separately).
+
+## Transforms
 
 Last but not least, the different `transforms` are available, to transform (add, update, delete etc.) the particular fields of the data being processed via external configuration. It's as simple as adding a new transform to the `transforms` section of the particular connector configuration file:
 
@@ -19,13 +72,15 @@ key = "message"
 value.static = "hello"
 ```
 
+All the available transforms and their configuration options are documented on the **[Transforms page](/docs/connectors/transforms)**.
+
 ## Protocol Buffers Support
 
 The SDK includes support for Protocol Buffers (protobuf) format with both encoding and decoding capabilities. Protocol Buffers provide efficient serialization and are particularly useful for high-performance data streaming scenarios.
 
 ### Configuration Example
 
-Here's a complete example configuration for using Protocol Buffers with Iggy connectors.
+Here's a complete example configuration for using Protocol Buffers with Iggy connectors. Note that no protobuf-specific plugin ships with the runtime - the example assumes a custom source and sink you implement yourself; the `schema = "proto"` stream setting and the `proto_convert` transform work with any connector.
 
 **Main runtime config (config.toml):**
 
@@ -54,8 +109,8 @@ path = "target/release/libiggy_connector_protobuf_source"
 stream = "protobuf_stream"
 topic = "protobuf_topic"
 schema = "proto"
-batch_size = 1000
-send_interval = "5ms"
+batch_length = 1000
+linger_time = "5ms"
 
 [plugin_config]
 schema_path = "schemas/message.proto"
@@ -75,21 +130,28 @@ path = "target/release/libiggy_connector_protobuf_sink"
 
 [[streams]]
 stream = "protobuf_stream"
-topic = "protobuf_topic"
+topics = ["protobuf_topic"]
 schema = "proto"
 
-[[transforms]]
-type = "proto_convert"
+[transforms.proto_convert]
+enabled = true
+source_format = "proto"
 target_format = "json"
-preserve_structure = true
-
+include_paths = ["."]
+preserve_unknown_fields = false
 field_mappings = { "old_field" = "new_field", "legacy_id" = "id" }
 
-[[transforms]]
-type = "proto_convert"
-target_format = "proto"
-preserve_structure = false
+[transforms.proto_convert.conversion_options]
+validate_messages = true
+pretty_json = false
+include_metadata = false
+type_url_prefix = "type.googleapis.com"
+strict_mode = false
 ```
+
+Note that the format-conversion transforms define no per-key defaults - every non-optional key shown above must be present, or the configuration fails to deserialize (`schema_path`, `message_type`, `field_mappings`, and `descriptor_set` are the optional ones).
+
+Note the differences between the two `[[streams]]` shapes: a source produces to a single `topic` and can tune batching via `batch_length` and `linger_time`, while a sink consumes from a list of `topics` and can additionally set `batch_length`, `poll_interval`, and `consumer_group`.
 
 ### Key Configuration Options
 
@@ -102,15 +164,19 @@ preserve_structure = false
 #### Transform Options
 
 - **`proto_convert`**: Transform for converting between protobuf and other formats
-- **`target_format`**: Target format for conversion (`json`, `proto`, `text`)
-- **`preserve_structure`**: Whether to preserve the original message structure during conversion
+- **`source_format`** / **`target_format`**: Formats to convert between - any schema value (`json`, `raw`, `text`, `proto`, `flat_buffer`, `avro`)
+- **`preserve_unknown_fields`**: Whether to keep fields that are not present in the schema during conversion
+- **`include_paths`**: Additional directories searched for imported `.proto` files
 - **`field_mappings`**: Mapping of field names for transformation (e.g., `"old_field" = "new_field"`)
+- **`conversion_options`**: Fine-tuning knobs: `validate_messages`, `pretty_json`, `include_metadata`, `type_url_prefix`, `strict_mode`
+
+The `schema_registry_url` field is reserved and currently not implemented - the SDK never contacts a schema registry; schemas are loaded only from `schema_path` or `descriptor_set`.
 
 ### Supported Features
 
 - **Encoding**: Convert JSON, Text, and Raw data to protobuf format
 - **Decoding**: Parse protobuf messages into JSON format with type information
-- **Transforms**: Convert between protobuf and other formats (JSON, Text)
+- **Transforms**: Convert between protobuf and other formats
 - **Field Mapping**: Transform field names during format conversion
 - **Any Wrapper**: Support for `google.protobuf.Any` message wrapper
 
@@ -142,13 +208,14 @@ match decoder.update_config(config_with_schema, true) {
 }
 ```
 
-#### Schema Registry Integration
+The encoder follows the same pattern:
 
 ```rust
 use iggy_connector_sdk::encoders::proto::{ProtoStreamEncoder, ProtoEncoderConfig};
+use std::path::PathBuf;
 
 let mut encoder = ProtoStreamEncoder::new_with_config(ProtoEncoderConfig {
-    schema_registry_url: Some("http://schema-registry:8081".to_string()),
+    schema_path: Some(PathBuf::from("schemas/event.proto")),
     message_type: Some("com.example.Event".to_string()),
     use_any_wrapper: false,
     ..Default::default()

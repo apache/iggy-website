@@ -37,8 +37,12 @@ pub struct SourceConfig {
     pub streams: Vec<StreamProducerConfig>,
     pub plugin_config_format: Option<ConfigFormat>,
     pub plugin_config: Option<serde_json::Value>,
+    pub verbose: bool,
+    pub benchmark: bool,
 }
 ```
+
+The two flags at the end are optional and default to `false`: `verbose` switches the connector's per-batch logging to info level, and `benchmark` emits per-batch timing events for performance measurement.
 
 **Main runtime config (config.toml):**
 
@@ -60,7 +64,7 @@ enabled = true # Toggle source on/off
 version = 0
 name = "Random source" # Name of the source
 path = "libiggy_connector_random_source" # Path to the source connector
-config_format = "toml"
+plugin_config_format = "toml"
 
 # Collection of the streams to which the produced messages are sent
 [[streams]]
@@ -69,10 +73,13 @@ topic = "example_topic"
 schema = "json"
 batch_length = 100
 linger_time = "5ms"
+# batch_length and linger_time are optional; the runtime defaults are 1000 and "5ms".
 
 # Custom configuration for the source connector, deserialized to type T from `plugin_config` field
 [plugin_config]
-messages_count = 10
+interval = "100ms"
+messages_range = [1, 5]
+payload_size = 200
 
 # Optional data transformation(s) to be applied before sending messages to the stream
 [transforms.add_fields]
@@ -94,9 +101,15 @@ For example, to override the `enabled` property for a source with ID `random`:
 IGGY_CONNECTORS_SOURCE_RANDOM_ENABLED=false
 ```
 
+Top-level fields of `plugin_config` can be overridden (or injected) the same way with the `IGGY_CONNECTORS_SOURCE_[KEY]_PLUGIN_CONFIG_[FIELD]` pattern. This is the recommended way to pass credentials without writing them into the TOML file:
+
+```bash
+IGGY_CONNECTORS_SOURCE_RANDOM_PLUGIN_CONFIG_PAYLOAD_SIZE=200
+```
+
 ## Sample implementation
 
-Let's implement the example source connector, which will simply generate the N random messages depending on the count specified in the configuration.
+Let's implement the example source connector, which will simply generate a random batch of messages at the configured interval, optionally stopping after a total message limit.
 
 Additionally, our source connector will have its own state, which can be used e.g. to track the overall progress or store some relevant information when producing the data from the actual external sources or tooling.
 
@@ -106,12 +119,14 @@ Also, when implementing the source connector, make sure to use the `source_conne
 
 And finally, each source should have its own, custom configuration, which is passed along with the unique plugin ID and optional state via expected `new()` method.
 
+The full, compiling implementation lives in the repository at [core/connectors/sources/random_source](https://github.com/apache/iggy/tree/master/core/connectors/sources/random_source); the snippets below mirror it.
+
 Let's start by defining the internal state and the public source connector along with its own configuration.
 
 ```rust
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 struct State {
-    current_id: usize,
+    messages_produced: usize,
 }
 ```
 
@@ -119,40 +134,54 @@ struct State {
 #[derive(Debug)]
 pub struct RandomSource {
     id: u32,
-    messages_count: u32,
-    state: Mutex<State>
+    max_count: Option<usize>,
+    interval: Duration,
+    messages_range: (u32, u32),
+    payload_size: u32,
+    state: Mutex<State>,
 }
 ```
 
 ```rust
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RandomSourceConfig {
-    messages_count: Option<u32>,
+    interval: Option<String>,
+    max_count: Option<usize>,
+    messages_range: Option<(u32, u32)>,
+    payload_size: Option<u32>,
 }
 ```
 
-At this point, we can expose the required `new()` method, which will be used by the runtime to create a new instance of the source connector. The `id` is assigned by the runtime, and represents the unique identifier of the source connector. The `state` is an optional connector state (e.g. persisted in the local file), which will be provided by the runtime, given that the connector has persisted its own state before the runtime was restarted.
+At this point, we can expose the required `new()` method, which will be used by the runtime to create a new instance of the source connector. The `id` is assigned by the runtime, and represents the unique identifier of the source connector. The `state` is an optional connector state (e.g. persisted in the local file), which will be provided by the runtime, given that the connector has persisted its own state before the runtime was restarted. The `ConnectorState::deserialize()` helper decodes the MessagePack bytes back into our `State` struct, falling back to a fresh state when nothing was persisted or decoding fails.
 
 ```rust
+const CONNECTOR_NAME: &str = "Random source";
+
 impl RandomSource {
     pub fn new(id: u32, config: RandomSourceConfig, state: Option<ConnectorState>) -> Self {
-        let current_id = if let Some(state) = state {
-            u64::from_le_bytes(
-                state.0[0..8]
-                    .try_into()
-                    .inspect_err(|error| {
-                        error!("Failed to convert state to current ID. {error}");
-                    })
-                    .unwrap_or_default(),
-            )
-        } else {
-            0
-        } as usize;
+        let interval = config.interval.unwrap_or("1s".to_string());
+        let interval = humantime::Duration::from_str(&interval)
+            .unwrap_or(humantime::Duration::from_str("1s").expect("Failed to parse interval"));
+
+        let restored_state = state
+            .and_then(|s| s.deserialize::<State>(CONNECTOR_NAME, id))
+            .inspect(|s| {
+                info!(
+                    "Restored state for {CONNECTOR_NAME} connector with ID: {id}. \
+                     Messages produced: {}",
+                    s.messages_produced
+                );
+            });
 
         RandomSource {
             id,
+            max_count: config.max_count,
+            interval: *interval,
+            messages_range: config.messages_range.unwrap_or((10, 50)),
             payload_size: config.payload_size.unwrap_or(100),
-            state: Mutex::new(State { current_id }),
+            state: Mutex::new(restored_state.unwrap_or(State {
+                messages_produced: 0,
+            })),
         }
     }
 }
@@ -161,49 +190,51 @@ impl RandomSource {
 We can invoke the expected macro to expose the FFI interface and allow the connector runtime to register the source within the runtime.
 
 ```rust
-source_connector!(TestSource);
+source_connector!(RandomSource);
 ```
 
 At a bare minimum, we need to add the following dependencies to the `Cargo.toml` file to compile the plugin at all:
 
+- async-trait
 - dashmap
-- once_cell
+- iggy_connector_sdk
+- serde
+- tokio
 - tracing
+
+This particular example additionally uses `humantime`, `rand`, `rmp-serde`, `simd-json`, and `uuid`.
 
 Before we make use of the `Source` trait, let's define the internal payload of the message that will be produced (e.g. as if it was pulled from some external database or so).
 
 ```rust
 #[derive(Debug, Serialize, Deserialize)]
 struct Record {
-    id: u64,
+    id: Uuid,
+    title: String,
+    name: String,
     text: String,
 }
 ```
 
-Now, let's implement the `Source` trait for our `RandomSource` struct. We'll assume that the amount of messages (provided in the config), will be generated every 100ms to mimic the behavior of a real-world external source. On top of this, we'll also keep track of the current ID of the last message produced and return the state along with the `ProducedMessages` - the state in this case, will be just a binary encoded number, but it can be anything else, including the complex structs.
+Next, a few helpers: `serialize_state()` encodes the state to MessagePack via the `ConnectorState::serialize()` helper, and `generate_messages()` builds a random number of messages (within `messages_range`), each carrying a JSON-serialized `Record` with `payload_size` random characters of text.
 
 ```rust
-#[async_trait]
-impl Source for RandomSource {
-    async fn open(&mut self) -> Result<(), iggy_connector_sdk::Error> {
-        info!(
-            "Opened random source connector with ID: {}, messages count: {}",
-            self.id, self.messages_count
-        );
-        Ok(())
+impl RandomSource {
+    fn serialize_state(&self, state: &State) -> Option<ConnectorState> {
+        ConnectorState::serialize(state, CONNECTOR_NAME, self.id)
     }
 
-    async fn poll(&self) -> Result<ProducedMessages, iggy_connector_sdk::Error> {
-        sleep(Duration::from_millis(100)).await;
-        let mut state = self.state.lock().await;
-        let current_id = state.current_id;
-
+    fn generate_messages(&self) -> Vec<ProducedMessage> {
         let mut messages = Vec::new();
-        for _ in 0..self.messages_count {
-            current_id += 1;
+        let mut rng = rand::rng();
+        let messages_count =
+            rng.sample(Uniform::new(self.messages_range.0, self.messages_range.1).unwrap());
+        for _ in 0..messages_count {
             let record = Record {
-                id: current_id,
-                text: format!("Hello from random source connector: #{current_id}")
+                id: Uuid::new_v4(),
+                title: "Hello".to_string(),
+                name: "World".to_string(),
+                text: self.generate_random_text(),
             };
             let Ok(payload) = simd_json::to_vec(&record) else {
                 error!(
@@ -223,22 +254,78 @@ impl Source for RandomSource {
             };
             messages.push(message);
         }
+        messages
+    }
 
-        state.current_id += current_id;
+    fn generate_random_text(&self) -> String {
+        let mut rng = rand::rng();
+        let text: String = (0..self.payload_size)
+            .map(|_| rng.sample(Alphanumeric) as char)
+            .collect();
+        text
+    }
+}
+```
+
+Now, let's implement the `Source` trait for our `RandomSource` struct. Each `poll()` waits for the configured `interval` to mimic the behavior of a real-world external source, stops producing once `max_count` messages were generated (when it is set), and returns the updated state along with the `ProducedMessages` - the runtime persists that state and hands it back to `new()` after a restart.
+
+```rust
+#[async_trait]
+impl Source for RandomSource {
+    async fn open(&mut self) -> Result<(), iggy_connector_sdk::Error> {
         info!(
-            "Generated {} messages by random source connector with ID: {}"
-            messages.len(),
+            "Opened random source connector with ID: {}. Interval: {:#?}, max offset: {:#?}, messages range: {} - {}, payload size: {}",
             self.id,
+            self.interval,
+            self.max_count,
+            self.messages_range.0,
+            self.messages_range.1,
+            self.payload_size
         );
+        Ok(())
+    }
+
+    async fn poll(&self) -> Result<ProducedMessages, iggy_connector_sdk::Error> {
+        sleep(self.interval).await;
+        let mut state = self.state.lock().await;
+        if let Some(max_count) = self.max_count
+            && state.messages_produced >= max_count
+        {
+            info!(
+                "Reached max number of {max_count} messages for {CONNECTOR_NAME} connector with ID: {}",
+                self.id
+            );
+            return Ok(ProducedMessages {
+                schema: Schema::Json,
+                messages: vec![],
+                state: self.serialize_state(&state),
+            });
+        }
+
+        let messages = self.generate_messages();
+        state.messages_produced += messages.len();
+        info!(
+            "{CONNECTOR_NAME} connector with ID: {} generated {} messages. Total produced: {}",
+            self.id,
+            messages.len(),
+            state.messages_produced
+        );
+
+        let persisted_state = self.serialize_state(&state);
+
         Ok(ProducedMessages {
             schema: Schema::Json,
             messages,
-            state: Some(ConnectorState(state.current_id.to_le_bytes().to_vec())),
+            state: persisted_state,
         })
     }
 
     async fn close(&mut self) -> Result<(), Error> {
-        info!("Random source connector with ID: {} is closed.", self.id);
+        let state = self.state.lock().await;
+        info!(
+            "{CONNECTOR_NAME} connector with ID: {} closed. Total messages produced: {}",
+            self.id, state.messages_produced
+        );
         Ok(())
     }
 }

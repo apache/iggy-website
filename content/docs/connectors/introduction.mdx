@@ -26,8 +26,8 @@ The connector runtime operates in two directions - **source** (ingest) and **sin
 
 | Type   | Connectors                                                     |
 |--------|----------------------------------------------------------------|
-| Source | PostgreSQL, Elasticsearch, Random                              |
-| Sink   | PostgreSQL, MongoDB, Elasticsearch, Quickwit, Apache Iceberg, Stdout |
+| Source | Elasticsearch, InfluxDB, PostgreSQL, Random                    |
+| Sink   | ClickHouse, Delta Lake, Apache Doris, Elasticsearch, HTTP, Apache Iceberg, InfluxDB, Meilisearch, MongoDB, PostgreSQL, Quickwit, S3, Stdout, SurrealDB |
 
 ### Transforms
 
@@ -35,12 +35,18 @@ The following built-in transforms are available:
 
 - **add_fields** - add new fields to the message payload.
 - **delete_fields** - remove existing fields from the message payload.
-- **filter_fields** - keep only the specified fields, removing everything else.
-- **update_fields** - update existing fields with computed values such as `timestamp_millis` or `uuid_v7`.
+- **filter_fields** - keep or drop fields based on key and value patterns.
+- **update_fields** - update existing fields with static or computed values such as `timestamp_millis` or `uuid_v7`.
+- **proto_convert** - convert messages between Protocol Buffers and other formats.
+- **flat_buffer_convert** - convert messages between FlatBuffers and other formats.
+- **avro_convert** - convert messages between Avro and other formats.
+- **unwrap_envelope** - promote a nested field of a JSON envelope to the top-level payload.
+
+See the **[Transforms documentation](/docs/connectors/transforms)** for the configuration of each transform.
 
 ### Supported Schemas
 
-Messages can be decoded and encoded using the following formats: **JSON**, **Raw bytes**, **Text**, **Protocol Buffers**, and **FlatBuffers**.
+Messages can be decoded and encoded using the following formats: **JSON**, **Raw bytes**, **Text**, **Protocol Buffers**, **FlatBuffers**, and **Avro**. For Avro, the schema can be provided per stream via the `avro_schema_json` or `avro_schema_path` keys in the `[[streams]]` section.
 
 ## Features
 
@@ -56,7 +62,7 @@ Messages can be decoded and encoded using the following formats: **JSON**, **Raw
 
 ## Quick Start
 
-1. Build the project in release mode (or debug, and update the connectors paths in the config accordingly), and make sure that the plugins specified in `core/connectors/runtime/example_config/connectors/` directory under `path` are available. The configuration must be provided in `toml` format.
+1. Build the project in release mode (or debug, and update the connectors paths in the config accordingly), and make sure that the plugins specified in `core/connectors/runtime/example_config/connectors/` directory under `path` are available. The configuration must be provided in `toml` format. Note that the example directory enables connectors for ClickHouse, Delta Lake, Apache Doris, Apache Iceberg, and InfluxDB as well - without their backing services (or their compiled plugins) these will be reported with the `Error` status, but they do not block the remaining connectors. Set `enabled = false` in their files to skip them entirely.
 
 2. Run `docker compose up -d` from `/examples/rust/src/sink-data-producer` which will start the Quickwit server to be used by an example sink connector. At this point, you can access the Quickwit UI at [http://localhost:7280](http://localhost:7280) - check this dashboard again later on, after the `events` index will be created.
 
@@ -73,11 +79,11 @@ Messages can be decoded and encoded using the following formats: **JSON**, **Raw
 
 5. Execute `cargo run --example sink-data-producer -r` which will start the example data producer application, sending the messages to previously created `qw` stream and `records` topic (this will be used by the Quickwit sink connector).
 
-6. Start the connector runtime `cargo run --bin iggy-connectors -r` - you should be able to browse Quickwit UI with records being constantly added to the `events` index. At the same time, you should see the new messages being added to the `example` stream and `topic1` topic by the test source connector - you can use Iggy Web UI to browse the data. The messages will have applied the basic fields transformations.
+6. Start the connector runtime `cargo run --bin iggy-connectors -r` - you should be able to browse Quickwit UI with records being constantly added to the `events` index. At the same time, you should see the new messages being added to the `example_stream` stream and `example_topic` topic by the Random source connector - you can use Iggy Web UI to browse the data. The messages will have applied the basic fields transformations.
 
 ## Configuration
 
-The same rules applies when it comes to overringing the configuration via environment variables as for the main [Iggy server](/docs/server/configuration).
+The same rules apply when it comes to overriding the configuration via environment variables as for the main [Iggy server](/docs/server/configuration).
 
 You can provide the following envs during the runtime startup:
 
@@ -87,7 +93,7 @@ IGGY_CONNECTORS_ENV_PATH - path to the .env file for custom environment variable
 IGGY_CONNECTORS_CONFIG_PATH - path to the connectors runtime configuration file
 ```
 
-Any configuration section can be overriden with `IGGY_CONNECTORS_` prefix, followed by the section name and the key name, e.g. `IGGY_CONNECTORS_IGGY_USERNAME`.
+Any configuration section can be overridden with `IGGY_CONNECTORS_` prefix, followed by the section name and the key name, e.g. `IGGY_CONNECTORS_IGGY_USERNAME`.
 
 ## Runtime
 
@@ -104,7 +110,7 @@ Each sink should have its own, custom configuration, which is passed along with 
 
 ## Source
 
-Sources are responsible for producing the messages to the configured stream(s) and topic(s). For example, the Test source connector will generate the random messages that will be then sent to the configured stream and topic.
+Sources are responsible for producing the messages to the configured stream(s) and topic(s). For example, the Random source connector will generate the random messages that will be then sent to the configured stream and topic.
 
 Please refer to the **[Source documentation](/docs/connectors/sources/source)** for the details about the configuration and the sample implementation.
 
@@ -114,6 +120,6 @@ New connector can be built simply by implementing either `Sink` or `Source` trai
 
 ## Transformations
 
-Field transformations (depending on the supported payload formats) can be applied to the messages either before they are sent to the specified topic (e.g. when produced by the source connectors), or before consumed by the sink connectors. To add the new transformation, simply implement the `Transform` trait and extend the existing `load` function. Each transform may have its own, custom configuration.
+Field transformations (depending on the supported payload formats) can be applied to the messages either before they are sent to the specified topic (e.g. when produced by the source connectors), or before consumed by the sink connectors. To add a new transformation, implement the `Transform` trait in a new module under the SDK's `transforms` directory, add a variant to the `TransformType` enum, and extend its `from_config` function - the runtime picks it up without any further changes. Each transform may have its own, custom configuration.
 
-To find out more about the transforms, stream decoders or encoders, please refer to the **[SDK documentation](/docs/connectors/sdk)**.
+To find out more about the transforms, please refer to the **[Transforms documentation](/docs/connectors/transforms)**. For the stream decoders and encoders, see the **[SDK documentation](/docs/connectors/sdk)**.

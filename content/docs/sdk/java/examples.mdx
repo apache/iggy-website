@@ -2,125 +2,83 @@
 title: Examples
 ---
 
-Working examples are available in the [examples/java](https://github.com/apache/iggy/tree/master/examples/java) directory as a Gradle project. The following example sets are included:
+Runnable examples live in the [examples/java](https://github.com/apache/iggy/tree/master/examples/java) directory of the core repository as a standalone Gradle project. The project builds against the in-repo SDK (via an `includeBuild` substitution), so the examples always match the SDK source in the same checkout. Java 17 is recommended; the included `gradlew` wrapper downloads the pinned Gradle version on first run.
 
-- **gettingstarted** - basic blocking TCP producer and consumer
-- **async** - asynchronous producer and consumer
-- **messageenvelope** - JSON message envelope pattern
-- **messageheaders** - custom message headers
-- **multitenant** - multi-tenant isolation with per-tenant streams
-- **tcptls** - TLS-encrypted TCP connections
-- **sinkdataproducer** - bulk random data generation
-- **streambuilder** - combined producer and consumer in one class
+## Starting the server
 
-## Producer
+The Java SDK speaks the VSR (Viewstamped Replication) wire protocol, so the examples run against the VSR server. The examples log in as `iggy`/`iggy`, and root credentials are applied **only on the very first startup**, when no data directory exists yet. Start the server with the default root credentials:
 
-```java
-import org.apache.iggy.client.blocking.tcp.IggyTcpClient;
-import org.apache.iggy.identifier.StreamId;
-import org.apache.iggy.identifier.TopicId;
-import org.apache.iggy.message.Message;
-import org.apache.iggy.message.Partitioning;
-import org.apache.iggy.topic.CompressionAlgorithm;
-import java.math.BigInteger;
-import java.util.List;
-import static java.util.Optional.empty;
-
-public class Producer {
-
-    static final String STREAM_NAME = "sample-stream";
-    static final StreamId STREAM_ID = StreamId.of(STREAM_NAME);
-    static final String TOPIC_NAME = "sample-topic";
-    static final TopicId TOPIC_ID = TopicId.of(TOPIC_NAME);
-
-    public static void main(String[] args) {
-        try (var client = IggyTcpClient.builder()
-                .host("127.0.0.1")
-                .port(8090)
-                .credentials("iggy", "iggy")
-                .buildAndLogin()) {
-
-            // Re-running this example is fine: only create what is missing.
-            if (client.streams().getStream(STREAM_ID).isEmpty()) {
-                client.streams().createStream(STREAM_NAME);
-            }
-            if (client.topics().getTopic(STREAM_ID, TOPIC_ID).isEmpty()) {
-                client.topics().createTopic(
-                        STREAM_ID,
-                        1L,
-                        CompressionAlgorithm.None,
-                        BigInteger.ZERO,
-                        BigInteger.ZERO,
-                        empty(),
-                        TOPIC_NAME);
-            }
-
-            Partitioning partitioning = Partitioning.partitionId(0L);
-            for (int i = 0; i < 10; i++) {
-                String payload = "message-" + i;
-                client.messages().sendMessages(
-                        STREAM_ID,
-                        TOPIC_ID,
-                        partitioning,
-                        List.of(Message.of(payload)));
-                System.out.println("Sent: " + payload);
-            }
-        }
-    }
-}
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-## Consumer
+Alternatively, set `IGGY_ROOT_USERNAME=iggy` and `IGGY_ROOT_PASSWORD=iggy` before the first start. If an example fails with `InvalidCredentials`, the server data directory (`local_data` by default) was created with different credentials: delete it and start the server again with the defaults. This setup is intended only for development and testing.
 
-```java
-import org.apache.iggy.client.blocking.tcp.IggyTcpClient;
-import org.apache.iggy.consumergroup.Consumer;
-import org.apache.iggy.identifier.StreamId;
-import org.apache.iggy.identifier.TopicId;
-import org.apache.iggy.message.Message;
-import org.apache.iggy.message.PolledMessages;
-import org.apache.iggy.message.PollingStrategy;
-import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
-import java.util.Optional;
+## Running the examples
 
-public class ConsumerExample {
+Run each example from the `examples/java` directory with its Gradle task:
 
-    static final StreamId STREAM_ID = StreamId.of("sample-stream");
-    static final TopicId TOPIC_ID = TopicId.of("sample-topic");
+- **[gettingstarted](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/gettingstarted)** - basic blocking producer and consumer, the best starting point.
 
-    public static void main(String[] args) {
-        try (var client = IggyTcpClient.builder()
-                .host("127.0.0.1")
-                .port(8090)
-                .credentials("iggy", "iggy")
-                .buildAndLogin()) {
+  ```bash
+  ./gradlew runGettingStartedProducer
+  ./gradlew runGettingStartedConsumer
+  ```
 
-            BigInteger offset = BigInteger.ZERO;
-            Consumer consumer = Consumer.of(0L);
+- **[messageheaders](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/messageheaders)** - message metadata via custom header keys and values, with header-based routing instead of payload-based typing.
 
-            while (true) {
-                PolledMessages polledMessages = client.messages().pollMessages(
-                        STREAM_ID,
-                        TOPIC_ID,
-                        Optional.of(0L),
-                        consumer,
-                        PollingStrategy.offset(offset),
-                        10L,
-                        false);
+  ```bash
+  ./gradlew runMessageHeadersProducer
+  ./gradlew runMessageHeadersConsumer
+  ```
 
-                if (polledMessages.messages().isEmpty()) {
-                    break;
-                }
-                for (Message message : polledMessages.messages()) {
-                    String payload = new String(message.payload(), StandardCharsets.UTF_8);
-                    System.out.printf("Offset: %d, Payload: %s%n", message.header().offset(), payload);
-                }
-                offset = offset.add(BigInteger.valueOf(polledMessages.messages().size()));
-            }
-        }
-    }
-}
-```
+- **[messageenvelope](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/messageenvelope)** - JSON envelope pattern for polymorphic message handling (order events wrapped in envelopes for type identification).
 
-For the full source code, see the [examples/java](https://github.com/apache/iggy/tree/master/examples/java) directory.
+  ```bash
+  ./gradlew runMessageEnvelopeProducer
+  ./gradlew runMessageEnvelopeConsumer
+  ```
+
+- **[multitenant](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/multitenant)** - multi-tenant isolation: per-tenant streams, users with stream-specific permissions, and concurrent producers and consumers across tenants.
+
+  ```bash
+  ./gradlew runMultiTenantProducer
+  ./gradlew runMultiTenantConsumer
+  ```
+
+- **[sinkdataproducer](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/sinkdataproducer)** - high-volume data generation (1000+ messages per batch) with realistic records, for testing and benchmarking.
+
+  ```bash
+  ./gradlew runSinkDataProducer
+  ```
+
+- **[streambuilder](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/streambuilder)** - a combined producer and consumer in a single class.
+
+  ```bash
+  ./gradlew runStreamBasic
+  ```
+
+- **[async](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/async)** - the async client: `CompletableFuture` chaining, submitting multiple sends without blocking, backpressure, error recovery with exponential backoff, and thread pool separation.
+
+  ```bash
+  ./gradlew runAsyncProducer
+  ./gradlew runAsyncConsumer
+  ```
+
+- **[tcptls](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/tcptls)** - TLS-encrypted TCP connections with CA certificate verification. Requires a TLS-enabled server:
+
+  ```bash
+  IGGY_TCP_TLS_ENABLED=true \
+  IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
+  IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
+  cargo run --bin iggy-server
+  ```
+
+  ```bash
+  ./gradlew runTcpTlsProducer
+  ./gradlew runTcpTlsConsumer
+  ```
+
+## Blocking vs. async
+
+Use the blocking client for scripts, CLI tools, integration tests, and anywhere sequential code is easier to reason about. Use the async client for high throughput, reactive applications, and composing non-blocking requests with `CompletableFuture`. The async client runs I/O on Netty event loop threads: never block them with `.join()`, `.get()`, `Thread.sleep()`, or blocking I/O inside `thenApply`/`thenAccept`; offload blocking work with `thenApplyAsync(fn, executor)`. The [examples/java README](https://github.com/apache/iggy/blob/master/examples/java/README.md) covers these async patterns in detail.

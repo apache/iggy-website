@@ -12,7 +12,7 @@ key = "random-source"
 enabled = true
 version = 1
 name = "Random Source"
-path = "/path/to/librandom_source.so"
+path = "/path/to/libiggy_connector_random_source.so"
 verbose = false
 
 [[streams]]
@@ -24,7 +24,7 @@ linger_time = "100ms"
 
 [plugin_config]
 interval = "100ms"
-max_count = 0
+max_count = 1_000_000
 messages_range = [1, 10]
 payload_size = 256
 ```
@@ -33,7 +33,11 @@ payload_size = 256
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `interval` | string | `"100ms"` | Delay between message generation batches |
-| `max_count` | u64 | `0` | Maximum number of messages to generate (0 = unlimited) |
-| `messages_range` | [u32, u32] | `[1, 10]` | Min/max messages per batch (random within range) |
-| `payload_size` | u32 | `256` | Size of each generated payload in bytes |
+| `interval` | string | `"1s"` | Delay before each message generation cycle |
+| `max_count` | usize | unlimited | Stop producing after this many messages in total; omit for unlimited |
+| `messages_range` | [u32, u32] | `[10, 50]` | Min (inclusive) / max (exclusive) messages per batch (random within range) |
+| `payload_size` | u32 | `100` | Number of random characters in the `text` field of each message |
+
+Setting `max_count = 0` stops production immediately (the connector produces zero messages). To generate messages without a limit, leave the key out.
+
+The connector persists the total number of produced messages as its state, so `max_count` is enforced across runtime restarts.

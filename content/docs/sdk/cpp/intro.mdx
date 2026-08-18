@@ -2,38 +2,96 @@
 title: C++ SDK (WIP)
 ---
 
-The Iggy C++ SDK is a work in progress. It wraps the Rust SDK via CXX/FFI, which means it can access all transport protocols (TCP, QUIC, HTTP, WebSocket) through connection strings. The source code is available at [github.com/apache/iggy/tree/master/foreign/cpp](https://github.com/apache/iggy/tree/master/foreign/cpp).
+The Iggy C++ SDK wraps the Rust SDK through a [CXX](https://cxx.rs) FFI bridge, which means it can access all transport protocols (TCP, QUIC, HTTP, WebSocket) through connection strings. The source code is available at [github.com/apache/iggy/tree/master/foreign/cpp](https://github.com/apache/iggy/tree/master/foreign/cpp).
 
-This SDK is not yet published to any package registry. To use it, build from source using CMake.
+This SDK is not published to any package registry. It is consumed from the monorepo and built from source with Bazel.
+
+## Building from source
+
+The project builds with Bazel (`BUILD.bazel` / `MODULE.bazel`). The Bazel build drives the system-provided cargo toolchain to compile the Rust bridge, so concurrent runs can race; run builds serially.
+
+```bash
+cd foreign/cpp
+
+# Build the library
+bazel build //:iggy-cpp
+
+# Unit tests
+bazel test //:unit
+
+# Low-level integration tests (require a running server)
+bazel test //:e2e
+```
 
 ## Quick start
+
+The snippet below mirrors the SDK's own end-to-end tests in `foreign/cpp/tests/e2e`:
 
 ```cpp
 #include "lib.rs.h"
 
-// Connect via connection string (supports all transports)
-auto* client = iggy::ffi::new_connection(
-    "iggy://iggy:iggy@localhost:8090"
-);
-client->connect();
-client->login_user("iggy", "iggy");
+#include <cstdint>
+#include <iostream>
+#include <string>
 
-// Create a stream
-client->create_stream("my-stream");
+iggy::ffi::Identifier id(const std::string &name) {
+    iggy::ffi::Identifier identifier;
+    identifier.set_string(name);
+    return identifier;
+}
 
-// Build an identifier for the stream
-iggy::ffi::Identifier stream_id;
-stream_id.kind = "string";
-stream_id.length = 9;
-for (char c : std::string("my-stream"))
-    stream_id.value.push_back(static_cast<uint8_t>(c));
+iggy::ffi::Identifier numeric_id(const std::uint32_t value) {
+    iggy::ffi::Identifier identifier;
+    identifier.set_numeric(value);
+    return identifier;
+}
 
-// Create a topic with 2 partitions
-client->create_topic(stream_id, "my-topic", 2);
+rust::Vec<std::uint8_t> payload(const std::string &text) {
+    rust::Vec<std::uint8_t> bytes;
+    for (const char c : text) {
+        bytes.push_back(static_cast<std::uint8_t>(c));
+    }
+    return bytes;
+}
 
-// Cleanup
-iggy::ffi::delete_connection(client);
+int main() {
+    // Empty string = TCP to the default local address. Connection strings
+    // (iggy://..., iggy+quic://..., ...) are also accepted.
+    iggy::ffi::Client *client = iggy::ffi::new_connection("");
+    client->connect();
+    client->login_user("iggy", "iggy");
+
+    client->create_stream("my-stream");
+
+    // (stream, name, partitions, compression, expiry kind, expiry value,
+    //  max topic size, extra options)
+    client->create_topic(id("my-stream"), "my-topic", 1, "none",
+                         "server_default", 0, "server_default", {});
+
+    rust::Vec<iggy::ffi::IggyMessageToSend> messages;
+    for (int i = 0; i < 10; i++) {
+        messages.push_back(iggy::ffi::make_message(
+            payload("message-" + std::to_string(i)), {}));
+    }
+    client->send_messages(id("my-stream"), id("my-topic"), "balanced", {},
+                          std::move(messages));
+
+    // Partition ids are 0-based: 0 is the first partition.
+    auto polled = client->poll_messages(id("my-stream"), id("my-topic"), 0,
+                                        "consumer", numeric_id(1),
+                                        "offset", 0, 10, false);
+    for (const auto &message : polled.messages) {
+        std::string text(message.payload.begin(), message.payload.end());
+        std::cout << "Offset: " << message.offset << ", Payload: " << text
+                  << std::endl;
+    }
+
+    iggy::ffi::delete_client(client);
+    return 0;
+}
 ```
+
+Polling strategies are selected by kind string: `offset`, `timestamp`, `first`, `last`, or `next`. Partitioning kinds for sending are `balanced`, `partition_id`, and `messages_key`.
 
 ## Connection strings
 
@@ -48,10 +106,12 @@ iggy+ws://user:pass@host:port        (WebSocket)
 
 When an empty string or plain address is passed to `new_connection()`, it defaults to TCP.
 
-## Building from source
+## Helper types
 
-The C++ SDK uses CMake and depends on the Rust SDK being compiled first (via CXX bridge). See the [build instructions](https://github.com/apache/iggy/tree/master/foreign/cpp) in the repository for details.
+Beyond the generated `lib.rs.h` FFI surface, `foreign/cpp/include/iggy.hpp` ships typed C++ helpers: `CompressionAlgorithm`, `MaxTopicSize`, `Expiry`, `PollingStrategy`, `IdKind`, `TopicOption`, `SnapshotCompression`, and `SystemSnapshotType`, plus the `IggyException` error type. They construct and validate the kind strings and values the raw FFI calls expect.
 
 ## Current status
 
-The SDK provides low-level access to stream, topic, and client management operations. Message sending and polling, consumer groups, and higher-level abstractions are being developed. Contributions are welcome.
+The FFI bridge exposes the full command-level client: streams, topics, partitions, and segments; message sending and polling with user headers; consumer groups and consumer offsets; stats, client info, and cluster metadata; snapshots; permission updates and password changes; topic option discovery (`describe_options`); and raw binary requests (`send_binary_request`).
+
+Not yet exposed: the high-level `Producer`/`Consumer` wrappers and user management (create/get/update/delete users, personal access tokens). Contributions are welcome.

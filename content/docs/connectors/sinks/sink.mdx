@@ -42,8 +42,12 @@ pub struct SinkConfig {
     pub streams: Vec<StreamConsumerConfig>,
     pub plugin_config_format: Option<ConfigFormat>,
     pub plugin_config: Option<serde_json::Value>,
+    pub verbose: bool,
+    pub benchmark: bool,
 }
 ```
+
+The two flags at the end are optional and default to `false`: `verbose` switches the connector's per-batch logging to info level, and `benchmark` emits per-batch timing events for performance measurement.
 
 **Main runtime config (config.toml):**
 
@@ -75,6 +79,8 @@ schema = "json"
 batch_length = 100
 poll_interval = "5ms"
 consumer_group = "stdout_sink_connector"
+# batch_length, poll_interval and consumer_group are optional; the runtime
+# defaults are 1000, "5ms" and "iggy-connect-sink-<key>" respectively.
 
 # Custom configuration for the sink connector, deserialized to type T from `plugin_config` field
 [plugin_config]
@@ -98,6 +104,12 @@ For example, to override the `enabled` property for a sink with ID `stdout`:
 
 ```bash
 IGGY_CONNECTORS_SINK_STDOUT_ENABLED=false
+```
+
+Top-level fields of `plugin_config` can be overridden (or injected) the same way with the `IGGY_CONNECTORS_SINK_[KEY]_PLUGIN_CONFIG_[FIELD]` pattern. This is the recommended way to pass credentials without writing them into the TOML file:
+
+```bash
+IGGY_CONNECTORS_SINK_STDOUT_PLUGIN_CONFIG_PRINT_PAYLOAD=true
 ```
 
 ## Sample implementation
@@ -155,8 +167,11 @@ sink_connector!(StdoutSink);
 
 At a bare minimum, we need to add the following dependencies to the `Cargo.toml` file to compile the plugin at all:
 
+- async-trait
 - dashmap
-- once_cell
+- iggy_connector_sdk
+- serde
+- tokio
 - tracing
 
 Now, let's implement the `Sink` trait for our `StdoutSink` struct.

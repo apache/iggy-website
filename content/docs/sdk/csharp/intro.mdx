@@ -12,7 +12,7 @@ The SDK is built around the `IIggyClient` interface, which aggregates every feat
 dotnet add package Apache.Iggy --prerelease
 ```
 
-The SDK targets .NET 8 and .NET 10 (`net8.0` and `net10.0`). It currently ships as **prerelease versions** (`0.9.0-edge.x` at the time of writing), so pass `--prerelease` to get the version these docs describe.
+The SDK targets .NET 8 and .NET 10 (`net8.0` and `net10.0`). Stable versions on NuGet stop at `0.8.0`, which predates the current wire protocol and cannot talk to a current server. The `0.9.0` line ships as **prerelease versions** (`0.9.0-edge.x` at the time of writing), so `--prerelease` is required, not optional.
 
 ## Supported protocols
 

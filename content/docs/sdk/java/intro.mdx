@@ -2,7 +2,11 @@
 title: Java SDK
 ---
 
-The Iggy Java SDK is a library that allows you to interact with the Iggy API from your Java application. It supports TCP and HTTP transports. The package is available on [Maven Central](https://mvnrepository.com/artifact/org.apache.iggy/iggy) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/master/foreign/java).
+The Iggy Java SDK is a client library for interacting with the Iggy server from Java applications. It provides a blocking client and an async client (based on `CompletableFuture`) over TCP, plus a blocking HTTP client. The artifact is published to [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy) and the source code lives in [foreign/java](https://github.com/apache/iggy/tree/master/foreign/java).
+
+## Server compatibility
+
+The TCP transport speaks the VSR (Viewstamped Replication) wire protocol. The SDK and the server must speak the same protocol: the latest published artifact (`0.6.0`) predates VSR and only pairs with servers of the same era, while the SDK on `master` requires a current server. When working from source, build the SDK and the server from the same repository checkout. The code on this page tracks `master`.
 
 ## Installation
 
@@ -12,17 +16,21 @@ The Iggy Java SDK is a library that allows you to interact with the Iggy API fro
 <dependency>
     <groupId>org.apache.iggy</groupId>
     <artifactId>iggy</artifactId>
-    <version>LATEST</version>
+    <version>0.6.0</version>
 </dependency>
 ```
 
 ### Gradle
 
 ```groovy
-implementation 'org.apache.iggy:iggy:LATEST'
+implementation 'org.apache.iggy:iggy:0.6.0'
 ```
 
+Check [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy) for the latest published version. Snapshot builds are available from the [ASF snapshot repository](https://repository.apache.org/content/repositories/snapshots/).
+
 ## Quick start
+
+The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/gettingstarted). Note that stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
 
 ### Producer
 
@@ -35,7 +43,6 @@ import org.apache.iggy.message.Partitioning;
 import org.apache.iggy.topic.CompressionAlgorithm;
 import java.math.BigInteger;
 import java.util.List;
-import static java.util.Optional.empty;
 
 public class Producer {
 
@@ -62,7 +69,6 @@ public class Producer {
                         CompressionAlgorithm.None,
                         BigInteger.ZERO,
                         BigInteger.ZERO,
-                        empty(),
                         TOPIC_NAME);
             }
 
@@ -80,6 +86,8 @@ public class Producer {
     }
 }
 ```
+
+`createTopic` also has an overload with a trailing `Map<String, HeaderValue>` of named topic options, for option keys the server catalog gained after the SDK build shipped.
 
 ### Consumer
 
@@ -134,15 +142,59 @@ public class SampleConsumer {
 }
 ```
 
+## Client types and configuration
+
+`org.apache.iggy.Iggy` is the unified entrypoint for building clients. `Iggy.tcpClientBuilder().blocking()` returns the same builder as `IggyTcpClient.builder()` used above.
+
+```java
+import org.apache.iggy.Iggy;
+
+// Blocking TCP client
+var client = Iggy.tcpClientBuilder()
+    .blocking()
+    .host("localhost")
+    .port(8090)
+    .credentials("iggy", "iggy")
+    .buildAndLogin();
+
+// Async TCP client (CompletableFuture-based)
+var asyncClient = Iggy.tcpClientBuilder()
+    .async()
+    .host("localhost")
+    .port(8090)
+    .credentials("iggy", "iggy")
+    .buildAndLogin()
+    .join();
+
+// Blocking HTTP client
+var httpClient = Iggy.httpClientBuilder()
+    .blocking()
+    .url("http://localhost:3000")
+    .credentials("iggy", "iggy")
+    .buildAndLogin();
+```
+
+The TCP builder also accepts TLS and resilience options:
+
+```java
+import java.time.Duration;
+import org.apache.iggy.config.RetryPolicy;
+
+var client = Iggy.tcpClientBuilder()
+    .blocking()
+    .host("iggy.example.com")
+    .port(8090)
+    .enableTls()
+    .tlsCertificate("/path/to/ca.pem")   // optional custom CA
+    .connectionTimeout(Duration.ofSeconds(10))
+    .requestTimeout(Duration.ofSeconds(30))
+    .retryPolicy(RetryPolicy.exponentialBackoff())
+    .credentials("iggy", "iggy")
+    .buildAndLogin();
+```
+
+Beyond streams, topics, and messages, the client exposes consumer groups, partitions, users, and personal access tokens through `client.consumerGroups()`, `client.partitions()`, `client.users()`, and `client.personalAccessTokens()`. All SDK exceptions inherit from `IggyException`.
+
 ## Examples
 
-Working examples are available in the [examples/java](https://github.com/apache/iggy/tree/master/examples/java) directory as a Gradle project. The following example sets are included:
-
-- **getting-started** - basic producer and consumer
-- **async** - asynchronous message processing
-- **message-envelope** - working with message envelopes
-- **message-headers** - custom message headers
-- **multi-tenant** - multi-tenant streaming setup
-- **tcp-tls** - TLS-encrypted TCP connections
-- **sink-data-producer** - data sink producer pattern
-- **stream-builder** - stream builder API usage
+Runnable examples covering the async client, message headers and envelopes, multi-tenant setups, and TLS live in [examples/java](https://github.com/apache/iggy/tree/master/examples/java). See the [examples page](/docs/sdk/java/examples) for how to run them.

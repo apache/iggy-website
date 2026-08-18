@@ -2,171 +2,54 @@
 title: Examples
 ---
 
+A runnable getting-started example lives in the [examples/go](https://github.com/apache/iggy/tree/master/examples/go) directory of the core repository. Its `go.mod` carries a `replace` directive pointing at the in-repo SDK, so the example always builds against the SDK source in the same checkout. The examples are exercised in CI via `scripts/run-examples-from-readme.sh --language go`.
+
+## Starting the server
+
+The Go SDK speaks the VSR (Viewstamped Replication) wire protocol, so the examples run against the VSR server. The examples log in as `iggy`/`iggy`, and root credentials are applied **only on the very first startup**, when no data directory exists yet. Start the server with the default root credentials:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+If an example fails to log in, the server data directory (`local_data` by default) was created with different credentials: delete it and start the server again with the defaults. This setup is intended only for development and testing.
+
 ## Getting started
 
-A complete getting-started example is available in the [examples/go](https://github.com/apache/iggy/tree/master/examples/go) directory. It demonstrates connecting to the server, creating streams and topics, sending messages, and consuming them.
+The [producer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/producer/main.go) creates `sample-stream` and `sample-topic` (if missing) and sends 5 batches of 10 messages to partition `0`; the [consumer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/consumer/main.go) polls them from offset `0` and exits after 5 batches. Note that stream, topic, and partition IDs are **0-based**.
 
-### Producer
+Run both from the `examples/go` directory:
 
-```go
-package main
-
-import (
-	"context"
-	"errors"
-	"fmt"
-	"time"
-
-	"github.com/apache/iggy/foreign/go/client"
-	"github.com/apache/iggy/foreign/go/client/tcp"
-	iggcon "github.com/apache/iggy/foreign/go/contracts"
-	ierror "github.com/apache/iggy/foreign/go/errors"
-)
-
-var (
-	StreamId    = uint32(0)
-	TopicId     = uint32(0)
-	PartitionId = uint32(0)
-)
-
-func main() {
-	// Create the client with TCP transport
-	cli, err := client.NewIggyClient(
-		client.WithTcp(tcp.WithServerAddress("127.0.0.1:8090")),
-	)
-	if err != nil {
-		panic(err)
-	}
-	defer cli.Close()
-
-	ctx := context.Background()
-	if err := cli.Connect(ctx); err != nil {
-		panic(err)
-	}
-
-	// Log in
-	if _, err := cli.LoginUser(ctx, "iggy", "iggy"); err != nil {
-		panic(err)
-	}
-
-	// Create a stream. Re-running this example is fine: an existing stream is not an error.
-	if _, err := cli.CreateStream(ctx, "sample-stream"); err != nil &&
-		!errors.Is(err, ierror.ErrStreamNameAlreadyExists) {
-		panic(err)
-	}
-
-	// Create a topic with 1 partition, no compression, no expiry
-	streamIdentifier, _ := iggcon.NewIdentifier(StreamId)
-	if _, err := cli.CreateTopic(
-		ctx,
-		streamIdentifier,
-		"sample-topic",
-		1,                                  // partitions count
-		iggcon.CompressionAlgorithmNone,
-		iggcon.IggyExpiryNeverExpire,
-		0,                                  // max topic size
-		nil,                                // replication factor
-	); err != nil && !errors.Is(err, ierror.ErrTopicNameAlreadyExists) {
-		panic(err)
-	}
-
-	// Send messages in a loop
-	partitioning := iggcon.PartitionId(PartitionId)
-	for i := 1; i <= 10; i++ {
-		payload := fmt.Sprintf("message-%d", i)
-		message, _ := iggcon.NewIggyMessage([]byte(payload))
-
-		streamIdentifier, _ := iggcon.NewIdentifier(StreamId)
-		topicIdentifier, _ := iggcon.NewIdentifier(TopicId)
-		if err := cli.SendMessages(
-			ctx,
-			streamIdentifier,
-			topicIdentifier,
-			partitioning,
-			[]iggcon.IggyMessage{message},
-		); err != nil {
-			panic(err)
-		}
-		fmt.Printf("Sent: %s\n", payload)
-		time.Sleep(500 * time.Millisecond)
-	}
-}
+```bash
+go run ./getting-started/producer/main.go
+go run ./getting-started/consumer/main.go
 ```
 
-### Consumer
+You can run multiple producers and consumers simultaneously to observe how messages are distributed across clients.
 
-```go
-package main
+Both binaries accept the same flags:
 
-import (
-	"context"
-	"fmt"
-	"time"
+- `--tcp-server-address` - server address, default `127.0.0.1:8090`
+- `--tls` - enable TLS
+- `--tls-ca-file` - path to a CA certificate file
+- `--tls-domain` - TLS server domain name for SNI
 
-	"github.com/apache/iggy/foreign/go/client"
-	"github.com/apache/iggy/foreign/go/client/tcp"
-	iggcon "github.com/apache/iggy/foreign/go/contracts"
-)
+## TLS
 
-var (
-	StreamID    = uint32(0)
-	TopicID     = uint32(0)
-	PartitionID = uint32(0)
-)
+Start the server with TLS enabled, using the development certificates from the repository:
 
-func main() {
-	// Create the client with TCP transport
-	cli, err := client.NewIggyClient(
-		client.WithTcp(tcp.WithServerAddress("127.0.0.1:8090")),
-	)
-	if err != nil {
-		panic(err)
-	}
-	defer cli.Close()
-
-	ctx := context.Background()
-	if err := cli.Connect(ctx); err != nil {
-		panic(err)
-	}
-
-	// Log in
-	if _, err := cli.LoginUser(ctx, "iggy", "iggy"); err != nil {
-		panic(err)
-	}
-
-	// Poll messages in a loop
-	offset := uint64(0)
-	consumer := iggcon.DefaultConsumer()
-
-	for {
-		streamIdentifier, _ := iggcon.NewIdentifier(StreamID)
-		topicIdentifier, _ := iggcon.NewIdentifier(TopicID)
-		pollMessages, err := cli.PollMessages(
-			ctx,
-			streamIdentifier,
-			topicIdentifier,
-			consumer,
-			iggcon.OffsetPollingStrategy(offset),
-			10,     // messages per batch
-			false,  // auto-commit
-			&PartitionID,
-		)
-		if err != nil {
-			panic(err)
-		}
-
-		if len(pollMessages.Messages) == 0 {
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
-
-		offset += uint64(len(pollMessages.Messages))
-		for _, message := range pollMessages.Messages {
-			fmt.Printf("Offset: %d, Payload: %s\n",
-				message.Header.Offset, string(message.Payload))
-		}
-	}
-}
+```bash
+IGGY_TCP_TLS_ENABLED=true \
+IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
+IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
+cargo run --bin iggy-server
 ```
 
-For the full source code, see the [examples/go](https://github.com/apache/iggy/tree/master/examples/go) directory.
+Then run the examples with the TLS flags (paths relative to `examples/go`):
+
+```bash
+go run ./getting-started/producer/main.go --tcp-server-address localhost:8090 --tls --tls-ca-file ../../core/certs/iggy_ca_cert.pem
+go run ./getting-started/consumer/main.go --tcp-server-address localhost:8090 --tls --tls-ca-file ../../core/certs/iggy_ca_cert.pem
+```
+
+For the code walkthrough, see the [quick start](/docs/sdk/go/intro#quick-start) on the intro page, which follows the same example.

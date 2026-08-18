@@ -2,7 +2,9 @@
 title: Node.js SDK
 ---
 
-The Iggy Node.js SDK is a client library that allows you to interact with the Iggy API from your Node.js and TypeScript applications. It communicates with the Iggy server over TCP using the binary protocol. The package is available on [npm](https://www.npmjs.com/package/apache-iggy) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/master/foreign/node).
+The Iggy Node.js SDK is a client library that allows you to interact with the Iggy API from your Node.js and TypeScript applications. It communicates with the Iggy server over TCP or TLS using the binary protocol. The package is available on [npm](https://www.npmjs.com/package/apache-iggy) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/master/foreign/node).
+
+The SDK speaks the current (VSR) wire protocol exclusively and does not fall back to older formats, so it requires an Iggy server that speaks it. Keep the client and server versions in step: pair the newest package with the newest server.
 
 ## Installation
 
@@ -11,6 +13,23 @@ npm install apache-iggy
 ```
 
 ## Quick start
+
+The samples below expect an Iggy server on `127.0.0.1:8090`:
+
+```bash
+# Latest release
+docker run --rm \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -p 8090:8090 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  apache/iggy:latest
+
+# Or from the repository source
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and set the root credentials the samples below log in with. Without `--with-default-root-credentials` (or the `IGGY_ROOT_USERNAME` / `IGGY_ROOT_PASSWORD` variables), a first boot generates a random root password instead of `iggy`/`iggy`.
 
 ### Producer
 
@@ -39,8 +58,7 @@ const topic =
     streamId: stream.id,
     name: TOPIC_NAME,
     partitionCount: 1,
-    compressionAlgorithm: 1,
-    replicationFactor: 1,
+    compressionAlgorithm: 1, // 1 = None, 2 = Gzip
   }));
 
 const messages = Array.from({ length: 10 }, (_, i) => ({
@@ -96,15 +114,25 @@ for (const message of polledMessages.messages) {
 await client.destroy();
 ```
 
+## Configuration
+
+The client constructor accepts a few knobs worth knowing about:
+
+- **reconnect**: automatic reconnection with `{ enabled, interval, maxRetries }`.
+- **heartbeatInterval**: the client pings the server every 5 seconds by default; `0` disables heartbeats. The server evicts connections that stay silent too long, so keep it well below the server's heartbeat timeout.
+- **maxResponseFrameSize**: response frames larger than this limit (default 64 MiB) are rejected and close the connection. Raise it when polling very large batches.
+- **poolSize**: the client currently supports exactly one pooled connection; `min`/`max` above 1 throw.
+- **TLS**: set `transport: 'TLS'` and pass Node `tls.ConnectionOptions` in `options`. See the [tcp-tls example](https://github.com/apache/iggy/tree/master/examples/node/src/tcp-tls).
+
+## Beyond the basics
+
+- **Consumer groups**: `client.group` manages groups (including ensure-and-join in one call), and polling with `Consumer.Group` distributes partitions across group members.
+- **Consumer streams**: `singleConsumerStream` and `groupConsumerStream` expose polling as Node streams.
+- **Administration**: users, personal access tokens, offsets, partitions, segments, and cluster metadata are all available on the client.
+- **Errors**: the package exports `ResponseError`, `DeserializeError`, `ProtocolFrameError`, and `VsrEvictionError` for precise error handling.
+
+See the [foreign/node README](https://github.com/apache/iggy/tree/master/foreign/node) for the full API walkthrough.
+
 ## Examples
 
-Working examples are available in the [examples/node](https://github.com/apache/iggy/tree/master/examples/node) directory, written in TypeScript. The following example sets are included:
-
-- **getting-started** - basic producer and consumer
-- **basic** - producer and consumer with utilities
-- **message-envelope** - working with message envelopes
-- **message-headers** - custom message headers
-- **multi-tenant** - multi-tenant streaming setup
-- **tcp-tls** - TLS-encrypted TCP connections
-- **stream-builder** - stream builder API usage
-- **sink-data-producer** - bulk data generation for sink connectors
+Working examples are available in the [examples/node](https://github.com/apache/iggy/tree/master/examples/node) directory, written in TypeScript. See [Examples](/docs/sdk/node/examples) for the list and how to run them.
