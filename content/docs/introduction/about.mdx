@@ -30,7 +30,7 @@ The name is an abbreviation for the Italian Greyhound - small yet extremely fast
 - Available client SDK in multiple languages
 - **Works directly with binary data**, avoiding enforced schema and serialization/deserialization overhead
 - Custom **zero-copy (de)serialization**, which greatly improves the performance and reduces memory usage
-- **Custom memory pool** with 32 buckets (buffer sizes from 256 B to 512 MiB) for pre-allocated, zero-copy message passing
+- **Custom memory pool** with 28 buckets (buffer sizes from 4 KiB to 512 MiB) for pre-allocated, zero-copy message passing
 - Configurable server features (e.g. caching, segment size, data flush interval, transport protocols etc.)
 - Server-side storage of **consumer offsets**
 - Multiple ways of polling the messages:
@@ -41,21 +41,19 @@ The name is an abbreviation for the Italian Greyhound - small yet extremely fast
 - Possibility of **auto committing the offset** (e.g. to achieve *at-most-once* delivery)
 - **Consumer groups** providing the message ordering and horizontal scaling across the connected clients, with cooperative partition rebalancing
 - **Message expiry** with auto deletion based on the configurable **retention policy**
-- Additional features such as **server side message deduplication**
 - **Multi-tenant** support via abstraction of **streams** which group **topics**
 - **TLS** support for all transport protocols (TCP, QUIC, WebSocket, HTTPS)
 - **[Connectors](/docs/connectors/introduction)** - sinks, sources and data transformations based on the **custom Rust plugins** loaded dynamically at runtime
 - **[Model Context Protocol](/docs/ai/mcp)** - provide context to LLM with **MCP server** exposing 40+ tools for full Iggy management
 - Optional server-side as well as client-side **data encryption** using AES-256-GCM
 - Optional metadata support in the form of **message headers**
-- Optional **data backups and archiving** to disk or **S3** compatible cloud storage (e.g. AWS S3)
 - Support for **OpenTelemetry** logs & traces + Prometheus metrics
 - Built-in **[CLI](/docs/cli/start)** to manage the streaming server installable via `cargo install iggy-cli`
 - Built-in **[Web UI](/docs/web_ui/start)** dashboard (Svelte) that can be embedded directly in the server binary or run as a standalone container
 - Built-in **benchmarking app** to test the performance
 - **Single binary deployment** (no external dependencies)
-- **TCP socket migration** across shards for optimal request routing
-- Running as a single node, with **clustering based on Viewstamped Replication (VSR)** currently being implemented
+- **Accept-time connection distribution** across shards via file descriptor transfer for load balancing
+- Built on **Viewstamped Replication (VSR)** consensus: runs as a single node by default, with multi-node [clustering](/docs/clustering/vsr) available via the `[cluster]` configuration
 
 ## Supported languages SDK
 
@@ -67,6 +65,7 @@ The name is an abbreviation for the Italian Greyhound - small yet extremely fast
 | Python | [apache-iggy](https://pypi.org/project/apache-iggy/) | PyPI |
 | Node.js | [apache-iggy](https://www.npmjs.com/package/apache-iggy) | npm |
 | Go | [iggy-go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) | pkg.go.dev |
+| PHP | [apache/iggy-php](https://packagist.org/packages/apache/iggy-php) | Packagist |
 | C++ | [iggy-cpp](https://github.com/apache/iggy/tree/master/foreign/cpp) | GitHub (WIP) |
 
 ## CLI
@@ -88,7 +87,7 @@ Features include stream/topic/partition management, message browser with JSON/st
 
 Iggy provides a highly performant and modular **[runtime](/docs/connectors/runtime)** for statically typed, yet dynamically loaded connectors. You can ingest data from external sources and push the data to Iggy streams, or fetch data from Iggy streams and forward it to external systems. **Create your own Rust plugins** by simply implementing either the `Source` or `Sink` trait and **build custom pipelines for the data processing**.
 
-Available connectors include sources for PostgreSQL, Elasticsearch, and random data generation, along with sinks for PostgreSQL, MongoDB, Elasticsearch, Quickwit, Apache Iceberg, and stdout.
+There are currently 14 sinks and 4 sources available. Sinks include PostgreSQL, MongoDB, Elasticsearch, ClickHouse, InfluxDB, Apache Iceberg, Delta Lake, Quickwit and S3; sources include PostgreSQL, Elasticsearch, InfluxDB and random data generation. See the [connectors documentation](/docs/connectors/introduction) for the full catalog.
 
 The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, and can be fetched via `docker pull apache/iggy-connect`.
 

@@ -2,7 +2,7 @@
 title: Examples
 ---
 
-These samples use the [High-level SDK](/docs/sdk/csharp/high-level-sdk) — the recommended way to build producers and consumers. For the low-level, per-call equivalents, see the [Guide](/docs/sdk/csharp/guide).
+These samples use the [High-level SDK](/docs/sdk/csharp/high-level-sdk) - the recommended way to build producers and consumers. For the low-level, per-call equivalents, see the [Guide](/docs/sdk/csharp/guide).
 
 ## Producer
 
@@ -101,7 +101,7 @@ Run several instances of the consumer to see the group load-balance partitions b
 
 ## Typed messages
 
-A typed publisher/consumer pair that (de)serializes a record as JSON. Note that the typed builders are configured via statements rather than one fluent chain — the `With*` methods return the untyped base builder, so `Build()` must be called on the typed builder variable (see [Typed consumer](/docs/sdk/csharp/high-level-sdk#typed-consumer)):
+A typed publisher/consumer pair that (de)serializes a record as JSON. Note that the typed builders are configured via statements rather than one fluent chain - the `With*` methods return the untyped base builder, so `Build()` **must be called on the typed builder variable** (see [Typed consumer](/docs/sdk/csharp/high-level-sdk#typed-consumer)):
 
 ```csharp
 using System.Buffers;
@@ -180,8 +180,8 @@ class OrderDeserializer : IDeserializer<OrderEvent>
 
 The [examples/csharp](https://github.com/apache/iggy/tree/master/examples/csharp) directory in the Iggy repository contains complete, runnable projects:
 
-- **Basic** / **GettingStarted** — low-level producer and consumer
-- **NewSdk** — high-level `IggyPublisher` / `IggyConsumer` (like the samples above)
-- **MessageEnvelope** — envelope pattern (message type + JSON payload) over the low-level client
-- **MessageHeaders** — user-defined message headers
-- **TcpTls** — TLS-encrypted TCP connection
+- **Basic** / **GettingStarted** - low-level producer and consumer
+- **NewSdk** - high-level `IggyPublisher` / `IggyConsumer` (like the samples above)
+- **MessageEnvelope** - envelope pattern (message type + JSON payload) over the low-level client
+- **MessageHeaders** - user-defined message headers
+- **TcpTls** - TLS-encrypted TCP connection
