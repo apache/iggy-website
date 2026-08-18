@@ -13,14 +13,25 @@ Iggy provides official client SDKs in multiple languages. The **Rust SDK** is th
 | Go | [iggy-go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) | pkg.go.dev | TCP | No |
 | C# | [Apache.Iggy](https://www.nuget.org/packages/Apache.Iggy/) | NuGet | TCP, HTTP | No |
 | C++ | [iggy-cpp](https://github.com/apache/iggy/tree/master/foreign/cpp) | GitHub (WIP) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
+| PHP | [apache/iggy-php](https://github.com/apache/iggy/tree/master/foreign/php) | Composer (experimental) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
 
-Python and C++ wrap the Rust SDK, so they inherit all transport protocols when using connection strings. Java and C# implement TCP and HTTP natively. Go and Node.js currently support TCP only.
+Python, C++, and PHP wrap the Rust SDK, so they inherit all transport protocols when using connection strings. Java and C# implement TCP and HTTP natively. Go and Node.js currently support TCP *only*.
 
 The Rust SDK is always the first to receive new features.
 
+## Prerequisites
+
+The samples across the SDK docs log in with the `iggy`/`iggy` root credentials. These **only exist** when the server is started with the default-credentials flag (or `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` set) on its first boot; otherwise root gets a generated password and the samples fail with `InvalidCredentials`:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+`--fresh` **wipes the local data directory**, so an existing server with different stored credentials is re-initialized. This setup is for *development only*.
+
 ## Connection string
 
-Connection strings are supported by Rust, Python, and C++ SDKs. They provide a compact way to configure the client, including the transport protocol, credentials, server address, and options.
+Connection strings are supported by the Rust, Python, C++, and PHP SDKs. They provide a compact way to configure the client, including the transport protocol, credentials, server address, and options.
 
 **Format:**
 
@@ -38,10 +49,10 @@ iggy://username:password@host:port[?options]
 | `iggy+http://` | HTTP |
 | `iggy+ws://` | WebSocket |
 
-**Personal Access Token** authentication:
+**Personal Access Token** authentication: any credential without a colon is treated as a PAT. Server-minted tokens carry no prefix, so paste the token exactly as returned:
 
 ```
-iggy://iggypat-your-token-here@host:port
+iggy://<personal-access-token>@host:port
 ```
 
 **Examples:**
@@ -50,7 +61,7 @@ iggy://iggypat-your-token-here@host:port
 // Rust - TCP with default options
 let client = IggyClient::from_connection_string("iggy://iggy:iggy@localhost:8090")?;
 
-// Rust - QUIC with TLS
+// Rust - QUIC
 let client = IggyClient::from_connection_string("iggy+quic://iggy:iggy@localhost:8080")?;
 
 // Rust - TCP with options
@@ -64,13 +75,7 @@ let client = IggyClient::from_connection_string(
 client = IggyClient.from_connection_string("iggy://iggy:iggy@localhost:8090")
 ```
 
-**Available TCP options:** `tls`, `tls_domain`, `tls_ca_file`, `reconnection_retries` (number or `unlimited`), `reconnection_interval`, `reestablish_after`, `heartbeat_interval`, `nodelay`
-
-**Available QUIC options:** `response_buffer_size`, `max_concurrent_bidi_streams`, `datagram_send_buffer_size`, `initial_mtu`, `send_window`, `receive_window`, `keep_alive_interval`, `max_idle_timeout`, `validate_certificate`, `heartbeat_interval`, `reconnection_max_retries`, `reconnection_interval`
-
-**Available WebSocket options:** `tls`, `tls_domain`, `tls_ca_file`, `heartbeat_interval`, `reconnection_retries`, `reconnection_interval`, `read_buffer_size`, `write_buffer_size`, `max_message_size`, `max_frame_size`
-
-**Available HTTP options:** `heartbeat_interval`, `retries`
+The option keys differ per transport and unknown keys are rejected as **hard errors**. See [Connection Strings](/docs/sdk/connection-strings) for the full per-transport option tables, defaults, and default ports.
 
 ## Common operations
 
@@ -80,6 +85,7 @@ All SDKs provide the same core operations through the unified client interface:
 - **StreamClient** - create, get, list, update, delete, purge streams
 - **TopicClient** - create, get, list, update, delete, purge topics
 - **PartitionClient** - create, delete partitions
+- **SegmentClient** - delete segments
 - **MessageClient** - send, poll messages
 - **ConsumerOffsetClient** - get, store, delete consumer offsets
 - **ConsumerGroupClient** - create, get, list, delete consumer groups

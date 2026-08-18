@@ -1,0 +1,374 @@
+---
+title: Command Reference
+description: Every iggy CLI command with its arguments, flags, and a runnable example
+---
+
+This page lists every top-level `iggy` command. Examples assume you are already authenticated, for example via `iggy login`; see [installation and authentication](/docs/cli/start). Run `iggy <command> --help` for the full flag list of any command.
+
+{/* Keep this block in sync with the Command enum in core/cli/src/args/mod.rs. */}
+
+```text
+Usage: iggy [OPTIONS] [COMMAND]
+
+Commands:
+  stream           stream operations [aliases: s]
+  topic            topic operations [aliases: t]
+  partition        partition operations [aliases: p]
+  segment          segments operations [aliases: seg]
+  ping             ping iggy server
+  me               get current client info
+  options          list the options a resource's create command accepts
+  stats            get iggy server statistics
+  snapshot         collect iggy server troubleshooting data
+  pat              personal access token operations
+  user             user operations [aliases: u]
+  client           client operations [aliases: c]
+  cluster          cluster operations [aliases: cl]
+  consumer-group   consumer group operations [aliases: g]
+  consumer-offset  consumer offset operations [aliases: o]
+  message          message operations [aliases: m]
+  context          context operations [aliases: ctx]
+  login            login to Iggy server [aliases: li]
+  logout           logout from Iggy server [aliases: lo]
+  session          login session operations [aliases: sess]
+  help             Print this message or the help of the given subcommand(s)
+```
+
+Conventions used throughout:
+
+- Wherever a command takes a stream, topic, user, or consumer group ID, you can pass either the numeric ID or the name (`iggy topic get dev events` and `iggy topic get 1 1` are equivalent).
+- Subcommands have single-letter aliases too: `c` (create), `d` (delete), `g` (get), `l` (list), `u` (update), `p` (purge). So `iggy s l` is `iggy stream list`.
+- Every `list` command accepts `-l, --list-mode <table|list>` (default: `table`).
+- `-q, --quiet` suppresses stdout output; `-d, --debug <file>` writes verbose logs to a file.
+
+## stream
+
+Manage streams, the top-level containers for topics. Subcommands: `create`, `delete`, `update`, `get`, `list`, `purge`.
+
+```bash
+# Create a stream (the server assigns the ID; use -s to pick one)
+iggy stream create dev
+
+# List, inspect, rename
+iggy stream list
+iggy stream get dev
+iggy stream update dev development
+
+# Remove all messages in every topic of the stream
+iggy stream purge development
+
+# Delete the stream
+iggy stream delete development
+```
+
+## topic
+
+Manage topics within a stream. Subcommands: `create`, `delete`, `update`, `get`, `list`, `purge`.
+
+```text
+iggy topic create [OPTIONS] <STREAM_ID> <NAME> <PARTITIONS_COUNT> <COMPRESSION_ALGORITHM> [MESSAGE_EXPIRY]...
+iggy topic update [OPTIONS] <STREAM_ID> <TOPIC_ID> <NAME> <COMPRESSION_ALGORITHM> [MESSAGE_EXPIRY]...
+```
+
+Compression is a **required positional**: `none` or `gzip`. Expiry is a human-readable duration (`7d`, `1day 12h`, `unlimited`); omitting it uses the server default.
+
+| Flag | Description |
+|------|-------------|
+| `-t, --topic-id <ID>` | Explicit topic ID (create only; server assigns one by default) |
+| `-m, --max-topic-size <SIZE>` | Max topic size, e.g. `15GB`, `unlimited` (default: `server_default`) |
+| `--set <KEY=VALUE>` | Additional server-side option, repeatable (create only) |
+
+```bash
+# 2 partitions, no compression, 7 day retention
+iggy topic create dev events 2 none 7d
+
+# Extra creation options via --set; discover accepted keys with "iggy options topic"
+iggy topic create dev metrics 4 gzip 30d --set segment_size=128MiB
+
+iggy topic list dev
+iggy topic get dev events
+
+# Update: name and compression are required positionals, in that order
+iggy topic update dev metrics metrics gzip 60d
+
+iggy topic purge dev metrics
+iggy topic delete dev metrics
+```
+
+## partition
+
+Add or remove partitions of a topic.
+
+```bash
+# Add 2 partitions
+iggy partition create dev events 2
+
+# Remove 2 partitions
+iggy partition delete dev events 2
+```
+
+## segment
+
+Delete the oldest segments of a partition.
+
+```bash
+# Delete 3 segments from partition 1 of dev/events
+iggy segment delete dev events 1 3
+```
+
+## message
+
+Send, poll, and flush messages. Subcommands: `send`, `poll`, `flush`.
+
+### message send
+
+```text
+iggy message send [OPTIONS] <STREAM_ID> <TOPIC_ID> [MESSAGES]...
+```
+
+| Flag | Description |
+|------|-------------|
+| `-p, --partition-id <ID>` | Send to a specific partition |
+| `-m, --message-key <KEY>` | Let the server pick the partition from the key (mutually exclusive with `--partition-id`) |
+| `-H, --headers <KEY:KIND:VALUE>` | Message headers, comma separated. Kinds: `raw`, `string`, `bool`, `int8`-`int128`, `uint8`-`uint128`, `float32`, `float64` |
+| `--input-file <FILE>` | Send messages from a binary file written by `poll --output-file` |
+
+```bash
+# Positional messages; quote messages containing spaces
+iggy message send --partition-id 1 dev events "hello world"
+
+# Partition chosen from the message key
+iggy message send --message-key sensor-42 dev events "temperature: 21.5"
+
+# With headers
+iggy message send -p 1 -H "trace-id:string:abc123,retries:uint32:0" dev events "payload"
+
+# No messages given: read stdin, one message per line
+cat data.txt | iggy message send -p 1 dev events
+```
+
+### message poll
+
+```text
+iggy message poll [OPTIONS] <--offset <OFFSET>|--first|--last|--next> <STREAM_ID> <TOPIC_ID> <PARTITION_ID>
+```
+
+**Exactly one** polling strategy is required:
+
+| Strategy | Description |
+|----------|-------------|
+| `-o, --offset <OFFSET>` | Start from the given offset |
+| `-f, --first` | Start from the first message in the partition |
+| `-l, --last` | Start from the last message |
+| `-n, --next` | Continue after the stored consumer offset |
+
+| Flag | Description |
+|------|-------------|
+| `-m, --message-count <N>` | Number of messages to poll (default: 1) |
+| `-a, --auto-commit` | Commit the consumer offset on the server after polling |
+| `-c, --consumer <ID>` | Consumer name or ID to poll as (default: `0`) |
+| `-s, --show-headers` | Include message headers in the output |
+| `--output-file <FILE>` | Append polled messages to a binary file instead of printing |
+
+```bash
+# 10 messages from offset 0 of partition 1
+iggy message poll --offset 0 --message-count 10 dev events 1
+
+# Consume incrementally as consumer "reporting"
+iggy message poll --next --auto-commit --consumer reporting dev events 1
+```
+
+Polled messages can be replayed later, for example into another topic:
+
+```bash
+iggy message poll --first --message-count 1000 --output-file backup.bin dev events 1
+iggy topic create dev events-replay 2 none 7d
+iggy message send --input-file backup.bin --partition-id 1 dev events-replay
+```
+
+### message flush
+
+Force a flush of the unsaved buffer of a partition to disk. With `-f, --fsync` the data is also fsynced.
+
+```bash
+iggy message flush dev events 1 --fsync
+```
+
+## user
+
+Manage users and their permissions. Subcommands: `create`, `delete`, `get`, `list`, `name`, `status`, `password`, `permissions`.
+
+```bash
+iggy user create reader Str0ngPass1
+iggy user list
+iggy user get reader
+
+# Rename
+iggy user name reader analytics-reader
+
+# Activate / deactivate
+iggy user status analytics-reader inactive
+
+# Change password; omit the passwords to be prompted securely
+iggy user password analytics-reader
+iggy user password analytics-reader Str0ngPass1 N3wPass2
+
+iggy user delete analytics-reader
+```
+
+### Permissions
+
+`user create` and `user permissions` accept the same permission flags:
+
+| Flag | Description |
+|------|-------------|
+| `-g, --global-permissions <PERMS>` | Comma-separated global permissions |
+| `-s, --stream-permissions <SPEC>` | Per-stream (and per-topic) permissions, repeatable |
+| `-u, --user-status <active\|inactive>` | Initial status (create only, default: `active`) |
+
+Global permission tokens (long / short): `manage_servers`/`m_srv`, `read_servers`/`r_srv`, `manage_users`/`m_usr`, `read_users`/`r_usr`, `manage_streams`/`m_str`, `read_streams`/`r_str`, `manage_topics`/`m_top`, `read_topics`/`r_top`, `poll_messages`/`p_msg`, `send_messages`/`s_msg`.
+
+The stream permission format is `STREAM_ID[:STREAM_PERMISSIONS][#TOPIC_ID[:TOPIC_PERMISSIONS]]`:
+
+```bash
+# Global: can only poll and send messages
+iggy user create guest guest-pass --global-permissions p_msg,s_msg
+
+# Stream 1: manage and read topics
+iggy user create operator op-pass -s 1:manage_topics,read_topics
+
+# Stream 3: send to topics 1 and 2 only
+iggy user create sender send-pass -s "3#1:s_msg#2:s_msg"
+
+# Replace permissions of an existing user (no flags = remove all permissions)
+iggy user permissions operator -g r_str,r_top
+```
+
+## pat
+
+Manage personal access tokens for the authenticated user. Subcommands: `create`, `delete`, `list`.
+
+```bash
+# Token with 7 day expiry; the value is printed once
+iggy pat create ci-token 7d
+
+# Token stored in the platform keyring, usable via -n (see the Getting started page)
+iggy pat create my-token --store-token
+
+iggy pat list
+iggy pat delete ci-token
+```
+
+`--store-token` and an expiry are mutually exclusive: stored tokens **never expire**.
+
+## client
+
+Inspect the clients currently connected to the server. Clients are **connections, not users**.
+
+```bash
+iggy client list
+iggy client get 42
+```
+
+## cluster
+
+Cluster operations. The only subcommand is `metadata` (alias `m`).
+
+```bash
+iggy cluster metadata
+```
+
+## consumer-group
+
+Manage consumer groups of a topic. Subcommands: `create`, `delete`, `get`, `list`.
+
+```bash
+# Server assigns the group ID; use -g to pick one
+iggy consumer-group create dev events reporting
+
+iggy consumer-group list dev events
+iggy consumer-group get dev events reporting
+iggy consumer-group delete dev events reporting
+```
+
+## consumer-offset
+
+Read or set the stored offset of a consumer for one partition. Subcommands: `get`, `set`. Both accept `-k, --kind <consumer|consumer-group>` (default: `consumer`).
+
+```bash
+# Offset of consumer 1 in partition 1
+iggy consumer-offset get 1 dev events 1
+
+# Offset of a consumer group
+iggy consumer-offset get reporting dev events 1 --kind consumer-group
+
+# Rewind a consumer to offset 100
+iggy consumer-offset set 1 dev events 1 100
+```
+
+## context
+
+Manage named connection profiles. Subcommands: `list`, `use`, `create`, `delete`, `show`. See [connection contexts](/docs/cli/start#connection-contexts) for details.
+
+```bash
+iggy context create production --tcp-server-address prod-server:8090
+iggy context use production
+```
+
+## options
+
+Print the server's option catalog for one scope: `topic`, `stream` or `user`. These are the keys the corresponding `create` command accepts via `--set KEY=VALUE`, with their kinds, defaults, and bounds.
+
+```bash
+iggy options topic
+iggy topic create dev metrics 4 none 30d --set segment_size=128MiB
+```
+
+## ping
+
+Check that the server is up and measure the response time. `-c, --count <N>` sends N pings (default: 1).
+
+```bash
+iggy ping -c 5
+```
+
+## me
+
+Show info about the current connection: client ID, user ID, server address, protocol.
+
+```bash
+iggy me
+```
+
+## stats
+
+Show server statistics: streams, topics, partitions, messages, plus host OS details. `-o, --output <table|list|json|toml>` selects the format (default: `table`).
+
+```bash
+iggy stats
+iggy stats --output json
+```
+
+## snapshot
+
+Collect server troubleshooting data into an archive, useful for support bundles.
+
+| Flag | Description |
+|------|-------------|
+| `-c, --compression <TYPE>` | `stored`, `deflated`, `bzip2`, `zstd`, `lzma`, `xz` |
+| `-s, --snapshot-types <TYPES>` | Space-separated subset of `filesystem_overview`, `process_list`, `resource_usage`, `test`, `server_logs`, `server_config`, `all` |
+| `-o, --out-dir <DIR>` | Output directory for the snapshot file |
+
+```bash
+iggy snapshot --compression zstd --snapshot-types server_logs server_config --out-dir ./snapshots
+```
+
+## login, logout, session
+
+Manage login sessions backed by the platform keyring. `iggy login [EXPIRY]` stores a session token (default expiry: 15 minutes, `none` disables expiry), `iggy logout` removes it, and `iggy session status` reports whether a token exists locally. See [login sessions](/docs/cli/start#login-sessions) for the full flow.
+
+```bash
+iggy -u iggy login 1h
+iggy session status
+iggy logout
+```

@@ -41,7 +41,7 @@ export function MessageFlowDiagram() {
     { label: "Router", desc: "Request routed to owning shard via IggyNamespace hash", icon: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" },
     { label: "Stream", desc: "Stream lookup by ID (metadata read from left-right)", icon: "M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" },
     { label: "Topic", desc: "Topic lookup within stream, compression applied", icon: "M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" },
-    { label: "Partition", desc: "Messages buffered in MemoryMessageJournal", icon: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z" },
+    { label: "Partition", desc: "Messages buffered in the partition journal (PartitionJournal)", icon: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z" },
     { label: "Segment", desc: "Flushed to .log file via vectored I/O (io_uring)", icon: "M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" },
   ];
 
@@ -124,24 +124,24 @@ export function ShardDiagram() {
   const shards = [
     {
       id: 0,
-      label: "Shard 0 (Primary)",
+      label: "Shard 0 (Coordinator)",
       color: "var(--color-fd-primary)",
-      features: ["MetadataWriter", "HTTP Server (axum)", "QUIC Server", "VSR Primary", "Config Writer"],
-      partitions: ["P1", "P4", "P7"],
+      features: ["Binds all listeners: TCP, QUIC, HTTP, WS", "Replica plane listener", "Metadata plane (left-right write handle)", "QUIC + TCP-TLS terminate here", "Hands plaintext TCP/WS to peers (fd transfer)"],
+      partitions: ["P0", "P3", "P6"],
     },
     {
       id: 1,
       label: "Shard 1",
       color: "#3b82f6",
-      features: ["MetadataReader", "TCP Server", "WebSocket Server"],
-      partitions: ["P2", "P5", "P8"],
+      features: ["Metadata read handle (left-right)", "Plaintext TCP/WS via fd transfer", "Owns partitions"],
+      partitions: ["P1", "P4", "P7"],
     },
     {
       id: 2,
       label: "Shard 2",
       color: "#8b5cf6",
-      features: ["MetadataReader", "TCP Server", "WebSocket Server"],
-      partitions: ["P3", "P6", "P9"],
+      features: ["Metadata read handle (left-right)", "Plaintext TCP/WS via fd transfer", "Owns partitions"],
+      partitions: ["P2", "P5", "P8"],
     },
   ];
 
@@ -213,8 +213,8 @@ export function ShardDiagram() {
           <span className="text-xs font-medium text-fd-muted-foreground">Inter-shard communication</span>
         </div>
         <p className="text-xs text-fd-muted-foreground m-0">
-          Shards communicate via <code className="text-[11px]">crossfire</code> bounded mpsc channels. Metadata mutations route to Shard 0.
-          Partition ops route to the owning shard via <code className="text-[11px]">DashMap&lt;IggyNamespace, PartitionLocation&gt;</code>.
+          Shards communicate via <code className="text-[11px]">crossfire</code> bounded mpsc channels. Metadata mutations route to Shard 0, the only shard that commits; peers hold left-right read handles.
+          Partition ops route to the owning shard via the lock-free <code className="text-[11px]">papaya::HashMap&lt;IggyNamespace, PartitionLocation&gt;</code>.
         </p>
       </div>
     </div>
@@ -343,7 +343,7 @@ export function SegmentVisualization() {
                       <span className="text-[11px] font-mono font-bold text-fd-foreground">.log</span>
                     </div>
                     <span className="text-[10px] text-fd-muted-foreground block">Message data (headers + payloads)</span>
-                    <span className="text-[10px] text-fd-muted-foreground block">64-byte header per message</span>
+                    <span className="text-[10px] text-fd-muted-foreground block">batch records, 48-byte frame per message</span>
                   </div>
                   <div className="rounded-lg bg-fd-accent/30 p-3">
                     <div className="flex items-center gap-2 mb-1">
@@ -483,14 +483,14 @@ export function BenchmarkChart() {
 
 export function NamespacePacking() {
   const bitGroups = [
-    { label: "unused (20 bits)", bits: 20, color: undefined, range: "63..44" },
-    { label: "stream", bits: 12, color: "#f59e0b88", range: "43..32", sub: "12 bits" },
+    { label: "unused (12 bits)", bits: 12, color: undefined, range: "63..52" },
+    { label: "stream", bits: 20, color: "#f59e0b88", range: "51..32", sub: "20 bits" },
     { label: "topic", bits: 12, color: "#3b82f688", range: "31..20", sub: "12 bits" },
     { label: "partition", bits: 20, color: "#10b98188", range: "19..0", sub: "20 bits" },
   ];
 
   const limits = [
-    { label: "Max Streams", value: "4,096", color: "#f59e0b" },
+    { label: "Max Streams", value: "1,048,576", color: "#f59e0b" },
     { label: "Max Topics", value: "4,096", color: "#3b82f6" },
     { label: "Max Partitions", value: "1,000,000", color: "#10b981" },
   ];
@@ -541,12 +541,12 @@ export function StreamHierarchy() {
     stream: true,
     "topic-user": true,
     "topic-order": true,
+    "partition-user-0": false,
     "partition-user-1": false,
     "partition-user-2": false,
-    "partition-user-3": false,
+    "partition-order-0": false,
     "partition-order-1": false,
     "partition-order-2": false,
-    "partition-order-3": false,
   });
 
   const toggle = (key: string) => {
@@ -579,7 +579,7 @@ export function StreamHierarchy() {
   );
 
   const partitions = (topicKey: string) =>
-    [1, 2, 3].map((p) => {
+    [0, 1, 2].map((p) => {
       const pKey = `partition-${topicKey}-${p}`;
       return (
         <div key={pKey} className="ml-8 mt-1.5">
@@ -620,7 +620,7 @@ export function StreamHierarchy() {
           <Chevron open={expanded.stream} />
           <span className="w-3 h-3 rounded bg-fd-primary shrink-0" />
           <span className="text-sm font-mono font-bold text-fd-foreground">Stream: orders</span>
-          <span className="text-[10px] text-fd-muted-foreground ml-auto">ID: 1</span>
+          <span className="text-[10px] text-fd-muted-foreground ml-auto">ID: 0</span>
         </button>
 
         {expanded.stream && (
@@ -747,12 +747,12 @@ export function AppendOnlyLogViz() {
 
 export function ConsumerGroupViz() {
   const consumers = [
-    { id: "A", color: "#f59e0b", partitions: ["P1", "P4"] },
-    { id: "B", color: "#3b82f6", partitions: ["P2", "P5"] },
-    { id: "C", color: "#10b981", partitions: ["P3", "P6"] },
+    { id: "A", color: "#f59e0b", partitions: ["P0", "P3"] },
+    { id: "B", color: "#3b82f6", partitions: ["P1", "P4"] },
+    { id: "C", color: "#10b981", partitions: ["P2", "P5"] },
   ];
 
-  const allPartitions = ["P1", "P2", "P3", "P4", "P5", "P6"];
+  const allPartitions = ["P0", "P1", "P2", "P3", "P4", "P5"];
 
   const getConsumerForPartition = (p: string) =>
     consumers.find((c) => c.partitions.includes(p))!;
@@ -880,7 +880,7 @@ export function ServerEcosystem() {
 
       <div className="mt-4 rounded-lg bg-fd-muted/20 p-3">
         <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-[10px] text-fd-muted-foreground">
-          <span><strong className="text-fd-foreground">SDKs:</strong> Rust, Python, Java, Go, Node.js, C#, C++</span>
+          <span><strong className="text-fd-foreground">SDKs:</strong> Rust, Python, Java, Go, Node.js, C#, C++, PHP</span>
           <span><strong className="text-fd-foreground">Security:</strong> TLS, Argon2id, AES-256-GCM, RBAC</span>
           <span><strong className="text-fd-foreground">Observability:</strong> Prometheus, OpenTelemetry</span>
         </div>
@@ -1030,7 +1030,7 @@ export function WhyIggy() {
     {
       label: "Memory",
       traditional: "Heap allocations on hot path",
-      iggy: "Pre-allocated 4 GiB pool, 32 bucket sizes",
+      iggy: "Pre-allocated 4 GiB pool, 28 bucket sizes (4 KiB to 512 MiB)",
       iggyColor: "#ec4899",
     },
     {
@@ -1070,7 +1070,7 @@ export function WhyIggy() {
 
 export function QuickStartSnippet() {
   const steps = [
-    { n: "1", label: "Start the server", code: "docker run --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 -p 8090:8090 apache/iggy" },
+    { n: "1", label: "Start the server", code: "docker run --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 -p 8090:8090 -e IGGY_TCP_ADDRESS=0.0.0.0:8090 -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy apache/iggy" },
     { n: "2", label: "Add the SDK", code: "cargo add iggy" },
     { n: "3", label: "Connect and send", code: 'let client = IggyClient::from_connection_string("iggy://iggy:iggy@localhost:8090")?;\nclient.connect().await?;' },
   ];
@@ -1096,7 +1096,7 @@ export function QuickStartSnippet() {
 
       <div className="flex flex-wrap gap-1.5 mt-4 pl-9">
         <span className="text-[10px] text-fd-muted-foreground mr-1">SDKs:</span>
-        {["Rust", "Python", "Java", "Go", "Node.js", "C#", "C++"].map((l) => (
+        {["Rust", "Python", "Java", "Go", "Node.js", "C#", "C++", "PHP"].map((l) => (
           <span key={l} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-fd-muted/50 text-fd-muted-foreground">{l}</span>
         ))}
       </div>
@@ -1129,7 +1129,7 @@ export function DocsHero() {
     { title: "Getting Started", href: "/docs/introduction/getting-started", desc: "Install, configure, send your first messages", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
     { title: "Architecture", href: "/docs/introduction/architecture", desc: "Thread-per-core, io_uring, shared-nothing design", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1v-2z" },
     { title: "Connectors", href: "/docs/connectors/introduction", desc: "Source & sink plugins for data integration", icon: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" },
-    { title: "SDKs", href: "/docs/sdk/introduction", desc: "Rust, Python, Java, Go, Node.js, C#, C++", icon: "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" },
+    { title: "SDKs", href: "/docs/sdk/introduction", desc: "Rust, Python, Java, Go, Node.js, C#, C++, PHP", icon: "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" },
     { title: "Server Config", href: "/docs/server/configuration", desc: "Tune performance, storage, and security", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" },
     { title: "CLI & Web UI", href: "/docs/cli/start", desc: "Manage streams, topics, users from terminal or browser", icon: "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
   ];
@@ -1248,7 +1248,7 @@ export function DocsHero() {
               { label: "MCP Server", href: "/docs/ai/mcp", sub: "40+ LLM tools" },
               { label: "Web UI", href: "/docs/web_ui/start", sub: "Dashboard" },
               { label: "CLI", href: "/docs/cli/start", sub: "Terminal" },
-              { label: "7 SDKs", href: "/docs/sdk/introduction", sub: "All languages" },
+              { label: "8 SDKs", href: "/docs/sdk/introduction", sub: "All languages" },
             ].map((t) => (
               <a key={t.label} href={t.href} className="text-center no-underline group">
                 <span className="text-[10px] font-semibold text-fd-foreground group-hover:text-fd-primary transition-colors block">{t.label}</span>

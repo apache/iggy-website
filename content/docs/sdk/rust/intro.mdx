@@ -8,6 +8,16 @@ The Rust SDK is the primary and most feature-complete client for Iggy. It is ava
 cargo add iggy
 ```
 
+## Prerequisites
+
+The examples below log in with the `iggy`/`iggy` root credentials, which **only exist** when the server is started with the default-credentials flag (or `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` set) on its first boot. Otherwise root gets a generated password and the examples fail with `InvalidCredentials`:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+`--fresh` **wipes the local data directory**. This setup is for *development only*.
+
 ## High-level vs low-level API
 
 The SDK provides two layers:
@@ -53,11 +63,13 @@ iggy://iggy:iggy@my-server:8090?tls=true&tls_ca_file=/path/to/ca.crt
 iggy://iggy:iggy@localhost:8090?reconnection_retries=unlimited&heartbeat_interval=5s
 ```
 
-Personal Access Tokens are also supported:
+Personal Access Tokens are also supported. Any credential without a colon is treated as a PAT; paste the token exactly as the server returned it, with **no prefix**:
 
 ```
-iggy://iggypat-your-token@localhost:8090
+iggy://<personal-access-token>@localhost:8090
 ```
+
+See [Connection Strings](/docs/sdk/connection-strings) for the full per-transport option tables and defaults.
 
 ## Quick example
 
@@ -75,15 +87,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(_) | Err(IggyError::StreamNameAlreadyExists(_)) => {}
         Err(e) => return Err(e.into()),
     }
+    // Every topic knob rides `TopicCreateOptions`; fields left as `None`
+    // resolve against the server's defaults at admission.
     match client
         .create_topic(
             &"my-stream".try_into()?,
             "my-topic",
-            1,
-            CompressionAlgorithm::None,
-            None,
-            IggyExpiry::NeverExpire,
-            MaxTopicSize::ServerDefault,
+            &TopicCreateOptions {
+                partitions_count: Some(1),
+                message_expiry: Some(IggyExpiry::NeverExpire),
+                ..TopicCreateOptions::default()
+            },
         )
         .await
     {
@@ -122,5 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+Note that partition IDs are **0-based**: the first partition of a topic is partition `0`.
 
 For the full getting started tutorial, see [Getting Started](/docs/introduction/getting-started). For the high-level producer/consumer builders, see [High-level SDK](/docs/sdk/rust/high-level-sdk) and [Stream Builder](/docs/sdk/rust/stream-builder).

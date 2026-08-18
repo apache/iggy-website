@@ -1,1 +1,4 @@
-{"title": "Clustering", "pages": ["vsr"]}
+{
+  "title": "Clustering",
+  "pages": ["vsr", "deploy", "configuration", "security", "client-failover"]
+}

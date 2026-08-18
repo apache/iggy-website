@@ -1,17 +1,19 @@
 ---
 title: Viewstamped Replication
-description: VSR clustering architecture, configuration, and development guide
+description: How Apache Iggy replicates data across a cluster with VSR
 ---
 
-Apache Iggy is adding replicated clusters based on **Viewstamped Replication Revisited (VSR)**. VSR keeps an ordered state machine consistent across replicas and elects a new primary when the current primary fails.
+Apache Iggy replicates clusters with **Viewstamped Replication Revisited (VSR)**. VSR keeps an ordered state machine consistent across replicas and elects a new primary when the current primary fails.
+
+Clustering is built into the standard `iggy-server` binary. There is **no separate build, binary, or Cargo feature**: the same server runs single-node or clustered, and `cluster.enabled` in the configuration decides which one you get. Clustering is **disabled by default**.
 
 Read the [VSR paper used by the project](https://github.com/apache/iggy/blob/master/assets/vsr.pdf) for the protocol specification.
 
-> VSR clustering is experimental and targets Iggy v1. It is close to feature completion, but it is not yet a production release.
+> Iggy has not reached a 1.0 production release yet. The cluster protocol and configuration described here can still change between pre-release versions.
 
 ## Current implementation
 
-The implementation lives in the next-generation [`core/server-ng`](https://github.com/apache/iggy/tree/master/core/server-ng) server. It includes:
+The implementation includes:
 
 - normal operation with quorum commits
 - view changes and deterministic primary selection
@@ -20,14 +22,14 @@ The implementation lives in the next-generation [`core/server-ng`](https://githu
 - replica rejoin with journal repair
 - client sessions, request fencing, and duplicate detection
 - replica authentication and optional TLS
-- follower-aware routing in the Rust SDK
-- deterministic simulation and Rust BDD coverage
+- leader redirection in the client SDKs
+- deterministic simulation and cross-SDK BDD coverage
 
 The main components are:
 
 | Component | Source | Responsibility |
 | --- | --- | --- |
-| Server | [`core/server-ng`](https://github.com/apache/iggy/tree/master/core/server-ng) | Sharded runtime, listeners, recovery, and request dispatch |
+| Server | [`core/server`](https://github.com/apache/iggy/tree/master/core/server) | Sharded runtime, listeners, recovery, and request dispatch |
 | Consensus | [`core/consensus`](https://github.com/apache/iggy/tree/master/core/consensus) | VSR state machine, quorum, view changes, and timeouts |
 | Wire protocol | [`core/binary_protocol/src/consensus`](https://github.com/apache/iggy/tree/master/core/binary_protocol/src/consensus) | Fixed-size VSR headers and replica messages |
 | Simulator | [`core/simulator`](https://github.com/apache/iggy/tree/master/core/simulator) | Deterministic failures, delays, and network partitions |
@@ -42,9 +44,9 @@ Iggy splits replication by namespace:
 | Metadata | One group on shard 0 | Streams, topics, users, permissions, consumer groups, and access tokens |
 | Partition | One group per partition | Messages and consumer offsets |
 
-Each group can have a different primary. Metadata writes route through the metadata primary. Partition writes route through the primary for that partition.
+Each group can have a *different* primary. Metadata writes route through the metadata primary. Partition writes route through the primary for that partition.
 
-Reads use the local replicated state where possible. Writes return after the required VSR commit or return a retryable error when the replica is changing view or catching up.
+Reads use the local replicated state where possible. Writes return after the required VSR commit or return a retryable error when the replica is changing view or catching up. See [Client failover](/docs/clustering/client-failover) for how the SDKs handle both.
 
 ## Failure handling
 
@@ -54,135 +56,23 @@ VSR uses three main flows:
 2. **View change**: replicas exchange `StartViewChange` and `DoViewChange`, then the new primary sends `StartView`.
 3. **Recovery**: a restarted or lagging replica requests the current view and repairs missing WAL ranges before serving current state.
 
-A cluster of `2f + 1` replicas tolerates `f` unavailable replicas. Use at least three replicas for one-node fault tolerance. A two-node cluster is useful for development, but it cannot make progress after either node fails.
+A cluster of `2f + 1` replicas tolerates `f` unavailable replicas. Use **at least three replicas** for one-node fault tolerance. A two-node cluster is useful for development, but it **cannot make progress** after either node fails.
 
-## Build from source
+## Wire protocol and SDKs
 
-The VSR wire path is behind the `vsr` Cargo feature. Build the server and CLI from the repository root:
+VSR framing is the *only* wire protocol. Every SDK (Rust, Go, Java, C#, C++, Node.js, Python) speaks it, and every BDD suite runs against the clustered-capable `iggy-server`. Clients built before the VSR migration **cannot talk to current servers**.
 
-```bash
-cargo build --bin iggy-server-ng --bin iggy --features vsr
-```
-
-The current binary names are:
-
-```text
-target/debug/iggy-server-ng
-target/debug/iggy
-```
-
-The server uses Linux `io_uring`. Use a recent Linux kernel and a sufficient locked-memory limit.
-
-## Run one development node
-
-The default `core/server-ng/config.toml` has clustering disabled. Run it without `--replica-id`:
-
-```bash
-IGGY_ROOT_USERNAME=iggy \
-IGGY_ROOT_PASSWORD=iggy \
-IGGY_CONFIG_PATH=core/server-ng/config.toml \
-cargo run --bin iggy-server-ng --features vsr
-```
-
-Do not pass `--replica-id` when `cluster.enabled = false`.
-
-## Run a three-node cluster
-
-Start with a shared config. Every node must use the same cluster name and roster.
-
-```toml
-[cluster]
-enabled = true
-name = "iggy-vsr-dev"
-
-[cluster.auth]
-enabled = true
-shared_secret = ""
-
-[cluster.tls]
-enabled = false
-self_signed = false
-cert_file = ""
-key_file = ""
-ca_file = ""
-
-[[cluster.nodes]]
-name = "iggy-node-1"
-ip = "127.0.0.1"
-replica_id = 0
-ports = { tcp = 8090, quic = 8080, http = 3000, websocket = 8093, tcp_replica = 9090 }
-
-[[cluster.nodes]]
-name = "iggy-node-2"
-ip = "127.0.0.1"
-replica_id = 1
-ports = { tcp = 8091, quic = 8081, http = 3001, websocket = 8094, tcp_replica = 9091 }
-
-[[cluster.nodes]]
-name = "iggy-node-3"
-ip = "127.0.0.1"
-replica_id = 2
-ports = { tcp = 8092, quic = 8082, http = 3002, websocket = 8095, tcp_replica = 9092 }
-```
-
-Save it as `/tmp/iggy-vsr.toml`. Export the settings shared by all three processes:
-
-```bash
-export IGGY_CONFIG_PATH=/tmp/iggy-vsr.toml
-export IGGY_ROOT_USERNAME=iggy
-export IGGY_ROOT_PASSWORD=iggy
-export IGGY_CLUSTER_AUTH_SHARED_SECRET="replace-with-at-least-32-random-bytes"
-```
-
-Start each replica in a separate terminal. Use a different data path for every process:
-
-```bash
-# Replica 0
-IGGY_SYSTEM_PATH=local_data/node-0 ./target/debug/iggy-server-ng --replica-id 0
-
-# Replica 1
-IGGY_SYSTEM_PATH=local_data/node-1 ./target/debug/iggy-server-ng --replica-id 1
-
-# Replica 2
-IGGY_SYSTEM_PATH=local_data/node-2 ./target/debug/iggy-server-ng --replica-id 2
-```
-
-The exported settings must be present in all three terminals.
-
-In cluster mode:
-
-- `--replica-id` is required and must match one `cluster.nodes` entry
-- `replica_id` values must be unique and contiguous from `0`
-- every enabled transport needs a port for every node
-- `tcp_replica` is reserved for replica traffic
-- use `advertised_address` when clients cannot reach the roster `ip`
-- use a different `system.path` for each process on the same host
-
-## Check cluster metadata
-
-The CLI must also be built with `vsr`:
-
-```bash
-./target/debug/iggy \
-  --tcp-server-address 127.0.0.1:8090 \
-  -u iggy \
-  -p iggy \
-  cluster list
-```
-
-The response lists the cluster name, nodes, client endpoints, and current roles.
-
-## Use the Rust SDK
-
-Until VSR is released on the normal SDK path, depend on the current Git repository and enable `vsr`:
+The Rust SDK needs no feature flags. Depend on the published crate:
 
 ```toml
 [dependencies]
-iggy = { git = "https://github.com/apache/iggy", features = ["vsr"] }
+iggy = "0.11.0-edge.4"
 tokio = { version = "1", features = ["full"] }
 ```
 
-The public client API stays the same:
+or track the repository directly with `iggy = { git = "https://github.com/apache/iggy" }`.
+
+The client API is the same in single-node and cluster mode:
 
 ```rust
 use iggy::prelude::*;
@@ -203,83 +93,13 @@ async fn main() -> Result<(), IggyError> {
 }
 ```
 
-The feature enables VSR framing and consensus session handling for TCP, QUIC, and WebSocket clients. A VSR-enabled client is not wire-compatible with the legacy server.
+## Status
 
-The Rust SDK and CLI currently have the complete VSR feature path. Other language SDKs still use the legacy wire protocol.
+VSR started as a parallel `server-ng` implementation behind a `vsr` build feature. That phase is over: the VSR server was promoted to the mainline `core/server` crate and the `iggy-server` binary, the feature flag was removed, and the legacy server together with its wire format was deleted. What this page describes is the only server implementation.
 
-## Test the VSR path
+## Next steps
 
-The repository has a dedicated Rust BDD lane:
-
-```bash
-cargo build --bin iggy-server-ng --bin iggy --features vsr
-./scripts/run-bdd-tests.sh --vsr rust
-```
-
-Run one feature group while developing:
-
-```bash
-./scripts/run-bdd-tests.sh --vsr rust basic_messaging
-./scripts/run-bdd-tests.sh --vsr rust leader_redirection
-```
-
-The VSR build and legacy build use the same output path for `iggy`. Rebuild the CLI without `vsr` before returning to legacy-server tests.
-
-## Cluster security
-
-Replica authentication uses a shared secret and a BLAKE3 keyed handshake. Set the secret through `IGGY_CLUSTER_AUTH_SHARED_SECRET` instead of storing it in TOML.
-
-Replica TLS protects the `tcp_replica` connection:
-
-```toml
-[cluster.auth]
-enabled = true
-
-[cluster.tls]
-enabled = true
-self_signed = false
-cert_file = "/etc/iggy/tls/node.crt"
-key_file = "/etc/iggy/tls/node.key"
-ca_file = "/etc/iggy/tls/ca.crt"
-```
-
-Enable authentication and TLS on every node in one coordinated restart.
-
-## Default consensus timing
-
-The defaults are configurable in `[cluster]`:
-
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `heartbeat_timeout` | `5s` | Start a view change after primary silence |
-| `commit_broadcast_interval` | `500ms` | Broadcast the primary commit point |
-| `prepare_retransmit_interval` | `250ms` | Retry unacknowledged prepares |
-| `view_change_retransmit_interval` | `500ms` | Retry view-change messages |
-| `view_change_status_timeout` | `5s` | Restart a stalled view change |
-| `request_start_view_retransmit_interval` | `1s` | Probe the current primary during recovery |
-| `repair_retry_interval` | `1s` | Retry a stalled WAL repair |
-| `repair_chunk_max` | `128` | Limit prepares served per repair round |
-
-Keep the defaults unless tests show a specific scheduling or network problem.
-
-## Path to v1
-
-`server-ng` is a temporary development name. The plan for Iggy v1 is:
-
-1. finish and stabilize the VSR server
-2. make it the only server implementation
-3. remove the current `core/server`
-4. rename `core/server-ng` to `core/server`
-5. rename `iggy-server-ng` to `iggy-server`
-
-Expect the paths and binary names on this page to change when that transition lands.
-
-## Follow development
-
-- [Current `server-ng` source](https://github.com/apache/iggy/tree/master/core/server-ng)
-- [All Apache Iggy pull requests](https://github.com/apache/iggy/pulls)
-- [Configuration hardening](https://github.com/apache/iggy/pull/3756)
-- [Session resume across restarts](https://github.com/apache/iggy/pull/3753)
-- [Follower HTTP forwarding](https://github.com/apache/iggy/pull/3744)
-- [Rust BDD coverage for VSR](https://github.com/apache/iggy/pull/3732)
-- [VSR-enabled CLI](https://github.com/apache/iggy/pull/3679)
+- [Deploy a cluster](/docs/clustering/deploy): build the binaries and run a three-node cluster
+- [Configuration](/docs/clustering/configuration): every `[cluster]` setting and its validation rules
+- [Security](/docs/clustering/security): replica authentication, key rotation, and TLS
+- [Client failover](/docs/clustering/client-failover): reads, writes, and leader redirection from the client side
