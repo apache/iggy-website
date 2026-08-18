@@ -77,6 +77,12 @@ header#nd-nav button {
     font-size: 0.9375rem;
 }
 
+/* The default fumadocs mobile navbar background is only 80% opaque, which
+   lets page content ghost through while scrolling underneath. Force it opaque. */
+header#nd-subnav {
+    background-color: var(--color-fd-background) !important;
+}
+
 figure.shiki {
     border-color: var(--color-fd-border) !important;
     box-shadow: none !important;

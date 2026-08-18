@@ -129,7 +129,7 @@ iggy message send [OPTIONS] <STREAM_ID> <TOPIC_ID> [MESSAGES]...
 | Flag | Description |
 |------|-------------|
 | `-p, --partition-id <ID>` | Send to a specific partition |
-| `-m, --message-key <KEY>` | Let the server pick the partition from the key (mutually exclusive with `--partition-id`) |
+| `-m, --message-key <KEY>` | Route by message key, hashed to a partition client-side (mutually exclusive with `--partition-id`) |
 | `-H, --headers <KEY:KIND:VALUE>` | Message headers, comma separated. Kinds: `raw`, `string`, `bool`, `int8`-`int128`, `uint8`-`uint128`, `float32`, `float64` |
 | `--input-file <FILE>` | Send messages from a binary file written by `poll --output-file` |
 

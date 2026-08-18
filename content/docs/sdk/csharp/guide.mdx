@@ -424,7 +424,7 @@ Partitioning.EntityIdGuid(Guid.NewGuid())
 Partitioning.EntityIdBytes(new byte[] { 1, 2, 3 })
 ```
 
-Partition selection is resolved **client-side** on both transports; the server never routes. Balanced partitioning is a client-side round-robin over the topic's partitions, and key-based routing hashes the key with xxHash32 modulo the partition count, consistent with the Rust SDK.
+Partition selection is resolved **client-side** on both transports. Balanced partitioning is a client-side round-robin over the topic's partitions, and key-based routing hashes the key with xxHash32 modulo the partition count, consistent with the Rust SDK.
 
 ### User-defined headers
 

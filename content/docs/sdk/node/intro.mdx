@@ -79,6 +79,8 @@ console.log(`Sent ${messages.length} message(s)`);
 await client.destroy();
 ```
 
+The Node SDK sends the partitioning choice on the wire, and the server resolves balanced and key routing at admission (the Rust, C#, Java, and Go clients instead resolve them client-side).
+
 ### Consumer
 
 ```typescript

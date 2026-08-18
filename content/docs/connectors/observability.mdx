@@ -45,14 +45,12 @@ Runtime-level gauges:
 
 Per-connector counters, labeled with `connector_key` and `connector_type` (`source` or `sink`):
 
-- `iggy_connector_messages_produced_total_total` - messages received from a source plugin's poll.
-- `iggy_connector_messages_sent_total_total` - messages sent to Iggy (source).
-- `iggy_connector_messages_consumed_total_total` - messages consumed from Iggy (sink).
-- `iggy_connector_messages_processed_total_total` - messages processed and delivered to the sink plugin.
-- `iggy_connector_messages_filtered_total_total` - messages intentionally dropped by transforms.
-- `iggy_connector_errors_total_total` - errors encountered.
-
-The doubled `_total_total` suffix is what a scraper sees today: the counters are registered under names that already end in `_total`, and the Prometheus client library appends its own `_total` suffix to every counter at encode time. The names may normalize to a single suffix in a future release, so check `/metrics` after upgrading.
+- `iggy_connector_messages_produced_total` - messages received from a source plugin's poll.
+- `iggy_connector_messages_sent_total` - messages sent to Iggy (source).
+- `iggy_connector_messages_consumed_total` - messages consumed from Iggy (sink).
+- `iggy_connector_messages_processed_total` - messages processed and delivered to the sink plugin.
+- `iggy_connector_messages_filtered_total` - messages intentionally dropped by transforms.
+- `iggy_connector_errors_total` - errors encountered.
 
 Per-batch stage timings are recorded in the `iggy_connector_stage_duration_seconds` histogram, labeled with `connector_key`, `connector_type`, and `stage` (`prepare`, `ffi`, `decode`, `iggy_send`, `state_save`, `total`), with buckets ranging from 50 microseconds to 5 seconds.
 

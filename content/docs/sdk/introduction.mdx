@@ -114,3 +114,5 @@ When sending messages, you can control partition routing:
 | `partition_id(n)` | Send to a specific partition |
 | `balanced()` | Round-robin across partitions |
 | `messages_key(key)` | Hash-based routing by key |
+
+Strategies resolve in the client on binary transports, and on the server for the HTTP API and the Node SDK.

@@ -203,10 +203,13 @@ async fn main() -> Result<(), IggyError> {
         // `Partitioning` specifies to which partition the messages
         // should be sent.
         // It has the following options:
-        // - `Balanced` - round-robin dispatch.
+        // - `Balanced` - the client picks the next partition with a
+        //    local round-robin cursor.
         // - `PartitionId` - the partition ID is provided by the client.
-        // - `MessagesKey` - the partition ID is calculated by the server
-        //    using the hash of the provided messages key.
+        // - `MessagesKey` - the client hashes the provided messages key
+        //    to a partition ID.
+        // The partition count is cached per topic and not refreshed
+        // while the client stays connected.
         .partitioning(Partitioning::balanced())
         // Sets the retry policy (maximum number of retries and interval)
         // in case of messages sending failure.
