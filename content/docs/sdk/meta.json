@@ -1,4 +1,4 @@
 {
   "title": "SDK",
-  "pages": ["introduction", "connection-strings", "rust", "python", "java", "go", "node", "csharp", "cpp"]
+  "pages": ["introduction", "connection-strings", "rust", "python", "java", "go", "node", "csharp", "cpp", "php"]
 }

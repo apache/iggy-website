@@ -96,7 +96,7 @@ Values a client may send:
 | 161 | `StoreConsumerOffset` | partition |
 | 162 | `DeleteConsumerOffset` | partition |
 
-Value 0 is reserved and rejected. Values 64..67 are server-internal and refused from clients.
+Value 0 is reserved and rejected. The 64..127 range is reserved for server-internal operations (currently 64 through 68 are assigned) and every value in it is refused from clients.
 
 The planes matter for delivery semantics:
 

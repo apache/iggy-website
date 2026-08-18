@@ -12,7 +12,7 @@ key = "stdout-sink"
 enabled = true
 version = 1
 name = "Stdout Sink"
-path = "/path/to/libstdout_sink.so"
+path = "/path/to/libiggy_connector_stdout_sink.so"
 verbose = false
 
 [[streams]]
@@ -31,4 +31,4 @@ print_payload = true
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `print_payload` | bool | `true` | Whether to print the message payload to stdout |
+| `print_payload` | bool | `false` | Whether to print the message payload to stdout |

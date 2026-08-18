@@ -1,0 +1,68 @@
+---
+title: SurrealDB Sink
+---
+
+The SurrealDB sink connector writes messages from Iggy streams into SurrealDB over the HTTP API. Each batch becomes one SurrealQL bulk `INSERT IGNORE`, and every record gets a deterministic record id derived from stream, topic, partition, offset, and message id, so replayed batches are idempotent and existing records are left untouched.
+
+This page is a curated subset of the documentation. The canonical reference is the upstream [surrealdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/surrealdb_sink) in the `apache/iggy` repository.
+
+## Configuration
+
+```toml
+type = "sink"
+key = "surrealdb"
+enabled = true
+version = 0
+name = "SurrealDB sink"
+path = "target/release/libiggy_connector_surrealdb_sink"
+plugin_config_format = "toml"
+
+[[streams]]
+stream = "example_stream"
+topics = ["example_topic"]
+schema = "json"
+batch_length = 1000
+poll_interval = "5ms"
+consumer_group = "surrealdb_sink_connector"
+
+[plugin_config]
+endpoint = "127.0.0.1:8000"
+namespace = "iggy"
+database = "connectors"
+table = "iggy_messages"
+username = "root"
+password = "root"
+auto_define_table = true
+batch_size = 1000
+```
+
+### Common Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `endpoint` | string | **required** | SurrealDB HTTP host and port, e.g. `127.0.0.1:8000`; full `http://` / `https://` URLs also accepted |
+| `namespace` | string | **required** | Namespace selected at startup |
+| `database` | string | **required** | Database selected at startup |
+| `table` | string | **required** | Target table; must be a safe SurrealQL identifier |
+| `username` / `password` | string | none | Optional credentials |
+| `auth_scope` | string | `root` | `root`, `namespace`, `database`, or `none` |
+| `use_tls` | bool | `false` | Use `https://` when `endpoint` has no scheme |
+| `auto_define_table` | bool | `false` | Run `DEFINE TABLE IF NOT EXISTS <table> SCHEMALESS` at startup |
+| `define_indexes` | bool | `false` | Define an offset index on stream/topic/partition/offset; requires `auto_define_table` |
+| `batch_size` | u32 | `1000` | Maximum records per SurrealDB request |
+| `payload_format` | string | `auto` | `auto`, `json`, `text`, `base64`, or `binary` (alias for `base64`) |
+| `include_metadata` | bool | `true` | Store stream/topic/partition/offset/timestamp/schema fields |
+
+The `include_headers`, `include_checksum`, and `include_origin_timestamp` flags also default to `true`. Retry and timeout options: `query_timeout` (`30s`), `max_retries` (`3` total attempts), `retry_delay` (`100ms`), `max_retry_delay` (`5s`), plus `verbose_logging`. See the upstream [surrealdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/surrealdb_sink) for the full table.
+
+## Stored Shape
+
+With metadata enabled, each record contains the deterministic `id`, the `iggy_message_id`, provenance fields (`iggy_stream`, `iggy_topic`, `iggy_partition_id`, `iggy_offset`, `iggy_timestamp`, `iggy_origin_timestamp`, `iggy_checksum`, `iggy_schema`), `iggy_headers`, the `payload`, and its `payload_encoding`. With `payload_format = "auto"`, JSON payloads are stored as queryable SurrealDB values, text payloads as strings, and binary payloads as base64 strings.
+
+## Delivery Semantics
+
+The runtime commits consumer offsets before `consume()` runs, so persistent write failures are **at-most-once**: they are logged but not redelivered. Transient failures are retried inside the batch with capped exponential backoff. Because records use deterministic ids and `INSERT IGNORE`, a replayed batch (for example after a connector restart re-reads uncommitted messages) does not create duplicates.
+
+## Transforms
+
+Transforms can be applied before writing to SurrealDB. See the [transforms documentation](/docs/connectors/transforms) for the available types and their configuration.

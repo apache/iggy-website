@@ -1,0 +1,73 @@
+---
+title: ClickHouse Sink
+---
+
+The ClickHouse sink connector consumes messages from Iggy streams and inserts them into ClickHouse tables over the HTTP interface. It supports three insert formats: `json_each_row` (default), `row_binary`, and `string` passthrough for pre-formatted CSV/TSV/JSON payloads.
+
+This page is a curated subset of the documentation. The canonical reference is the upstream [clickhouse_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/clickhouse_sink) in the `apache/iggy` repository.
+
+## Configuration
+
+```toml
+type = "sink"
+key = "clickhouse"
+enabled = true
+version = 0
+name = "ClickHouse sink"
+path = "target/release/libiggy_connector_clickhouse_sink"
+plugin_config_format = "toml"
+
+[[streams]]
+stream = "example_stream"
+topics = ["example_topic"]
+schema = "json"
+batch_length = 1000
+poll_interval = "5ms"
+consumer_group = "clickhouse_sink_connector"
+
+[plugin_config]
+url = "http://localhost:8123"
+database = "default"
+username = "default"
+password = ""
+table = "events"
+insert_format = "json_each_row"
+timeout_seconds = 30
+max_retries = 3
+retry_delay = 1  # seconds
+verbose_logging = false
+```
+
+### Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `url` | string | **required** | ClickHouse HTTP endpoint |
+| `table` | string | **required** | Target table name |
+| `database` | string | `default` | ClickHouse database |
+| `username` | string | `default` | ClickHouse username |
+| `password` | string | `""` | ClickHouse password |
+| `insert_format` | string | `json_each_row` | `json_each_row`, `row_binary`, or `string` |
+| `string_format` | string | `json_each_row` | ClickHouse format for `string` mode: `json_each_row`, `csv`, or `tsv` |
+| `timeout_seconds` | u64 | `30` | HTTP request timeout |
+| `max_retries` | u32 | `3` | Total insert attempts on transient errors |
+| `retry_delay` | u64 | `1` | Delay between retries, in seconds |
+| `verbose_logging` | bool | `false` | Log inserts at info level instead of debug |
+
+## Insert Formats
+
+- **`json_each_row`** (default): accepts JSON payloads. Each message is sent as one JSON object per line using ClickHouse's `JSONEachRow` format. ClickHouse coerces JSON values to the column types, so the table can have any schema.
+- **`row_binary`**: accepts JSON payloads and serializes them to ClickHouse's `RowBinaryWithDefaults` binary format, which is more efficient than JSON at high volume. The table must already exist; its schema is fetched from `system.columns` and validated at startup. Requires ClickHouse 23.7 or newer. Columns with a `DEFAULT` expression may be omitted from messages; `MATERIALIZED`, `ALIAS`, and `EPHEMERAL` columns are dropped from the schema. Unsupported column types (128/256-bit integers, `Variant`, native `JSON`, geo types) cause startup to fail.
+- **`string`**: accepts text payloads and passes them through unchanged. Use `string_format` to tell ClickHouse which format the payload is in (`csv`, `tsv`, or `json_each_row`).
+
+In `row_binary` mode the schema is captured once at startup and the insert stream is positional. An `ALTER TABLE` on the target while the connector runs can silently corrupt inserted rows, so restart the connector after any schema change. The self-describing `json_each_row` format (including `string` mode with `string_format = "json_each_row"`) maps values by field name and tolerates schema changes; `string` passthrough with `csv` or `tsv` sends plain positional ClickHouse formats mapped by the current table column order.
+
+## Error Handling & Delivery Semantics
+
+Failed inserts are attempted up to `max_retries` total times with exponential backoff and full jitter, starting from `retry_delay`. A message whose payload type does not match the chosen format is skipped with an error log and the rest of the batch is still sent, in every mode. In `row_binary` mode there is an additional failure class: a JSON row whose values cannot be converted to the column types fails the whole batch (a half-written binary row would corrupt the rows after it).
+
+Delivery is **at-least-once**: retries resend the full batch without an `insert_deduplication_token`, so a lost acknowledgement can insert the same rows twice. `ReplicatedMergeTree` tables suppress duplicates via implicit block-level deduplication in the common retry case; plain `MergeTree` tables store them. If duplicates matter, deduplicate at the table engine or query level as described in the upstream [clickhouse_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/clickhouse_sink).
+
+## Transforms
+
+Transforms can be applied before inserting into ClickHouse. See the [transforms documentation](/docs/connectors/transforms) for the available types and their configuration.

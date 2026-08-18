@@ -2,7 +2,7 @@
 title: Examples
 ---
 
-Working examples are available in the [examples/node](https://github.com/apache/iggy/tree/master/examples/node) directory, written in TypeScript. The following example sets are included:
+Working examples are available in the [examples/node](https://github.com/apache/iggy/tree/master/examples/node) directory, written in TypeScript. They are exercised by CI, so they always match the current SDK:
 
 - **getting-started** - basic producer and consumer
 - **basic** - producer and consumer with utilities
@@ -10,91 +10,36 @@ Working examples are available in the [examples/node](https://github.com/apache/
 - **message-headers** - custom message headers
 - **multi-tenant** - multi-tenant streaming setup
 - **tcp-tls** - TLS-encrypted TCP connections
-- **stream-builder** - stream builder API usage
+- **stream-builder** - end-to-end walkthrough: create a stream and topic, produce, and consume
 - **sink-data-producer** - bulk data generation for sink connectors
 
-## Producer
+## Running the examples
 
-```typescript
-import { Client, Partitioning } from 'apache-iggy';
+Start an Iggy server first:
 
-const STREAM_NAME = 'sample-stream';
-const TOPIC_NAME = 'sample-topic';
+```bash
+# Latest release
+docker run --rm \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -p 8090:8090 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  apache/iggy:latest
 
-const client = new Client({
-  transport: 'TCP',
-  options: { port: 8090, host: '127.0.0.1' },
-  credentials: { username: 'iggy', password: 'iggy' },
-});
-
-// Re-running this example is fine: only create what is missing.
-const streams = await client.stream.list();
-const stream =
-  streams.find((s) => s.name === STREAM_NAME) ??
-  (await client.stream.create({ name: STREAM_NAME }));
-
-const topics = await client.topic.list({ streamId: stream.id });
-const topic =
-  topics.find((t) => t.name === TOPIC_NAME) ??
-  (await client.topic.create({
-    streamId: stream.id,
-    name: TOPIC_NAME,
-    partitionCount: 1,
-    compressionAlgorithm: 1,
-    replicationFactor: 1,
-  }));
-
-const messages = Array.from({ length: 10 }, (_, i) => ({
-  id: i + 1,
-  headers: [],
-  payload: `message-${i + 1}`,
-}));
-
-await client.message.send({
-  streamId: stream.id,
-  topicId: topic.id,
-  messages,
-  partition: Partitioning.Balanced,
-});
-
-console.log(`Sent ${messages.length} message(s)`);
-
-await client.destroy();
+# Or from the repository source
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-## Consumer
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and set the `iggy`/`iggy` root credentials the examples default to.
 
-```typescript
-import { Client, PollingStrategy, Consumer } from 'apache-iggy';
+Then, from `examples/node`, install the dependencies and run a producer/consumer pair:
 
-const STREAM_NAME = 'sample-stream';
-const TOPIC_NAME = 'sample-topic';
-const PARTITION_ID = 0;
-
-const client = new Client({
-  transport: 'TCP',
-  options: { port: 8090, host: '127.0.0.1' },
-  credentials: { username: 'iggy', password: 'iggy' },
-});
-
-// Next with autocommit continues from this consumer's last committed offset,
-// so each run picks up where the previous one finished.
-const polledMessages = await client.message.poll({
-  streamId: STREAM_NAME,
-  topicId: TOPIC_NAME,
-  consumer: Consumer.Single,
-  partitionId: PARTITION_ID,
-  pollingStrategy: PollingStrategy.Next,
-  count: 10,
-  autocommit: true,
-});
-
-for (const message of polledMessages.messages) {
-  const payload = message.payload.toString('utf8');
-  console.log(`Offset: ${message.headers.offset}, Payload: ${payload}`);
-}
-
-await client.destroy();
+```bash
+npm ci
+npm run test:getting-started:producer
+npm run test:getting-started:consumer
 ```
 
-For the full source code, see the [examples/node](https://github.com/apache/iggy/tree/master/examples/node) directory.
+Each example set has a matching `test:<name>` script in `examples/node/package.json`.
+
+For the quick-start code itself, see the [Node.js SDK intro](/docs/sdk/node/intro).

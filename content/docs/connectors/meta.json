@@ -1,4 +1,4 @@
 {
   "title": "Connectors",
-  "pages": ["introduction", "runtime", "sdk", "sources", "sinks"]
+  "pages": ["introduction", "runtime", "sdk", "transforms", "observability", "sources", "sinks"]
 }

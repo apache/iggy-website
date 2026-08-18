@@ -12,22 +12,23 @@ The [docker image](https://hub.docker.com/r/apache/iggy-mcp) is available, and c
 
 ## Configuration
 
-The minimal viable configuration requires at least the Iggy credentials, to create the connection with the running Iggy server using TCP with which the MCP server will communicate. You can choose between HTTP and STDIO transports (e.g. for the local usage with tools such as [Claude Desktop](https://claude.ai/download) choose `stdio`).
+The minimal viable configuration requires at least the Iggy credentials, to create the connection with the running Iggy server using TCP with which the MCP server will communicate. You can choose between HTTP (the default) and STDIO transports (e.g. for the local usage with tools such as [Claude Desktop](https://claude.ai/download) choose `stdio`).
 
 ```toml
-transport = "stdio" # http or stdio are supported
+transport = "http" # http (default) or stdio are supported
 
 [iggy]
 address = "localhost:8090" # TCP address of the Iggy server
 username = "iggy"
 password = "iggy"
 # token = "secret" # Personal Access Token (PAT) can be used instead of username and password
+# token = "file:/run/secrets/iggy_pat" # PAT can also be read from a file
 # consumer = "iggy-mcp" # Optional consumer name
 
-# TLS settings for connecting to Iggy server
-# [iggy.tls]
-# enabled = false
-# cert_file = "path/to/cert.pem"
+[iggy.tls] # Optional TLS configuration for the Iggy TCP connection
+enabled = false
+ca_file = "path/to/ca.pem"
+domain = "" # Optional domain for TLS connection
 
 [http] # Optional HTTP API configuration
 address = "127.0.0.1:8082"
@@ -44,8 +45,8 @@ allow_private_network = false
 
 [http.tls] # Optional TLS configuration for HTTP API
 enabled = false
-cert = "core/certs/iggy_cert.pem"
-key = "core/certs/iggy_key.pem"
+cert_file = "core/certs/iggy_cert.pem"
+key_file = "core/certs/iggy_key.pem"
 
 [permissions]
 create = true
@@ -56,9 +57,19 @@ delete = true
 [telemetry] # Optional OpenTelemetry integration
 enabled = false
 service_name = "iggy-mcp"
+
+[telemetry.logs]
+transport = "grpc" # grpc or http
+endpoint = "http://localhost:4317"
+
+[telemetry.traces]
+transport = "grpc" # grpc or http
+endpoint = "http://localhost:4317"
 ```
 
-Keep in mind that either of `toml`, `yaml`, or `json` formats are supported for the configuration file. The path to the configuration can be overriden by `IGGY_MCP_CONFIG_PATH` environment variable. Each configuration section can be also additionally updated by using the following convention `IGGY_MCP_SECTION_NAME.KEY_NAME` e.g. `IGGY_MCP_IGGY_USERNAME` and so on.
+The configuration file must be in the `toml` format. The path to the configuration can be overridden by `IGGY_MCP_CONFIG_PATH` environment variable. Each setting can be also additionally overridden by using the following convention `IGGY_MCP_<SECTION>_<KEY>` e.g. `IGGY_MCP_IGGY_USERNAME`, `IGGY_MCP_HTTP_ADDRESS` and so on. Environment variables can also be loaded from a dotenv file: point `IGGY_MCP_ENV_PATH` at the file, otherwise a `.env` file in the current working directory is loaded automatically.
+
+The `token` value can be either a literal PAT or a `file:` reference such as `token = "file:/run/secrets/iggy_pat"`, in which case the token is read from the given file (`~` is expanded to the home directory).
 
 ## Available tools
 
@@ -183,9 +194,22 @@ Run the MCP server as a container:
 
 ```bash
 docker run -e IGGY_MCP_TRANSPORT=http \
+  -e IGGY_MCP_HTTP_ADDRESS=0.0.0.0:8082 \
   -e IGGY_MCP_IGGY_ADDRESS=iggy-server:8090 \
   -e IGGY_MCP_IGGY_USERNAME=iggy \
   -e IGGY_MCP_IGGY_PASSWORD=iggy \
   -p 8082:8082 \
   apache/iggy-mcp
 ```
+
+The default HTTP address is `127.0.0.1:8082`, which inside a container is unreachable from the outside, so `IGGY_MCP_HTTP_ADDRESS=0.0.0.0:8082` is required for the published port to work.
+
+## Systemd integration
+
+Build with the `systemd` cargo feature to enable systemd readiness and watchdog notifications:
+
+```bash
+cargo build --bin iggy-mcp --release --features iggy-mcp/systemd
+```
+
+The MCP server then behaves the same way the Iggy server does under systemd.

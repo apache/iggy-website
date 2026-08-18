@@ -1,1 +1,1 @@
-{"title": "Sinks", "pages": ["sink", "elasticsearch", "postgres", "mongodb", "quickwit", "iceberg", "stdout"]}
+{"title": "Sinks", "pages": ["sink", "clickhouse", "delta", "doris", "elasticsearch", "http", "iceberg", "influxdb", "meilisearch", "mongodb", "postgres", "quickwit", "s3", "stdout", "surrealdb"]}
