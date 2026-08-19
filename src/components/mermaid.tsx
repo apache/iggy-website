@@ -44,14 +44,14 @@ function MermaidSVG({ chart }: { chart: string }) {
 
   const svg = use(
     cacheRender(`${chart}-${resolvedTheme}`, async () => {
-      const { renderMermaid } = await import("beautiful-mermaid");
-      return renderMermaid(chart, {
+      const { renderMermaidSVGAsync } = await import("beautiful-mermaid");
+      return renderMermaidSVGAsync(chart, {
         bg,
         fg,
         muted,
         line,
         accent,
-        font: "Geist Sans, sans-serif",
+        font: "sans-serif",
         transparent: true,
       });
     }),
