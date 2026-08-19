@@ -101,7 +101,7 @@ Run several instances of the consumer to see the group load-balance partitions b
 
 ## Typed messages
 
-A typed publisher/consumer pair that (de)serializes a record as JSON. Note that the typed builders are configured via statements rather than one fluent chain - the `With*` methods return the untyped base builder, so `Build()` **must be called on the typed builder variable** (see [Typed consumer](/docs/sdk/csharp/high-level-sdk#typed-consumer)):
+A typed publisher/consumer pair that (de)serializes a record as JSON. The typed builders are configured via statements rather than one fluent chain - the `With*` methods return the untyped base builder, so `Build()` **must be called on the typed builder variable** (see [Typed consumer](/docs/sdk/csharp/high-level-sdk#typed-consumer)):
 
 ```csharp
 using System.Buffers;

@@ -99,7 +99,7 @@ The TCP client pings the server on its own every `HeartbeatInterval` while conne
 | `UseExponentialBackoff` | `bool` | `true` | Use exponential backoff for delays |
 | `BackoffMultiplier` | `double` | `2.0` | Multiplier for exponential backoff |
 
-> **Warning:** Reconnection is **on by default** with **unlimited retries**. Only a failed dial is retried; a rejected certificate, bad credentials, or a missing leader is thrown right away. With the default `MaxRetries = 0` an unreachable server is retried forever, so a request that passes no `CancellationToken` waits for as long as the server stays down. Set `MaxRetries` or pass a token to bound the wait, and set `Enabled = false` to opt out of reconnection entirely. Reconnection only replays a request when [auto-login](#autologinsettings) can restore the session; a client that logged in by hand fails fast on a lost connection.
+> **Warning:** Reconnection is **on by default** with **unlimited retries**. Only a failed dial is retried. A rejected certificate, bad credentials, or a missing leader is thrown right away. With the default `MaxRetries = 0` an unreachable server is retried forever, so a request that passes no `CancellationToken` waits for as long as the server stays down. Set `MaxRetries` or pass a token to bound the wait, and set `Enabled = false` to opt out of reconnection entirely. Reconnection only replays a request when [auto-login](#autologinsettings) can restore the session. A client that logged in by hand fails fast on a lost connection.
 
 #### `AutoLoginSettings`
 
@@ -110,7 +110,7 @@ The TCP client pings the server on its own every `HeartbeatInterval` while conne
 | `Password` | `string` | `""` | Password for auto-login |
 | `PersonalAccessToken` | `string` | `""` | Personal access token to sign in with instead of a username and password; takes precedence over them when set |
 
-All properties are init-only: build the settings with an object initializer or the static factories `AutoLoginSettings.For(username, password)` and `AutoLoginSettings.ForPersonalAccessToken(token)`. Configuring auto-login is what enables transparent request replay after a reconnect; without stored credentials a reconnect **cannot restore the session**, and requests fail until the client logs in again.
+All properties are init-only: build the settings with an object initializer or the static factories `AutoLoginSettings.For(username, password)` and `AutoLoginSettings.ForPersonalAccessToken(token)`. Configuring auto-login is what enables transparent request replay after a reconnect. Without stored credentials a reconnect **cannot restore the session**, and requests fail until the client logs in again.
 
 ## Message encryption
 
@@ -344,7 +344,7 @@ await client.CreateTopicAsync(
 
 A property left `null` emits no key and keeps the server default. These keys are **settable at creation only**: `UpdateTopicAsync` refuses them by name, the same way it refuses a key outside the server's catalog, so a mistyped key fails the call instead of being silently ignored. Use [`DescribeOptionsAsync`](#option-catalog) to enumerate the keys a server accepts.
 
-There is **no on-demand flush command**; durability is configured per topic through `EnforceFsync` and the flush thresholds above.
+There is **no on-demand flush command**. Durability is configured per topic through `EnforceFsync` and the flush thresholds above.
 
 ```csharp
 var topicId = Identifier.String("my-topic");
@@ -424,7 +424,7 @@ Partitioning.EntityIdGuid(Guid.NewGuid())
 Partitioning.EntityIdBytes(new byte[] { 1, 2, 3 })
 ```
 
-Partition selection is resolved **client-side** on both transports; the server never routes. Balanced partitioning is a client-side round-robin over the topic's partitions, and key-based routing hashes the key with xxHash32 modulo the partition count, consistent with the Rust SDK.
+Partition selection is resolved **client-side** on both transports. Balanced partitioning round-robins over the topic's partitions, and key-based routing hashes the key with xxHash32 modulo the partition count, consistent with the Rust SDK.
 
 ### User-defined headers
 

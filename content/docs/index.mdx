@@ -22,7 +22,7 @@ Every partition is an append-only log. Messages are **immutable** once written, 
 
 | Capability | Details |
 |-----------|---------|
-| **Transport** | TCP, QUIC, WebSocket, HTTP with custom binary protocol |
+| **Transport** | TCP, QUIC, WebSocket (custom binary protocol), HTTP (REST) |
 | **Performance** | Thread-per-core + io_uring, zero-copy deserialization, custom 4 GiB memory pool |
 | **Security** | TLS on all transports, Argon2id hashing, AES-256-GCM encryption, [granular RBAC](/docs/server/security) with per-stream/per-topic permissions |
 | **Connectors** | [14 sink and 4 source plugins](/docs/connectors/introduction) including PostgreSQL, MongoDB, Elasticsearch, ClickHouse, Apache Iceberg, S3, with data transforms |

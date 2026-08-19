@@ -22,7 +22,7 @@ The examples below connect with the `iggy`/`iggy` root credentials, which **only
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-(or with `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` set). Otherwise root gets a generated password and the examples fail with `InvalidCredentials`.
+Setting `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` works too. Otherwise root gets a generated password and the examples fail with `InvalidCredentials`.
 
 ## IggyStream Builder
 
@@ -70,9 +70,9 @@ Here, we use the default configuration to get started quickly, but you can alway
 (`IggyStreamConfig::from_stream_topic` or the two per-side configs) to fit your requirements. If you already have a
 connected client, use `IggyStream::build(&client, &stream_config)` instead, which returns just the producer and consumer.
 
-Note that the consumer is bound as `mut`: `consume_messages` (and the underlying message stream) requires **mutable access**.
+The consumer is bound as `mut`: `consume_messages` (and the underlying message stream) requires **mutable access**.
 
-The `consume_messages` method is not part of the IggyConsumer; it comes from the `IggyConsumerMessageExt`
+The `consume_messages` method is not part of the IggyConsumer. It comes from the `IggyConsumerMessageExt`
 trait, which is re-exported by `iggy::prelude`. The PrintEventConsumer implements the MessageConsumer trait
 and is invoked to process each incoming message. A simple implementation is shown below:
 
@@ -203,10 +203,13 @@ async fn main() -> Result<(), IggyError> {
         // `Partitioning` specifies to which partition the messages
         // should be sent.
         // It has the following options:
-        // - `Balanced` - round-robin dispatch.
+        // - `Balanced` - the client picks the next partition with a
+        //    local round-robin cursor.
         // - `PartitionId` - the partition ID is provided by the client.
-        // - `MessagesKey` - the partition ID is calculated by the server
-        //    using the hash of the provided messages key.
+        // - `MessagesKey` - the client hashes the provided messages key
+        //    to a partition ID.
+        // The partition count is cached per topic and not refreshed
+        // while the client stays connected.
         .partitioning(Partitioning::balanced())
         // Sets the retry policy (maximum number of retries and interval)
         // in case of messages sending failure.

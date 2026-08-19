@@ -4,7 +4,7 @@ title: Python SDK
 
 The Iggy Python SDK is a client library that allows you to interact with the Iggy API from your Python application. It is built as a PyO3 wrapper around the Rust SDK, which means it supports TCP, QUIC, HTTP, and WebSocket transports via connection strings. The package is available on [PyPI](https://pypi.org/project/apache-iggy/) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/master/foreign/python).
 
-Because the wheel bundles the Rust SDK, it speaks the current Iggy wire protocol only and does not fall back to older formats. Keep the client and server versions in step: pair the newest wheel with the newest server.
+Because the wheel bundles the Rust SDK, it speaks only the current Iggy wire protocol and doesn't fall back to older formats. Keep the client and server versions in step: pair the newest wheel with the newest server.
 
 ## Installation
 
@@ -114,13 +114,11 @@ asyncio.run(main())
 
 ## Beyond the basics
 
-The SDK covers much more than the quick start above:
-
 - **TLS**: construct the client from a `TcpConfig` instead of a connection string and set `tls_enabled` plus `tls_ca_file`. The [getting-started example](https://github.com/apache/iggy/tree/master/examples/python/getting-started) shows the full setup.
 - **Consumer groups**: `client.consumer_group(...)` returns an `IggyConsumer` that creates and joins the group by default and commits offsets according to the configured `AutoCommit` mode.
-- **User headers**: `SendMessage(data, user_headers=...)` accepts a plain `dict` with `str`, `bytes`, `bool`, `int`, or `float` values; `HeaderKey`/`HeaderValue` give explicit control over the wire type. See the [message-headers examples](https://github.com/apache/iggy/tree/master/examples/python/message-headers).
-- **Topic options**: `create_topic(..., options=...)` accepts extra option keys as a `dict[str, str]`, validated against the server's catalog; `client.describe_options("topic")` lists the keys a server accepts.
-- **Administration**: user and permission management. Personal access tokens can be used for login via `AutoLogin.personal_access_token(...)` in the connection config; PAT management is not exposed yet.
+- **User headers**: `SendMessage(data, user_headers=...)` accepts a plain `dict` with `str`, `bytes`, `bool`, `int`, or `float` values. `HeaderKey`/`HeaderValue` give explicit control over the wire type. See the [message-headers examples](https://github.com/apache/iggy/tree/master/examples/python/message-headers).
+- **Topic options**: `create_topic(..., options=...)` accepts extra option keys as a `dict[str, str]`, validated against the server's catalog. `client.describe_options("topic")` lists the keys a server accepts.
+- **Administration**: user and permission management. Personal access tokens can be used for login via `AutoLogin.personal_access_token(...)` in the connection config. PAT management isn't exposed yet.
 
 ## Examples
 

@@ -30,7 +30,7 @@ const pkgInfo: Record<string, { install: string; url: string; label: string }> =
   "Node.js": { install: "npm install apache-iggy", url: "https://www.npmjs.com/package/apache-iggy", label: "npm" },
   "C#": { install: "dotnet add package Apache.Iggy", url: "https://www.nuget.org/packages/Apache.Iggy/", label: "NuGet" },
   "PHP": { install: "cargo php install --release --yes", url: "https://github.com/apache/iggy/tree/master/foreign/php", label: "GitHub" },
-  "C++ (WIP)": { install: "git clone https://github.com/apache/iggy", url: "https://github.com/apache/iggy/tree/master/foreign/cpp", label: "GitHub" },
+  "C++": { install: "git clone https://github.com/apache/iggy", url: "https://github.com/apache/iggy/tree/master/foreign/cpp", label: "GitHub" },
 };
 
 const snippets = [
@@ -244,7 +244,7 @@ $client->sendMessages(
 );`,
   },
   {
-    lang: "C++ (WIP)",
+    lang: "C++",
     file: "producer.cpp",
     href: "/docs/sdk/cpp/intro",
     code: `#include "lib.rs.h"

@@ -14,7 +14,7 @@ The server validates the whole section at boot and **refuses to start** on an in
 | `enabled` | `false` | Enables cluster mode. When disabled, the node runs single-node and the rest of the section is mostly inert. |
 | `name` | `"iggy-cluster"` | Unique cluster name shared by every node. Prevents accidental cross-cluster communication. |
 
-> `cluster.name` is a **permanent on-disk identity**, not a label. It is hashed into the cluster id stamped into every metadata and partition superblock on first boot, and the consensus layer derives its cluster id from the name unconditionally. Nodes with different names cannot connect to each other, and changing the name later makes the server refuse to start against existing data.
+> `cluster.name` is a **permanent on-disk identity**, not a label. It's hashed into the cluster id stamped into every metadata and partition superblock on first boot, and the consensus layer derives its cluster id from the name unconditionally. Nodes with different names cannot connect to each other, and changing the name later makes the server refuse to start against existing data.
 
 ## Consensus timing
 
@@ -38,7 +38,7 @@ Raise `heartbeat_timeout` on oversubscribed hosts where scheduling stalls fake p
 
 Boot-time validation enforces these constraints:
 
-- Every duration must be **nonzero**. The `0`, `disabled`, and `unlimited` sentinels all parse to a zero duration and are rejected; there is no way to switch the liveness window off.
+- Every duration must be **nonzero**. The `0`, `disabled`, and `unlimited` sentinels all parse to a zero duration and are rejected. There's no way to switch the liveness window off.
 - `heartbeat_timeout` must be at least `2s` and at least 4x `commit_broadcast_interval`, so one delayed broadcast never trips an election on a healthy primary.
 - `view_change_status_timeout` must be at least 4x `view_change_retransmit_interval`, so a few dropped view-change messages retransmit instead of escalating into a fresh cluster-wide election.
 - `view_probe_attempts_max` must be between 1 and 100.
@@ -63,9 +63,9 @@ Node name, unique within the roster and non-empty.
 
 ### `ip`
 
-The node's roster address. Replica-to-replica consensus traffic and follower-to-primary HTTP forwarding dial it, so it must be a **literal IPv4 or IPv6 address**; hostnames are rejected when the server resolves the roster at startup.
+The node's roster address. Replica-to-replica consensus traffic and follower-to-primary HTTP forwarding dial it, so it must be a **literal IPv4 or IPv6 address**. Hostnames are rejected when the server resolves the roster at startup.
 
-`ip` is **not the bind interface** for the client transports. `tcp`, `quic`, `http`, and `websocket` bind whatever their own `address` settings say; the roster supplies only their ports. The defaults bind loopback, so a cluster spread across hosts needs each transport's `address` set to `0.0.0.0` or the routable interface. The server warns at startup when a bind cannot serve the advertised `ip`.
+`ip` is **not the bind interface** for the client transports. `tcp`, `quic`, `http`, and `websocket` bind whatever their own `address` settings say. The roster supplies only their ports. The defaults bind loopback, so a cluster spread across hosts needs each transport's `address` set to `0.0.0.0` or the routable interface. The server warns at startup when a bind cannot serve the advertised `ip`.
 
 ### `replica_id`
 
@@ -96,7 +96,7 @@ client_cidr = "10.0.0.0/16"            # in-VPC clients stay private
 address = "10.0.1.5"
 ```
 
-Clients whose transport-level peer IP falls inside `client_cidr` are handed `address` instead of the catch-all. The **longest matching prefix** wins; clients matching no selector fall back to `advertised_address`, then `ip`. `address` takes the same forms as `advertised_address` (literal IP or hostname, never a port).
+Clients whose transport-level peer IP falls inside `client_cidr` are handed `address` instead of the catch-all. The **longest matching prefix** wins. Clients matching no selector fall back to `advertised_address`, then `ip`. `address` takes the same forms as `advertised_address` (literal IP or hostname, never a port).
 
 Rules and caveats:
 

@@ -29,17 +29,17 @@ Which can be used to create the client like this:
 let client = IggyClient::from_connection_string("iggy://iggy:iggy@localhost:8090")?;
 ```
 
-Options are appended as query parameters, for example for TCP:
+Options are appended as query parameters. For TCP:
 
 ```bash
 iggy://iggy:iggy@localhost:8090?tls=true&tls_domain=test.com&reconnection_retries=5&reconnection_interval=5s&reestablish_after=10s&heartbeat_interval=3s&nodelay=true
 ```
 
-The option keys differ per transport (for example QUIC uses `reconnection_max_retries` and `reconnection_reestablish_after` where TCP uses `reconnection_retries` and `reestablish_after`), and unknown keys are rejected as hard errors. See [Connection Strings](/docs/sdk/connection-strings) for the full per-transport option tables and defaults.
+The option keys differ per transport (for example QUIC uses `reconnection_max_retries` and `reconnection_reestablish_after` where TCP uses `reconnection_retries` and `reestablish_after`). Unknown keys are rejected as hard errors. See [Connection Strings](/docs/sdk/connection-strings) for the full per-transport option tables and defaults.
 
 Unless you need to provide a specific implementation of the client-side `Encryptor`, `Partitioner` or adjust some other settings, you should be good to go with the connection string. On the other hand, you can always make use of `IggyClientBuilder::from_connection_string()` to extend the options on top of the provided connection string.
 
-Additionally, the `IggyClient` internally wraps its transport in an `IggyRwLock`, so a single instance is **cheap to clone** and can be shared across multiple tasks. Typically, it's a good idea to create a separate connection for producing and consuming, but it's not a requirement.
+The `IggyClient` internally wraps its transport in an `IggyRwLock`, so a single instance is **cheap to clone** and can be shared across multiple tasks. Typically, it's a good idea to create a separate connection for producing and consuming, but it's not a requirement.
 
 ## Producer
 
@@ -88,9 +88,9 @@ The `background` mode buffers messages and sends them from shard workers, tradin
 | `max_in_flight` | `1` | Maximum batches being sent concurrently. More than 1 can reorder messages when retries occur; `0` means unlimited |
 | `error_callback` | `LogErrorCallback` | Async callback invoked on errors the producer cannot recover from |
 
-Note that `batch_size` limits bytes while `batch_length` limits the message count; whichever limit fires first (including `linger_time`) triggers the flush.
+`batch_size` limits bytes while `batch_length` limits the message count. Whichever limit fires first (including `linger_time`) triggers the flush.
 
-Call `producer.shutdown().await` to flush the background buffer before exiting; dropping the producer without it **silently discards unflushed messages**.
+Call `producer.shutdown().await` to flush the background buffer before exiting. Dropping the producer without it **silently discards unflushed messages**.
 
 ### Send confirmations
 
@@ -169,11 +169,11 @@ Defaults and lesser-known knobs on `IggyConsumerBuilder`:
 
 `AutoCommitWhen` triggers fire while receiving: `PollingMessages`, `ConsumingAllMessages`, `ConsumingEachMessage`, `ConsumingEveryNthMessage(n)`. `AutoCommitAfter` triggers fire after processing: `ConsumingAllMessages`, `ConsumingEachMessage`, `ConsumingEveryNthMessage(n)`.
 
-The `After` and `IntervalOrAfter` variants *only* work with `consume_messages()` from the `IggyConsumerMessageExt` trait (see [Stream Builder](/docs/sdk/rust/stream-builder)); the plain `next()` loop cannot observe when your processing finished.
+The `After` and `IntervalOrAfter` variants *only* work with `consume_messages()` from the `IggyConsumerMessageExt` trait (see [Stream Builder](/docs/sdk/rust/stream-builder)). The plain `next()` loop cannot observe when your processing finished.
 
 ## Raw requests
 
 For custom commands the `IggyClient` exposes two escape hatches below the typed API:
 
-- `send_binary_request(code, payload)` sends a raw binary command and returns the raw response. Binary transports only; on HTTP it returns `FeatureUnavailable`. Login and logout codes are rejected with `InvalidCommand`, use `login_user`/`logout_user` so the SDK session state stays correct. Custom codes are forwarded to the server, which decides whether it implements them.
-- `send_http_request(method, path, body)` invokes an arbitrary HTTP endpoint and returns the raw response body. HTTP transport only; binary transports return `FeatureUnavailable`.
+- `send_binary_request(code, payload)` sends a raw binary command and returns the raw response. Binary transports only. On HTTP it returns `FeatureUnavailable`. Login and logout codes are rejected with `InvalidCommand`, use `login_user`/`logout_user` so the SDK session state stays correct. Custom codes are forwarded to the server, which decides whether it implements them.
+- `send_http_request(method, path, body)` invokes an arbitrary HTTP endpoint and returns the raw response body. HTTP transport only. Binary transports return `FeatureUnavailable`.

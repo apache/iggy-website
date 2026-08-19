@@ -28,6 +28,7 @@ import { notFound } from "next/navigation";
 import { getMDXComponents } from "@/mdx-components";
 import type { Metadata } from "next";
 import { createRelativeLink } from "fumadocs-ui/mdx";
+import * as PageTree from "fumadocs-core/page-tree";
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -37,9 +38,20 @@ export default async function Page(props: {
   if (!page) notFound();
 
   const MDX = page.data.body;
+  const tree = source.getPageTree();
+  const neighbours = PageTree.findNeighbour(tree, page.url);
 
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <DocsPage
+      toc={page.data.toc}
+      full={page.data.full}
+      footer={{
+        items: {
+          previous: withChapter(tree, neighbours.previous),
+          next: withChapter(tree, neighbours.next),
+        },
+      }}
+    >
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
@@ -67,5 +79,26 @@ export async function generateMetadata(props: {
   return {
     title: page.data.title,
     description: page.data.description,
+  };
+}
+
+// Several chapters have pages with identical titles ("Introduction",
+// "Examples"), so a bare title in the prev/next footer is ambiguous.
+// Prefix it with the chapter, i.e. the target's nearest parent folder.
+function withChapter(tree: PageTree.Root, item: PageTree.Item | undefined) {
+  if (!item) return undefined;
+  const parent = PageTree.findParent(tree, item.url);
+  // The tree root is not a chapter; top-level pages keep a bare title.
+  if (!parent || !("type" in parent)) return item;
+  return {
+    ...item,
+    name: (
+      <>
+        <span className="me-1 font-normal text-fd-muted-foreground">
+          {parent.name}:
+        </span>
+        {item.name}
+      </>
+    ),
   };
 }

@@ -21,7 +21,7 @@ The Rust SDK is always the first to receive new features.
 
 ## Prerequisites
 
-The samples across the SDK docs log in with the `iggy`/`iggy` root credentials. These **only exist** when the server is started with the default-credentials flag (or `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` set) on its first boot; otherwise root gets a generated password and the samples fail with `InvalidCredentials`:
+The samples across the SDK docs log in with the `iggy`/`iggy` root credentials. These **only exist** when the server is started with the default-credentials flag (or `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` set) on its first boot. Otherwise root gets a generated password and the samples fail with `InvalidCredentials`:
 
 ```bash
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
@@ -114,3 +114,5 @@ When sending messages, you can control partition routing:
 | `partition_id(n)` | Send to a specific partition |
 | `balanced()` | Round-robin across partitions |
 | `messages_key(key)` | Hash-based routing by key |
+
+Strategies resolve in the client on binary transports, and on the server for the HTTP API and the Node SDK.

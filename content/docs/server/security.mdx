@@ -21,7 +21,7 @@ Or use the `--with-default-root-credentials` flag for development (sets root cre
 
 **Important**: once the data directory exists, environment variable credentials are **ignored**. To reset credentials, you must use the `--fresh` flag (which deletes all data).
 
-The root user **cannot be deleted**, and its permissions cannot be changed: it always holds every permission.
+The root user **cannot be deleted**, and its permissions are fixed: it always holds every permission.
 
 ### Personal Access Tokens (PAT)
 
@@ -89,7 +89,7 @@ Permissions are checked from top to bottom: global, then stream, then topic. A p
 
 If a stream has no entry in the user's stream permissions, only global permissions apply to it. The same holds for topics within a stream.
 
-For example, a user that may only consume from stream 42 needs no global permissions at all: grant stream-scoped `read_stream` and `poll_messages` on stream 42, and the user can read that stream, list its topics, and poll messages from any topic in it, nothing else.
+For example, a user that may only consume from stream 42 needs no global permissions at all: grant stream-scoped `read_stream` and `poll_messages` on stream 42, and the user can read that stream, list its topics, and poll messages from any topic in it. Nothing else.
 
 ## Transport encryption (TLS)
 
@@ -102,7 +102,7 @@ Each transport configures TLS in its own section, and the `self_signed` semantic
 | QUIC | `[quic.certificate]` | TLS is mandatory (part of the QUIC spec). `self_signed = true` **always** generates an ephemeral certificate and ignores `cert_file`/`key_file`, logging a warning if the files exist. |
 | HTTP | `[http.tls]` | No `self_signed` option: HTTPS requires real `cert_file`/`key_file`. |
 
-For production deployments, provide proper certificates via `cert_file` and `key_file`; ephemeral certificates change on every start and cannot be verified by clients. See [Networking](/docs/server/networking) for the surrounding transport configuration.
+For production deployments, provide proper certificates via `cert_file` and `key_file`. Ephemeral certificates change on every start and cannot be verified by clients. See [Networking](/docs/server/networking) for the surrounding transport configuration.
 
 ## Data encryption at rest
 
@@ -129,11 +129,11 @@ clock_skew = "5 s"
 
 Further keys (`valid_issuers`, `valid_audiences`, `not_before`, `use_base64_secret`, the signing secrets) are covered in [Configuration](/docs/server/configuration).
 
-**Signing secrets**: `encoding_secret` and `decoding_secret` default to empty, which makes the server generate a secure random secret on every start. That is a safe single-node default with two consequences: issued tokens **die on restart**, and in a cluster each node signs with its own key, so bearers are node-local and follower-to-primary request forwarding stays disabled. For clusters, configure an identical secret on every node (prefer the `IGGY_HTTP_JWT_ENCODING_SECRET`/`IGGY_HTTP_JWT_DECODING_SECRET` environment variables over on-disk config), or enable `cluster.auth` so the JWT key derives from the cluster's shared PSK.
+**Signing secrets**: `encoding_secret` and `decoding_secret` default to empty, which makes the server generate a secure random secret on every start. That's a safe single-node default with two consequences: issued tokens **die on restart**, and in a cluster each node signs with its own key, so bearers are node-local and follower-to-primary request forwarding stays disabled. For clusters, configure an identical secret on every node (prefer the `IGGY_HTTP_JWT_ENCODING_SECRET`/`IGGY_HTTP_JWT_DECODING_SECRET` environment variables over on-disk config), or enable `cluster.auth` so the JWT key derives from the cluster's shared PSK.
 
 **Refresh tokens**: `POST /users/refresh-token` re-issues an access token from a still-valid one presented in the request body, answering the same identity shape as login, so HTTP clients can extend a session without re-sending credentials.
 
-**Federated issuers**: the opt-in `[[http.jwt.trusted_issuers]]` list accepts tokens minted by external identity providers for application-to-application flows. Each entry names an `issuer`, `audience`, and `jwks_url`; signatures are verified against the issuer's JWKS (fetches are rate-limited), and every token from that issuer is remapped onto the configured non-root `user_id`. With no entries configured, the listener accepts only self-issued tokens. See [Configuration](/docs/server/configuration) for the key reference.
+**Federated issuers**: the opt-in `[[http.jwt.trusted_issuers]]` list accepts tokens minted by external identity providers for application-to-application flows. Each entry names an `issuer`, `audience`, and `jwks_url`. Signatures are verified against the issuer's JWKS (fetches are rate-limited), and every token from that issuer is remapped onto the configured non-root `user_id`. With no entries configured, the listener accepts only self-issued tokens. See [Configuration](/docs/server/configuration) for the key reference.
 
 ## Cluster security
 

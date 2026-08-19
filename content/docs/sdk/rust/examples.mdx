@@ -4,13 +4,13 @@ title: Examples
 
 In the core repository, you can find the following [examples](https://github.com/apache/iggy/tree/master/examples/rust/src) using the Rust SDK.
 
-Before running any of them, start the server with the default root credentials; without the flag (or `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD`) root gets a **generated password** and every example fails with `InvalidCredentials`:
+Before running any of them, start the server with the default root credentials. Without the flag (or `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD`) root gets a **generated password** and every example fails with `InvalidCredentials`:
 
 ```bash
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-The examples are cargo example targets of the `iggy_examples` crate. Run them from the `examples/rust` directory with `cargo run --example <name>`. Note that partition IDs are **0-based**: the examples send to and poll from partition `0`.
+The examples are cargo example targets of the `iggy_examples` crate. Run them from the `examples/rust` directory with `cargo run --example <name>`. Partition IDs are **0-based**: the examples send to and poll from partition `0`.
 
 - **[Getting started](https://github.com/apache/iggy/tree/master/examples/rust/src/getting-started)** - the basic example which is discussed in the [getting started](/docs/introduction/getting-started) guide.
 
@@ -61,7 +61,7 @@ The examples are cargo example targets of the `iggy_examples` crate. Run them fr
   cargo run --example typed-headers-consumer
   ```
 
-- **[Multi-tenant](https://github.com/apache/iggy/tree/master/examples/rust/src/multi-tenant)** - the comprehensive example of how to structure your application to support multiple tenants (separated by the unique streams) with the different users, permissions, topics etc.
+- **[Multi-tenant](https://github.com/apache/iggy/tree/master/examples/rust/src/multi-tenant)** - the larger example of how to structure your application to support multiple tenants (separated by the unique streams) with the different users, permissions, topics etc.
 
   ```bash
   cargo run --example multi-tenant-producer

@@ -53,7 +53,7 @@ output_format = "json_lines"
 
 Further options cover credentials (`access_key_id` / `secret_access_key`), retries (`max_attempts` `3`, `retry_delay` `1s` with exponential backoff and jitter), and `path_style` addressing (auto-enabled when `endpoint` is set). See the upstream [s3_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/s3_sink) for the full reference.
 
-Path templates support `{stream}`, `{topic}`, `{partition}`, `{date}`, `{hour}`, and `{timestamp}`; the time-based variables derive from the first message timestamp in each buffer. File names embed the partition (zero-padded to 5 digits, to prevent cross-partition collisions) and the offset range (zero-padded to 20 digits), e.g. `application_logs/api_requests/2026-03-16/14/00000-00000000000000000000-00000000000000000999.jsonl`.
+Path templates support `{stream}`, `{topic}`, `{partition}`, `{date}`, `{hour}`, and `{timestamp}`. The time-based variables derive from the first message timestamp in each buffer. File names embed the partition (zero-padded to 5 digits, to prevent cross-partition collisions) and the offset range (zero-padded to 20 digits), e.g. `application_logs/api_requests/2026-03-16/14/00000-00000000000000000000-00000000000000000999.jsonl`.
 
 ## Credentials
 

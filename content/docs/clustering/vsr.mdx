@@ -5,11 +5,11 @@ description: How Apache Iggy replicates data across a cluster with VSR
 
 Apache Iggy replicates clusters with **Viewstamped Replication Revisited (VSR)**. VSR keeps an ordered state machine consistent across replicas and elects a new primary when the current primary fails.
 
-Clustering is built into the standard `iggy-server` binary. There is **no separate build, binary, or Cargo feature**: the same server runs single-node or clustered, and `cluster.enabled` in the configuration decides which one you get. Clustering is **disabled by default**.
+Clustering is built into the standard `iggy-server` binary. There's **no separate build, binary, or Cargo feature**: the same server runs single-node or clustered, and `cluster.enabled` in the configuration decides which one you get. Clustering is **disabled by default**.
 
 Read the [VSR paper used by the project](https://github.com/apache/iggy/blob/master/assets/vsr.pdf) for the protocol specification.
 
-> Iggy has not reached a 1.0 production release yet. The cluster protocol and configuration described here can still change between pre-release versions.
+> Iggy hasn't reached a 1.0 production release yet. The cluster protocol and configuration described here can still change between pre-release versions.
 
 ## Current implementation
 
@@ -95,7 +95,7 @@ async fn main() -> Result<(), IggyError> {
 
 ## Status
 
-VSR started as a parallel `server-ng` implementation behind a `vsr` build feature. That phase is over: the VSR server was promoted to the mainline `core/server` crate and the `iggy-server` binary, the feature flag was removed, and the legacy server together with its wire format was deleted. What this page describes is the only server implementation.
+VSR started as a parallel `server-ng` implementation behind a `vsr` build feature. That phase is over. The VSR server moved into the mainline `core/server` crate and the `iggy-server` binary, the feature flag is gone, and the legacy server and its wire format were deleted. What this page describes is the only server implementation.
 
 ## Next steps
 

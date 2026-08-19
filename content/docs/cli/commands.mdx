@@ -3,7 +3,7 @@ title: Command Reference
 description: Every iggy CLI command with its arguments, flags, and a runnable example
 ---
 
-This page lists every top-level `iggy` command. Examples assume you are already authenticated, for example via `iggy login`; see [installation and authentication](/docs/cli/start). Run `iggy <command> --help` for the full flag list of any command.
+This page lists every top-level `iggy` command. Examples assume you're already authenticated, for example via `iggy login`. See [installation and authentication](/docs/cli/start). Run `iggy <command> --help` for the full flag list of any command.
 
 {/* Keep this block in sync with the Command enum in core/cli/src/args/mod.rs. */}
 
@@ -39,7 +39,7 @@ Conventions used throughout:
 - Wherever a command takes a stream, topic, user, or consumer group ID, you can pass either the numeric ID or the name (`iggy topic get dev events` and `iggy topic get 1 1` are equivalent).
 - Subcommands have single-letter aliases too: `c` (create), `d` (delete), `g` (get), `l` (list), `u` (update), `p` (purge). So `iggy s l` is `iggy stream list`.
 - Every `list` command accepts `-l, --list-mode <table|list>` (default: `table`).
-- `-q, --quiet` suppresses stdout output; `-d, --debug <file>` writes verbose logs to a file.
+- `-q, --quiet` suppresses stdout output. `-d, --debug <file>` writes verbose logs to a file.
 
 ## stream
 
@@ -70,7 +70,7 @@ iggy topic create [OPTIONS] <STREAM_ID> <NAME> <PARTITIONS_COUNT> <COMPRESSION_A
 iggy topic update [OPTIONS] <STREAM_ID> <TOPIC_ID> <NAME> <COMPRESSION_ALGORITHM> [MESSAGE_EXPIRY]...
 ```
 
-Compression is a **required positional**: `none` or `gzip`. Expiry is a human-readable duration (`7d`, `1day 12h`, `unlimited`); omitting it uses the server default.
+Compression is a **required positional**: `none` or `gzip`. Expiry is a human-readable duration (`7d`, `1day 12h`, `unlimited`). Omitting it uses the server default.
 
 | Flag | Description |
 |------|-------------|
@@ -129,7 +129,7 @@ iggy message send [OPTIONS] <STREAM_ID> <TOPIC_ID> [MESSAGES]...
 | Flag | Description |
 |------|-------------|
 | `-p, --partition-id <ID>` | Send to a specific partition |
-| `-m, --message-key <KEY>` | Let the server pick the partition from the key (mutually exclusive with `--partition-id`) |
+| `-m, --message-key <KEY>` | Route by message key, hashed to a partition client-side (mutually exclusive with `--partition-id`) |
 | `-H, --headers <KEY:KIND:VALUE>` | Message headers, comma separated. Kinds: `raw`, `string`, `bool`, `int8`-`int128`, `uint8`-`uint128`, `float32`, `float64` |
 | `--input-file <FILE>` | Send messages from a binary file written by `poll --output-file` |
 

@@ -44,7 +44,7 @@ iggy://username:password@localhost:8090
 iggy://<personal-access-token>@localhost:8090
 ```
 
-**Do not prepend anything** to the token. Strings like `iggypat-...` appear only in Iggy's own test code; a real token with a prefix added will fail to log in.
+**Do not prepend anything** to the token. Strings like `iggypat-...` appear only in Iggy's own test code. A real token with a prefix added will fail to log in.
 
 The default `iggy`/`iggy` root credentials **only exist** when the server was started with `--with-default-root-credentials` (or with `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` set) on its first boot. Otherwise the root user gets a generated password and samples using `iggy:iggy` fail with `InvalidCredentials`:
 
@@ -75,7 +75,7 @@ iggy://iggy:iggy@localhost:8090?tls=true&tls_domain=example.com&reconnection_ret
 
 ## QUIC options
 
-Note that the QUIC reconnection keys **differ from TCP**: `reconnection_max_retries` (not `reconnection_retries`) and `reconnection_reestablish_after` (not `reestablish_after`). Using the TCP names in a QUIC string is a hard error.
+The QUIC reconnection keys **differ from TCP**: `reconnection_max_retries` (not `reconnection_retries`) and `reconnection_reestablish_after` (not `reestablish_after`). Using the TCP names in a QUIC string is a hard error.
 
 | Key | Description | Default |
 |-----|-------------|---------|

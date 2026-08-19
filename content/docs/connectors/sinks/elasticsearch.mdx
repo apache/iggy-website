@@ -42,7 +42,7 @@ create_index_if_not_exists = true
 | `batch_size` | integer | unused | Accepted but currently not read by the connector |
 | `timeout_seconds` | integer | unused | Accepted but currently not read by the connector |
 
-Batching is governed by the stream-level `batch_length`: each consume cycle bulk-indexes the batch of messages it receives. The connector performs no retries of its own; failed batches are logged and counted.
+The stream-level `batch_length` governs batching: each consume cycle bulk-indexes the batch of messages it receives. The connector performs no retries of its own. Failed batches are logged and counted.
 
 ### Index mapping
 
@@ -65,7 +65,7 @@ type = "keyword"
 ## Payload handling
 
 - JSON payloads are indexed as documents directly.
-- Raw payloads are parsed as JSON when possible; otherwise they are wrapped as `{ "data": "<base64>", "data_type": "raw" }`.
+- Raw payloads are parsed as JSON when possible, and wrapped as `{ "data": "<base64>", "data_type": "raw" }` when that fails.
 - Text payloads are wrapped as `{ "text": "...", "data_type": "text" }`.
 - Other payload formats are skipped with a warning.
 

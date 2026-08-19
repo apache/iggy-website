@@ -34,7 +34,7 @@ All shards, **including shard 0**, own partitions and serve partition requests.
 Requests are routed between shards using **message passing** (via `crossfire` bounded mpsc channels), which avoids locking entirely. The routing logic splits operations into two planes:
 
 - **Metadata operations** (create/delete stream/topic/user etc.) always execute on **shard 0** - it is the only shard that commits metadata
-- **Partition operations** (send_messages, poll_messages, store_consumer_offset) are routed to the shard owning that partition via a lock-free concurrent map lookup; a request that lands on a non-owning shard rides the inter-shard message bus to the owner
+- **Partition operations** (send_messages, poll_messages, store_consumer_offset) are routed to the shard owning that partition via a lock-free concurrent map lookup. A request that lands on a non-owning shard rides the inter-shard message bus to the owner
 
 Partition-to-shard assignment is **deterministic**: the packed `IggyNamespace` is hashed with `Murmur3`, and the upper 16 bits of the hash are taken modulo the shard count (the upper bits are used because Murmur3 has weak lower bits for small integer inputs).
 
@@ -107,7 +107,7 @@ local_data/
                         └── offsets/
 ```
 
-The stream, topic and partition directories are named after their numeric IDs, **assigned from 0**. The `metadata/journal.wal` file is the VSR write-ahead log that persists all metadata operations (stream/topic/user creation, etc.). The `runtime/current_config.toml` file captures the configuration the server actually booted with. Segment files are named by the 20-digit start offset of their first record; the `.index` file is created automatically and is used to speed up the search operations by keeping track of the offsets and timestamps of the records. The `offsets/` directory holds the server-side consumer and consumer group offsets.
+The stream, topic and partition directories are named after their numeric IDs, **assigned from 0**. The `metadata/journal.wal` file is the VSR write-ahead log that persists all metadata operations (stream/topic/user creation, etc.). The `runtime/current_config.toml` file captures the configuration the server actually booted with. Segment files are named by the 20-digit start offset of their first record. The `.index` file is created automatically and speeds up searches by keeping track of the offsets and timestamps of the records. The `offsets/` directory holds the server-side consumer and consumer group offsets.
 
 ## Memory pool
 

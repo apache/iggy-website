@@ -41,7 +41,7 @@ timestamp_field = "@timestamp"
 | `batch_size` | integer | `100` | Maximum documents fetched per poll |
 | `timestamp_field` | string | none | Document field used for incremental polling |
 
-A custom `query` must be a structured object. In TOML that means nested tables (an inline JSON string will not work):
+A custom `query` must be a structured object. In TOML that means nested tables (an inline JSON string won't work):
 
 ```toml
 [plugin_config.query.term.level]
@@ -54,7 +54,7 @@ Alternatively, set `plugin_config_format = "json"` and provide the plugin config
 
 Each cycle the connector waits `polling_interval`, then runs a search against `index` with the configured `query`, `size = batch_size`, sorted ascending by `timestamp_field` (`@timestamp` when unset). Every document's `_source` becomes one JSON message.
 
-When `timestamp_field` is set, the query is additionally filtered to documents whose timestamp is greater than the newest one seen so far, so already-processed documents are not fetched again. Without a `timestamp_field` there is no incremental cursor and each poll returns the first `batch_size` matching documents.
+When `timestamp_field` is set, the query is also filtered to documents whose timestamp is greater than the newest one seen so far, so already-processed documents are not fetched again. Without a `timestamp_field` there is no incremental cursor and each poll returns the first `batch_size` matching documents.
 
 ## State
 

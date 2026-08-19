@@ -41,7 +41,7 @@ const heroStats = [
     gradient: "from-[#5f87fd] to-[#7d44e0]",
   },
   {
-    value: "7",
+    value: "8",
     label: "Language SDKs",
     gradient: "from-[#9d44e0] to-[#e55efa]",
   },
@@ -71,7 +71,7 @@ const features = [
   {
     title: "Multi-Language SDKs",
     description:
-      "Client libraries available for Rust, C#, Java, Go, Python, Node.js and PHP, with C++ coming soon.",
+      "Client libraries available for Rust, C#, C++, Java, Go, Python, Node.js and PHP.",
   },
   {
     title: "Consumer Groups & Partitioning",
@@ -230,21 +230,22 @@ export default function HomePage() {
           <div className="mx-auto mb-14 max-w-5xl border-y border-white/[0.1]">
             <div className="grid gap-5 py-6 md:grid-cols-[auto_1fr_auto] md:items-center md:gap-7">
               <span className="w-fit rounded-md border border-[#38bdf8]/30 bg-[#38bdf8]/10 px-2.5 py-1 font-mono text-xs font-semibold uppercase text-[#7dd3fc]">
-                Experimental
+                Shipped
               </span>
               <div className="min-w-0">
                 <h3 className="text-lg font-semibold text-[#fffaeb]">
-                  VSR clustering is coming soon
+                  VSR clustering is built in
                 </h3>
                 <p className="mt-1 text-sm leading-relaxed text-[#aeb5bd]">
-                  Viewstamped Replication Revisited is already implemented in
-                  the{" "}
-                  <span className="font-mono text-[#d7dce1]">server-ng</span>{" "}
-                  module on main. Its deterministic simulation testing (DST)
-                  exercises failures, delays, restarts and network partitions to
-                  validate consensus. Together, VSR and DST provide the
-                  foundation for highly available, fault-tolerant and reliable
-                  Iggy clusters.
+                  Viewstamped Replication Revisited is built into the server:
+                  it runs as a single node by default, and multi-node
+                  clustering is enabled through the{" "}
+                  <span className="font-mono text-[#d7dce1]">[cluster]</span>{" "}
+                  configuration section. Its deterministic simulation testing
+                  (DST) exercises failures, delays, restarts and network
+                  partitions to validate consensus. Together, VSR and DST
+                  provide the foundation for highly available, fault-tolerant
+                  and reliable Iggy clusters.
                 </p>
               </div>
               <Link

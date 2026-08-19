@@ -3,7 +3,7 @@ title: Client Failover
 description: Local reads, leader redirection, and retryable errors from the client side
 ---
 
-A clustered deployment changes what a client can expect from any single node: reads are served locally where possible, writes must reach the right primary, and the SDKs follow the primary as it moves. This page describes that behavior and which SDKs implement it.
+A clustered deployment changes what a client can expect from any single node: reads are served locally where possible, writes must reach the right primary, and the SDKs follow the primary as it moves.
 
 ## Where requests are served
 
@@ -18,9 +18,9 @@ One caveat on follower reads: server-managed offset auto-commit replicates the p
 Leader-aware SDKs find the primary instead of requiring you to point them at it:
 
 1. The client connects to any node from its connection string and fetches cluster metadata, which lists every node with its name, client endpoints, role, and status.
-2. When the connected node is not the leader, the client reconnects to the leader's advertised endpoint for the transport in use.
+2. When the connected node isn't the leader, the client reconnects to the leader's advertised endpoint for the transport in use.
 3. When the cluster is transiently leaderless (for roughly one heartbeat timeout after a primary fails, while the election completes), the client polls the metadata until a leader appears instead of failing.
-4. Redirects are **capped** (three in the Rust SDK) so a flapping roster cannot bounce the client forever.
+4. Redirects are **capped** (three in the Rust SDK) so a flapping roster can't bounce the client forever.
 
 The address a client is redirected to is the node's `advertised_address` (or the matching `advertised_addresses` selector), falling back to the roster `ip`. Getting those right matters: the client redials **exactly what the metadata advertises**. See [Configuration](/docs/clustering/configuration) for the selector rules.
 

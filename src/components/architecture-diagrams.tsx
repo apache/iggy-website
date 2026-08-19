@@ -1047,14 +1047,14 @@ export function WhyIggy() {
       <p className="text-xs text-fd-muted-foreground m-0 mb-5">How Iggy compares to traditional message streaming platforms</p>
 
       <div className="space-y-2">
-        <div className="grid grid-cols-[100px_1fr_1fr] md:grid-cols-[120px_1fr_1fr] gap-2 mb-1">
-          <span className="text-[10px] font-semibold text-fd-muted-foreground" />
+        <div className="grid grid-cols-2 sm:grid-cols-[100px_1fr_1fr] md:grid-cols-[120px_1fr_1fr] gap-2 mb-1">
+          <span className="hidden sm:block text-[10px] font-semibold text-fd-muted-foreground" />
           <span className="text-[10px] font-semibold text-fd-muted-foreground text-center">Traditional</span>
           <span className="text-[10px] font-semibold text-fd-primary text-center">Iggy</span>
         </div>
         {comparisons.map((c) => (
-          <div key={c.label} className="grid grid-cols-[100px_1fr_1fr] md:grid-cols-[120px_1fr_1fr] gap-2 items-center">
-            <span className="text-[11px] font-semibold text-fd-foreground">{c.label}</span>
+          <div key={c.label} className="grid grid-cols-2 sm:grid-cols-[100px_1fr_1fr] md:grid-cols-[120px_1fr_1fr] gap-2 items-center">
+            <span className="col-span-2 sm:col-span-1 text-[11px] font-semibold text-fd-foreground">{c.label}</span>
             <div className="rounded-md bg-fd-muted/30 px-3 py-2 text-center">
               <span className="text-[10px] text-fd-muted-foreground">{c.traditional}</span>
             </div>
@@ -1243,7 +1243,7 @@ export function DocsHero() {
             </div>
           </div>
 
-          <div className="flex justify-center gap-5 mt-4 pt-3 border-t border-fd-border/50">
+          <div className="grid grid-cols-2 gap-3 sm:flex sm:justify-center sm:gap-5 mt-4 pt-3 border-t border-fd-border/50">
             {[
               { label: "MCP Server", href: "/docs/ai/mcp", sub: "40+ LLM tools" },
               { label: "Web UI", href: "/docs/web_ui/start", sub: "Dashboard" },

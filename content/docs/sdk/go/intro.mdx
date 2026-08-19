@@ -6,7 +6,7 @@ The Iggy Go SDK is a client library for interacting with the Iggy server from Go
 
 ## Server compatibility
 
-The SDK and the server must speak the same wire protocol. Tagged releases up to `v0.8.0` predate VSR (and the current API) and pair only with servers of the same era; the module on `master` speaks VSR only and requires a current server. When working from source, build the SDK and the server from the same repository checkout. The code on this page tracks `master`.
+The SDK and the server must speak the same wire protocol. Tagged releases up to `v0.8.0` predate VSR (and the current API) and pair only with servers of the same era. The module on `master` speaks VSR only and requires a current server. When working from source, build the SDK and the server from the same repository checkout. The code on this page tracks `master`.
 
 ## Installation
 
@@ -22,7 +22,7 @@ go get github.com/apache/iggy/foreign/go@master
 
 ## Quick start
 
-The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/master/examples/go/getting-started). Note that stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
+The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/master/examples/go/getting-started). Stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
 
 ### Producer
 
@@ -109,7 +109,7 @@ func main() {
 }
 ```
 
-`CreateTopic` accepts optional trailing `iggcon.HeaderEntry` values carrying named topic options, for option keys the server catalog gained after the SDK build shipped; `DescribeOptions` lists the keys a server accepts.
+`CreateTopic` accepts optional trailing `iggcon.HeaderEntry` values carrying named topic options, for option keys the server catalog gained after the SDK build shipped. `DescribeOptions` lists the keys a server accepts.
 
 ### Consumer
 
@@ -191,7 +191,7 @@ func main() {
 }
 ```
 
-Polled message payloads and user headers alias the reply buffer, so retaining one message pins the whole reply; copy the bytes out when they outlive the poll.
+Polled message payloads and user headers alias the reply buffer, so retaining one message pins the whole reply. Copy the bytes out when they outlive the poll.
 
 ## TLS
 
@@ -213,11 +213,11 @@ cli, err := client.NewIggyClient(
 
 ## Delivery semantics
 
-`SendMessages` returns the placements the server committed; delivery is at-least-once. A send whose reply is lost to a dropped connection returns `ErrDisconnected` without a replay: a reconnect registers a fresh client identity, so the server could not deduplicate the replay against a batch that may have already committed. Retrying such a send is the caller's decision and may write the batch twice; consumers that need exactly-once handling deduplicate on the message id. A confirmation reports an in-memory commit, not a flush to disk, and an empty confirmation list is a valid success.
+`SendMessages` returns the placements the server committed. Delivery is at-least-once. A send whose reply is lost to a dropped connection returns `ErrDisconnected` without a replay: a reconnect registers a fresh client identity, so the server could not deduplicate the replay against a batch that may have already committed. Retrying such a send is the caller's decision and may write the batch twice. Consumers that need exactly-once handling deduplicate on the message id. A confirmation reports an in-memory commit, not a flush to disk, and an empty confirmation list is a valid success.
 
 ## Consumer groups
 
-The client exposes the full consumer group API: `CreateConsumerGroup`, `JoinConsumerGroup`, `LeaveConsumerGroup`, `GetConsumerGroups`, and `SyncConsumerGroup` (which returns the partitions this client currently owns together with the group generation). To poll as a group member, build the consumer with `iggcon.NewGroupConsumer` and pass a `nil` partition id to `PollMessages`; the client orchestrates the group poll. An empty batch with no assigned partition means nothing to read right now (a member that owns no partition, or a rebalance still settling): poll again. `ErrConsumerGroupMemberNotFound` means the client is not a member, for example after an explicit `LeaveConsumerGroup`; `JoinConsumerGroup` restores membership.
+The client exposes the full consumer group API: `CreateConsumerGroup`, `JoinConsumerGroup`, `LeaveConsumerGroup`, `GetConsumerGroups`, and `SyncConsumerGroup` (which returns the partitions this client currently owns together with the group generation). To poll as a group member, build the consumer with `iggcon.NewGroupConsumer` and pass a `nil` partition id to `PollMessages`. The client orchestrates the group poll. An empty batch with no assigned partition means nothing to read right now (a member that owns no partition, or a rebalance still settling): poll again. `ErrConsumerGroupMemberNotFound` means the client is not a member, for example after an explicit `LeaveConsumerGroup`. `JoinConsumerGroup` restores membership.
 
 ## Examples
 

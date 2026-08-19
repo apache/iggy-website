@@ -2,13 +2,13 @@
 title: C++ SDK (WIP)
 ---
 
-The Iggy C++ SDK wraps the Rust SDK through a [CXX](https://cxx.rs) FFI bridge, which means it can access all transport protocols (TCP, QUIC, HTTP, WebSocket) through connection strings. The source code is available at [github.com/apache/iggy/tree/master/foreign/cpp](https://github.com/apache/iggy/tree/master/foreign/cpp).
+The Iggy C++ SDK wraps the Rust SDK through a [CXX](https://cxx.rs) FFI bridge, so it can use all transport protocols (TCP, QUIC, HTTP, WebSocket) via connection strings. The source code is available at [github.com/apache/iggy/tree/master/foreign/cpp](https://github.com/apache/iggy/tree/master/foreign/cpp).
 
-This SDK is not published to any package registry. It is consumed from the monorepo and built from source with Bazel.
+This SDK isn't published to any package registry. Consume it from the monorepo and build it from source with Bazel.
 
 ## Building from source
 
-The project builds with Bazel (`BUILD.bazel` / `MODULE.bazel`). The Bazel build drives the system-provided cargo toolchain to compile the Rust bridge, so concurrent runs can race; run builds serially.
+The project builds with Bazel (`BUILD.bazel` / `MODULE.bazel`). The build drives the system-provided cargo toolchain to compile the Rust bridge, so concurrent runs can race. Run builds serially.
 
 ```bash
 cd foreign/cpp

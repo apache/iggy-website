@@ -3,7 +3,7 @@ title: Deploy a Cluster
 description: Build the binaries and run a three-node Apache Iggy cluster
 ---
 
-This page walks through building `iggy-server` and the `iggy` CLI, running a single development node, and bringing up a three-node cluster on one machine. See [Configuration](/docs/clustering/configuration) for the full `[cluster]` reference.
+Build `iggy-server` and the `iggy` CLI, run a single development node, then bring up a three-node cluster on one machine. See [Configuration](/docs/clustering/configuration) for the full `[cluster]` reference.
 
 ## Build from source
 
@@ -32,7 +32,7 @@ cargo run --bin iggy-server -- --with-default-root-credentials
 
 `--with-default-root-credentials` sets the root user to `iggy`/`iggy` unless `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` are already exported. **Only the first boot** on an empty data directory reads these values.
 
-When clustering is disabled, `--replica-id 0` is still accepted; any other id is rejected because it would have to match a `cluster.nodes` entry.
+When clustering is disabled, `--replica-id 0` is still accepted. Any other id is rejected because it would have to match a `cluster.nodes` entry.
 
 ## Run a three-node cluster
 
@@ -79,7 +79,7 @@ export IGGY_ROOT_PASSWORD=iggy
 export IGGY_CLUSTER_AUTH_SHARED_SECRET="replace-with-at-least-32-random-bytes"
 ```
 
-Root credentials are **mandatory** once the cluster is enabled. The shared secret must be **at least 32 bytes**; see [Security](/docs/clustering/security) for how it is used and rotated.
+Root credentials are **mandatory** once the cluster is enabled. The shared secret must be **at least 32 bytes**. See [Security](/docs/clustering/security) for how it's used and rotated.
 
 Start each replica in a separate terminal. Use a different data path for every process:
 
@@ -102,12 +102,12 @@ In cluster mode:
 - `replica_id` values must be unique and contiguous from `0`
 - `ports` is the single source of listener ports: every enabled transport needs an explicit per-node port, otherwise the server **refuses to start**
 - `tcp_replica` carries replica-to-replica consensus traffic and is **always required**
-- `ip` must be a **literal IP address**; use `advertised_address` when clients cannot reach it (see [Configuration](/docs/clustering/configuration))
+- `ip` must be a **literal IP address**. Use `advertised_address` when clients can't reach it (see [Configuration](/docs/clustering/configuration))
 - use a different `system.path` for each process on the same host
 
 ## Spanning multiple hosts
 
-The roster `ip` is the address other replicas dial. It is **not the bind interface** for the client transports: `tcp`, `quic`, `http`, and `websocket` bind whatever their own `address` settings say, and the roster supplies only the port. The defaults listen on loopback, so a cluster spread across hosts needs each transport's `address` set to `0.0.0.0` or the routable interface. The server warns at startup when a bind cannot serve the advertised `ip`.
+The roster `ip` is the address other replicas dial. It's **not the bind interface** for the client transports: `tcp`, `quic`, `http`, and `websocket` bind whatever their own `address` settings say, and the roster supplies only the port. The defaults listen on loopback, so a cluster spread across hosts needs each transport's `address` set to `0.0.0.0` or the routable interface. The server warns at startup when a bind cannot serve the advertised `ip`.
 
 ## Containers
 
@@ -163,4 +163,4 @@ The cross-SDK BDD suites run against a real cluster started from `bdd/docker-com
 ./scripts/run-bdd-tests.sh rust leader_redirection
 ```
 
-The first argument selects the SDK (`rust`, `python`, `php`, `go`, `go-race`, `node`, `csharp`, `java`, `cpp`, or `all`) and the optional second argument selects one feature (`basic_messaging`, `leader_redirection`, `raw_command`, or `all`). `leader_redirection` is the clustered feature; it is supported by the Rust, Go, C#, and Java suites.
+The first argument selects the SDK (`rust`, `python`, `php`, `go`, `go-race`, `node`, `csharp`, `java`, `cpp`, or `all`) and the optional second argument selects one feature (`basic_messaging`, `leader_redirection`, `raw_command`, or `all`). `leader_redirection` is the clustered feature. The Rust, Go, C#, and Java suites support it.

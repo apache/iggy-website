@@ -84,7 +84,7 @@ await publisher.DisposeAsync();
 | `flushInterval` | `TimeSpan?` | `100ms` | Interval at which pending messages are flushed |
 | `disposalTimeout` | `TimeSpan?` | `5s` | How long `DisposeAsync` waits for the background processor to drain |
 
-A batch also flushes once its accumulated payload reaches `IggyPublisherConfig.BackgroundMaxBatchBytes` (default 256 KB, `0` disables the byte gate) - whichever of `batchSize` or the byte limit is hit first. This knob has no builder method; set it on the config directly if needed.
+A batch also flushes once its accumulated payload reaches `IggyPublisherConfig.BackgroundMaxBatchBytes` (default 256 KB, `0` disables the byte gate) - whichever of `batchSize` or the byte limit is hit first. This knob has no builder method. Set it on the config directly if needed.
 
 ### Publishing with rented batches
 

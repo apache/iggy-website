@@ -65,7 +65,7 @@ The runtime supports two types of configuration providers for managing connector
 
 ### Local File Provider
 
-The default configuration provider reads connector configurations from local files. Each connector (source or sink) is configured in its own separate file within the directory specified by `connectors.config_dir`. An empty `config_dir` is a fatal startup error; a missing directory is created automatically with a warning, and no connectors are loaded from it.
+The default configuration provider reads connector configurations from local files. Each connector (source or sink) is configured in its own separate file within the directory specified by `connectors.config_dir`. An empty `config_dir` is a fatal startup error. A missing directory is created automatically with a warning, and no connectors are loaded from it.
 
 ```toml
 [connectors]

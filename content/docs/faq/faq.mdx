@@ -24,7 +24,7 @@ When consumers join or leave a consumer group, the server triggers cooperative p
 
 ## Q: Does Iggy support exactly-once delivery?
 
-Iggy supports **at-most-once** (with auto-commit) and **at-least-once** (without auto-commit, manual offset management). **Exactly-once** semantics can be achieved at the application level, e.g. by attaching unique message IDs to messages and deduplicating on the consumer side.
+Iggy supports **at-most-once** (with auto-commit) and **at-least-once** (without auto-commit, manual offset management). **Exactly-once** semantics can be achieved at the application level, e.g. by attaching unique IDs to messages and deduplicating on the consumer side.
 
 ## Q: How do I secure my Iggy deployment?
 
@@ -40,7 +40,7 @@ Iggy migrated from Tokio to a thread-per-core architecture with `compio` (which 
 
 ## Q: Is clustering/replication available?
 
-Yes. Replication based on Viewstamped Replication (VSR) is built into the server. Multi-node clustering is configured via the `[cluster]` section (single-node mode is the default, `enabled = false`), covers consensus, view changes, node authentication, and TLS between nodes, and is maturing toward production readiness. See the [Clustering](/docs/clustering/vsr) documentation for the protocol and [Deploy](/docs/clustering/deploy) for setting up a cluster.
+Yes. Replication based on Viewstamped Replication (VSR) is built into the server. Multi-node clustering is configured via the `[cluster]` section (single-node mode is the default, `enabled = false`). It covers consensus, view changes, node authentication, and TLS between nodes, and is maturing toward production readiness. See the [Clustering](/docs/clustering/vsr) documentation for the protocol and [Deploy](/docs/clustering/deploy) for setting up a cluster.
 
 ## Q: What examples are available?
 
