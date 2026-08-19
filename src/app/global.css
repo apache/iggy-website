@@ -21,6 +21,16 @@
 @import "fumadocs-ui/css/black.css";
 @import "fumadocs-ui/css/preset.css";
 
+/* Pinned to Tailwind 4.1's stacks. 4.3 switched its defaults to
+   -apple-system/BlinkMacSystemFont/Segoe UI/Roboto, which renders differently on
+   Linux and Android than what the site has always shipped. */
+@theme {
+    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+        "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+}
+
 :root {
     --color-fd-primary: hsl(34 100% 51%);
     --color-fd-primary-foreground: hsl(0 0% 0%);

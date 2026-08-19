@@ -47,5 +47,24 @@ export const blogPosts = defineCollections({
 export default defineConfig({
   mdxOptions: {
     remarkPlugins: [remarkMdxMermaid],
+    // Search snippets are rendered as plain text. The stock stringifier
+    // serialises back to markdown, so emphasis, inline code and character
+    // escapes leak into the index as literal syntax.
+    remarkStructureOptions: {
+      stringify: {
+        handlers: {
+          strong: (node, _parent, state, info) =>
+            state.containerPhrasing(node, info),
+          emphasis: (node, _parent, state, info) =>
+            state.containerPhrasing(node, info),
+          delete: (node, _parent, state, info) =>
+            state.containerPhrasing(node, info),
+          blockquote: (node, _parent, state, info) =>
+            state.containerFlow(node, info),
+          inlineCode: (node) => node.value,
+          text: (node) => node.value,
+        },
+      },
+    },
   },
 });

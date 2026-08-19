@@ -17,31 +17,31 @@
  * under the License.
  */
 
-import { RootProvider } from "fumadocs-ui/provider/next";
 import type { Metadata } from "next";
-import "./global.css";
+import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: {
-    default: "Apache Iggy (Incubating)",
-    template: "%s | Apache Iggy",
-  },
-  description:
-    "Apache Iggy (Incubating) is a persistent message streaming platform written in Rust, supporting QUIC, TCP and HTTP transport protocols, capable of processing millions of messages per second.",
-  icons: { icon: "/img/favicon.png" },
+  title: "404: Page not found",
 };
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default function NotFound() {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="flex min-h-screen flex-col font-sans antialiased">
-        <RootProvider
-          search={{ options: { type: "static" as const } }}
-          theme={{ defaultTheme: "dark" }}
-        >
-          {children}
-        </RootProvider>
-      </body>
-    </html>
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+      <p className="font-mono text-sm font-semibold uppercase tracking-widest text-[#ff9103]">
+        404
+      </p>
+      <h1 className="text-3xl font-extrabold tracking-tight text-fd-foreground md:text-4xl">
+        This page could not be found
+      </h1>
+      <p className="max-w-md text-fd-muted-foreground">
+        The page you are looking for was moved, renamed, or never existed.
+      </p>
+      <Link
+        href="/docs"
+        className="mt-2 inline-flex items-center rounded-lg bg-[#ff9103] px-6 py-3 text-sm font-semibold text-[#0e0f11] transition-colors hover:bg-[#ffa703]"
+      >
+        Back to documentation
+      </Link>
+    </main>
   );
 }

@@ -89,7 +89,7 @@ function withChapter(tree: PageTree.Root, item: PageTree.Item | undefined) {
   if (!item) return undefined;
   const parent = PageTree.findParent(tree, item.url);
   // The tree root is not a chapter; top-level pages keep a bare title.
-  if (!parent || !("type" in parent)) return item;
+  if (!parent || parent.type !== "folder") return item;
   return {
     ...item,
     name: (
