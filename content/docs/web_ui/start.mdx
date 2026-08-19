@@ -11,7 +11,7 @@ Iggy Web UI provides a comprehensive dashboard for Iggy server. It allows you to
 The Web UI is a purely client-side application: every call to the Iggy HTTP API is issued by your browser, not by the Web UI container or server. Two things follow from this:
 
 - `PUBLIC_IGGY_API_URL` must be a URL that the **browser** can reach (e.g. `http://localhost:3010`), not an internal Docker network hostname like `http://iggy:80`.
-- The Iggy server must allow cross-origin requests from the Web UI origin. CORS is enabled for all origins by default (`[http.cors]` in the server config); if you restricted `allowed_origins`, add the Web UI origin.
+- The Iggy server must allow cross-origin requests from the Web UI origin. CORS is enabled for all origins by default (`[http.cors]` in the server config). If you restricted `allowed_origins`, add the Web UI origin.
 
 In embedded mode neither applies: the UI is served from the same origin as the HTTP API and uses relative URLs.
 
@@ -38,11 +38,11 @@ docker pull apache/iggy-web-ui
 docker run -e PUBLIC_IGGY_API_URL=http://localhost:3000 -p 3050:3050 apache/iggy-web-ui
 ```
 
-Remember that `PUBLIC_IGGY_API_URL` is consumed by the browser: if the Iggy server also runs in Docker, use the host-published HTTP port here, not the container's network alias.
+`PUBLIC_IGGY_API_URL` is consumed by the browser: if the Iggy server also runs in Docker, use the host-published HTTP port here, not the container's network alias.
 
 ### Local development
 
-The Web UI lives in the `web/` folder of the [repository](https://github.com/apache/iggy/tree/master/web). Use a Node.js version supported by the frontend toolchain (`^20.19.0 || >=22.12.0` per Vite; 22 LTS is a safe default) and `npm` (`pnpm` and `yarn` are not part of the supported workflow):
+The Web UI lives in the `web/` folder of the [repository](https://github.com/apache/iggy/tree/master/web). Use a Node.js version supported by the frontend toolchain (Vite requires `^20.19.0 || >=22.12.0`, so 22 LTS is a safe default) and `npm` (`pnpm` and `yarn` are not part of the supported workflow):
 
 ```bash
 cd web
@@ -56,7 +56,7 @@ Point the UI at your Iggy server's HTTP API via a `.env` file in the `web/` fold
 
 The Web UI provides the following pages and functionality:
 
-- **Overview** - server health overview and key metrics
+- **Overview** - server health and key metrics
 - **Streams** - list, create, and manage streams
 - **Topics** - manage topics per stream (create, update, delete, purge)
 - **Partitions** - view partition details per topic
@@ -67,7 +67,7 @@ The Web UI provides the following pages and functionality:
 - **Users** - user management (create, update, delete, permissions)
 - **Settings** - Web UI preferences
 
-Some pages visible in the navigation (Clients, Logs, terminal, server settings) are placeholders that are not functional yet; see the [roadmap](https://github.com/apache/iggy/tree/master/web#roadmap) for what is planned.
+Some pages visible in the navigation (Clients, Logs, terminal, server settings) are placeholders that aren't functional yet. See the [roadmap](https://github.com/apache/iggy/tree/master/web#roadmap) for what is planned.
 
 ## Docker Compose example
 

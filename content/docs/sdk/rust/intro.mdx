@@ -63,7 +63,7 @@ iggy://iggy:iggy@my-server:8090?tls=true&tls_ca_file=/path/to/ca.crt
 iggy://iggy:iggy@localhost:8090?reconnection_retries=unlimited&heartbeat_interval=5s
 ```
 
-Personal Access Tokens are also supported. Any credential without a colon is treated as a PAT; paste the token exactly as the server returned it, with **no prefix**:
+Personal Access Tokens are also supported. Any credential without a colon is treated as a PAT. Paste the token exactly as the server returned it, with **no prefix**:
 
 ```
 iggy://<personal-access-token>@localhost:8090
@@ -137,6 +137,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Note that partition IDs are **0-based**: the first partition of a topic is partition `0`.
+Partition IDs are **0-based**: the first partition of a topic is partition `0`.
 
 For the full getting started tutorial, see [Getting Started](/docs/introduction/getting-started). For the high-level producer/consumer builders, see [High-level SDK](/docs/sdk/rust/high-level-sdk) and [Stream Builder](/docs/sdk/rust/stream-builder).

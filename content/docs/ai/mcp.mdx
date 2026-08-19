@@ -12,7 +12,7 @@ The [docker image](https://hub.docker.com/r/apache/iggy-mcp) is available, and c
 
 ## Configuration
 
-The minimal viable configuration requires at least the Iggy credentials, to create the connection with the running Iggy server using TCP with which the MCP server will communicate. You can choose between HTTP (the default) and STDIO transports (e.g. for the local usage with tools such as [Claude Desktop](https://claude.ai/download) choose `stdio`).
+The minimal viable configuration requires at least the Iggy credentials, used to create the TCP connection to the running Iggy server that the MCP server talks to. You can choose between HTTP (the default) and STDIO transports (e.g. for the local usage with tools such as [Claude Desktop](https://claude.ai/download) choose `stdio`).
 
 ```toml
 transport = "http" # http (default) or stdio are supported
@@ -67,7 +67,7 @@ transport = "grpc" # grpc or http
 endpoint = "http://localhost:4317"
 ```
 
-The configuration file must be in the `toml` format. The path to the configuration can be overridden by `IGGY_MCP_CONFIG_PATH` environment variable. Each setting can be also additionally overridden by using the following convention `IGGY_MCP_<SECTION>_<KEY>` e.g. `IGGY_MCP_IGGY_USERNAME`, `IGGY_MCP_HTTP_ADDRESS` and so on. Environment variables can also be loaded from a dotenv file: point `IGGY_MCP_ENV_PATH` at the file, otherwise a `.env` file in the current working directory is loaded automatically.
+The configuration file must be in the `toml` format. The path to the configuration can be overridden by `IGGY_MCP_CONFIG_PATH` environment variable. Each setting can also be overridden by using the following convention `IGGY_MCP_<SECTION>_<KEY>` e.g. `IGGY_MCP_IGGY_USERNAME`, `IGGY_MCP_HTTP_ADDRESS` and so on. Environment variables can also be loaded from a dotenv file: point `IGGY_MCP_ENV_PATH` at the file, otherwise a `.env` file in the current working directory is loaded automatically.
 
 The `token` value can be either a literal PAT or a `file:` reference such as `token = "file:/run/secrets/iggy_pat"`, in which case the token is read from the given file (`~` is expanded to the home directory).
 

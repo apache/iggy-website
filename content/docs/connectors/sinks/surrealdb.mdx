@@ -2,7 +2,7 @@
 title: SurrealDB Sink
 ---
 
-The SurrealDB sink connector writes messages from Iggy streams into SurrealDB over the HTTP API. Each batch becomes one SurrealQL bulk `INSERT IGNORE`, and every record gets a deterministic record id derived from stream, topic, partition, offset, and message id, so replayed batches are idempotent and existing records are left untouched.
+The SurrealDB sink connector writes messages from Iggy streams into SurrealDB over the HTTP API. Each batch becomes one SurrealQL bulk `INSERT IGNORE`. Every record gets a deterministic record id derived from stream, topic, partition, offset, and message id, so replayed batches are idempotent and existing records are left untouched.
 
 This page is a curated subset of the documentation. The canonical reference is the upstream [surrealdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/surrealdb_sink) in the `apache/iggy` repository.
 
@@ -61,7 +61,7 @@ With metadata enabled, each record contains the deterministic `id`, the `iggy_me
 
 ## Delivery Semantics
 
-The runtime commits consumer offsets before `consume()` runs, so persistent write failures are **at-most-once**: they are logged but not redelivered. Transient failures are retried inside the batch with capped exponential backoff. Because records use deterministic ids and `INSERT IGNORE`, a replayed batch (for example after a connector restart re-reads uncommitted messages) does not create duplicates.
+The runtime commits consumer offsets before `consume()` runs, so persistent write failures are **at-most-once**: they are logged but not redelivered. Transient failures are retried inside the batch with capped exponential backoff. Because records use deterministic ids and `INSERT IGNORE`, a replayed batch (for example after a connector restart re-reads uncommitted messages) doesn't create duplicates.
 
 ## Transforms
 

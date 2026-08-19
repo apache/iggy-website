@@ -2,7 +2,7 @@
 title: HTTP Sink
 ---
 
-The HTTP Sink connector consumes messages from Iggy streams and delivers them to any HTTP endpoint: webhooks, REST APIs, serverless functions, or SaaS integrations. This is the transport-level, generic HTTP connector. It is distinct from sinks such as Elasticsearch or Quickwit, which use HTTP internally to talk to one specific system. You bring the URL, headers, and batching strategy, and the sink handles transport, retries, and metadata wrapping.
+The HTTP Sink connector consumes messages from Iggy streams and delivers them to any HTTP endpoint: webhooks, REST APIs, serverless functions, or SaaS integrations. This is the transport-level, generic HTTP connector. It's distinct from sinks such as Elasticsearch or Quickwit, which use HTTP internally to talk to one specific system. You bring the URL, headers, and batching strategy, and the sink handles transport, retries, and metadata wrapping.
 
 This page is a curated subset of the documentation. The canonical reference, including the full configuration table, deployment patterns, and performance analysis, is the upstream [http_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/http_sink) in the `apache/iggy` repository.
 
@@ -46,7 +46,7 @@ The `batch_mode` option controls how messages from one poll cycle are delivered 
 - **`json_array`**: all messages as a single JSON array. Best for APIs that expect array payloads. `Content-Type: application/json`.
 - **`raw`**: raw bytes, one request per message. For non-JSON payloads (Protobuf, FlatBuffers, binary). The metadata envelope is not applied. `Content-Type: application/octet-stream`.
 
-Both `individual` and `raw` perform one HTTP request per message. For production throughput with JSON-representable payloads, prefer `ndjson` or `json_array`, which collapse N round trips per poll cycle into one.
+For production throughput with JSON-representable payloads, prefer `ndjson` or `json_array`, which collapse N round trips per poll cycle into one.
 
 ## Metadata Envelope
 
@@ -80,7 +80,7 @@ Non-JSON payloads (`raw`, `flatbuffer`, `proto`, and `avro` schemas) cannot be e
 
 With the envelope enabled, this object becomes the `payload` field shown above.
 
-The connector does not require any particular message structure on input. The envelope is applied on the way out, not expected on the way in, so your producers can publish whatever they like.
+The connector doesn't require any particular message structure on input. The envelope is applied on the way out, not expected on the way in, so your producers can publish whatever they like.
 
 ## Authentication
 
@@ -99,11 +99,11 @@ Failed requests are retried with exponential backoff: `retry_delay`, multiplied 
 
 - **Transient errors** (retried): network errors, HTTP 429, 500, 502, 503, 504.
 - **Non-transient errors** (fail immediately): HTTP 400, 401, 403, 404, 405, etc.
-- **`success_status_codes`** (default `[200, 201, 202, 204]`) short-circuits retries: any status code in this set is treated as success and is never retried, even codes that are normally transient. Placing `429` in the set makes the sink accept rate-limited responses as delivered; the sink warns at startup about such overlaps.
-- **HTTP 429 `Retry-After`**: the header is logged but not honored; retry timing always uses the computed backoff.
+- **`success_status_codes`** (default `[200, 201, 202, 204]`) short-circuits retries: any status code in this set is treated as success and is never retried, even codes that are normally transient. Placing `429` in the set makes the sink accept rate-limited responses as delivered. The sink warns at startup about such overlaps.
+- **HTTP 429 `Retry-After`**: the header is logged but not honored. Retry timing always uses the computed backoff.
 - **Partial delivery** (`individual`/`raw` modes): after a fixed number of consecutive HTTP failures (3 at the time of writing, not configurable), the remainder of the batch is aborted to avoid hammering a dead endpoint.
 
-The connector runtime commits consumer-group offsets when messages are polled, before `consume()` runs, and does not inspect its return value, so the effective delivery guarantee is **at-most-once** at the runtime level. The sink's internal retry loop provides best-effort delivery within each `consume()` call.
+The connector runtime commits consumer-group offsets when messages are polled, before `consume()` runs, and doesn't inspect its return value, so the effective delivery guarantee is **at-most-once** at the runtime level. The sink's internal retry loop provides best-effort delivery within each `consume()` call.
 
 ## Example Configurations
 
@@ -117,7 +117,7 @@ include_metadata = false
 max_retries = 5
 ```
 
-The sink performs no outbound payload transformation. `include_metadata = false` only skips the envelope; the message payload is delivered exactly as produced, so your producer must publish JSON already in the shape Slack expects (for example `{"text": "..."}`).
+The sink performs no outbound payload transformation. `include_metadata = false` only skips the envelope. The message payload is delivered exactly as produced, so your producer must publish JSON already in the shape Slack expects (for example `{"text": "..."}`).
 
 ### Bulk REST API Ingestion
 
@@ -153,9 +153,9 @@ timeout = "5s"
 
 ## Deployment & Performance
 
-One `iggy-connectors` runtime process can host many connectors: the local config provider imports every connector TOML file under its `config_dir`, and each entry gets its own plugin instance and consume tasks in the same process. Each connector entry has exactly one `[plugin_config]` block and therefore one destination URL, so to send to multiple destinations, add multiple HTTP sink entries with distinct keys and URLs (in the same runtime or separate ones). For fan-out from a single topic to multiple endpoints, point multiple sink entries at the same topic with different `consumer_group` names so each maintains its own offset.
+One `iggy-connectors` runtime process can host many connectors: the local config provider imports every connector TOML file under its `config_dir`, and each entry gets its own plugin instance and consume tasks in the same process. Each connector entry has exactly one `[plugin_config]` block and therefore one destination URL. To send to multiple destinations, add multiple HTTP sink entries with distinct keys and URLs (in the same runtime or separate ones). For fan-out from a single topic to multiple endpoints, point multiple sink entries at the same topic with different `consumer_group` names so each maintains its own offset.
 
-Throughput is dominated by batch-mode choice: the runtime calls `consume()` sequentially within each topic task, so `individual` and `raw` modes perform N round trips per poll cycle while `ndjson`/`json_array` collapse the same batch into one request. Connection pooling and HTTP keep-alive are enabled by default; tune `max_connections` and `batch_length` together for high-throughput targets.
+Throughput is dominated by batch-mode choice: the runtime calls `consume()` sequentially within each topic task, so `individual` and `raw` modes perform N round trips per poll cycle while `ndjson`/`json_array` collapse the same batch into one request. Connection pooling and HTTP keep-alive are enabled by default. Tune `max_connections` and `batch_length` together for high-throughput targets.
 
 For multi-instance deployment patterns (Docker, Kubernetes, fan-out topologies), connection pool tuning, and full performance analysis, see the upstream [http_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/http_sink).
 
@@ -163,7 +163,7 @@ For multi-instance deployment patterns (Docker, Kubernetes, fan-out topologies),
 
 - **No `Retry-After` honoring**: the header is logged but doesn't influence retry timing.
 - **No dead-letter queue**: failed messages are logged at `error!` level but not persisted.
-- **No request signing**: AWS SigV4, HMAC, and similar schemes are not supported. Use custom headers or a signing proxy.
+- **No request signing**: AWS SigV4, HMAC, and similar schemes aren't supported. Use custom headers or a signing proxy.
 - **No per-topic URL routing**: all topics in one connector instance share the same `url`. For routing, deploy multiple instances.
 - **No OAuth2 / OIDC token refresh**: bearer tokens are static. Use an auth proxy for services that require token rotation.
 - **No mTLS client certificates**: terminate mTLS at a sidecar proxy for production use.

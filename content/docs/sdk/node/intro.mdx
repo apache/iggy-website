@@ -4,7 +4,7 @@ title: Node.js SDK
 
 The Iggy Node.js SDK is a client library that allows you to interact with the Iggy API from your Node.js and TypeScript applications. It communicates with the Iggy server over TCP or TLS using the binary protocol. The package is available on [npm](https://www.npmjs.com/package/apache-iggy) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/master/foreign/node).
 
-The SDK speaks the current (VSR) wire protocol exclusively and does not fall back to older formats, so it requires an Iggy server that speaks it. Keep the client and server versions in step: pair the newest package with the newest server.
+The SDK speaks only the current (VSR) wire protocol and doesn't fall back to older formats. Keep the client and server versions in step: pair the newest package with the newest server.
 
 ## Installation
 
@@ -29,7 +29,7 @@ docker run --rm \
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and set the root credentials the samples below log in with. Without `--with-default-root-credentials` (or the `IGGY_ROOT_USERNAME` / `IGGY_ROOT_PASSWORD` variables), a first boot generates a random root password instead of `iggy`/`iggy`.
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and set the root credentials the samples log in with. Without `--with-default-root-credentials` (or the `IGGY_ROOT_USERNAME` / `IGGY_ROOT_PASSWORD` variables), a first boot generates a random root password instead of `iggy`/`iggy`.
 
 ### Producer
 
@@ -118,12 +118,12 @@ await client.destroy();
 
 ## Configuration
 
-The client constructor accepts a few knobs worth knowing about:
+The client constructor accepts a few options:
 
 - **reconnect**: automatic reconnection with `{ enabled, interval, maxRetries }`.
-- **heartbeatInterval**: the client pings the server every 5 seconds by default; `0` disables heartbeats. The server evicts connections that stay silent too long, so keep it well below the server's heartbeat timeout.
+- **heartbeatInterval**: the client pings the server every 5 seconds by default. `0` disables heartbeats. The server evicts connections that stay silent too long, so keep it well below the server's heartbeat timeout.
 - **maxResponseFrameSize**: response frames larger than this limit (default 64 MiB) are rejected and close the connection. Raise it when polling very large batches.
-- **poolSize**: the client currently supports exactly one pooled connection; `min`/`max` above 1 throw.
+- **poolSize**: the client currently supports exactly one pooled connection. `min`/`max` above 1 throw.
 - **TLS**: set `transport: 'TLS'` and pass Node `tls.ConnectionOptions` in `options`. See the [tcp-tls example](https://github.com/apache/iggy/tree/master/examples/node/src/tcp-tls).
 
 ## Beyond the basics

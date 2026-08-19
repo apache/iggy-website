@@ -87,6 +87,6 @@ Source connectors can persist their position (see the [SDK documentation](/docs/
 path = "local_state"
 ```
 
-Each source gets one file named `source_{key}.state` (e.g. `local_state/source_random.state`) holding the raw state bytes - by convention MessagePack produced by the SDK helpers. Sinks have no state files; their progress lives in Iggy consumer groups.
+Each source gets one file named `source_{key}.state` (e.g. `local_state/source_random.state`) holding the raw state bytes - by convention MessagePack produced by the SDK helpers. Sinks have no state files. Their progress lives in Iggy consumer groups.
 
-The write is crash-safe: the state is written and fsynced to a `.tmp` file, atomically renamed over the previous file, and the directory entry is fsynced. Files are created with owner-only permissions (`0600`), since state may carry cursors or tokens. An empty or missing state file simply means the source starts fresh - deleting a state file resets that source's position.
+The write is crash-safe: the state is written and fsynced to a `.tmp` file, atomically renamed over the previous file, and the directory entry is fsynced. Files are created with owner-only permissions (`0600`), since state may carry cursors or tokens. An empty or missing state file means the source starts fresh - deleting a state file resets that source's position.

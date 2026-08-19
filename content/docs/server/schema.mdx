@@ -4,7 +4,7 @@ title: Schema
 
 Iggy speaks one binary protocol over its three binary transports: TCP, QUIC, and WebSocket. Commands, responses, data models, and status codes are the same on all of them. The HTTP transport is separate: it exposes the same operations as JSON REST endpoints, listed in [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http).
 
-This page describes **binary protocol version 0.11.0**. The protocol version is the semver of the `iggy_binary_protocol` crate, and it is exchanged and checked during login (see [Connection lifecycle](#connection-lifecycle)). The crate itself is the source of truth: every request and response module carries a `Wire format:` doc comment, and this page is generated against those.
+This page describes **binary protocol version 0.11.0**. The protocol version is the semver of the `iggy_binary_protocol` crate, and it's exchanged and checked during login (see [Connection lifecycle](#connection-lifecycle)). The crate itself is the source of truth: every request and response module carries a `Wire format:` doc comment, and this page is generated against those.
 
 All multi-byte integers are **little-endian** unless stated otherwise.
 
@@ -32,7 +32,7 @@ The header shape is identified by the `command` byte at offset 60. Values a clie
 
 Other `command` values (Prepare, PrepareOk, view-change traffic, and so on) are replica-to-replica consensus messages and never appear on a client connection.
 
-The `size` field at offset 48 is the total frame length in bytes, header included. A body, when present, immediately follows the 256 header bytes and has length `size - 256`. Readers can decode `size` before typing the header; that offset is a protocol constant.
+The `size` field at offset 48 is the total frame length in bytes, header included. A body, when present, immediately follows the 256 header bytes and has length `size - 256`. Readers can decode `size` before typing the header. That offset is a protocol constant.
 
 ### RequestHeader
 
@@ -61,7 +61,7 @@ Client to server. 256 bytes.
 
 ### Operation discriminants
 
-The `operation` byte tells the server which state-machine operation the request carries. Replicated operations are identified by `operation` alone; non-replicated operations (reads, ping) all use `operation = 2` and carry their concrete u32 command code in header bytes 196..200.
+The `operation` byte tells the server which state-machine operation the request carries. Replicated operations are identified by `operation` alone. Non-replicated operations (reads, ping) all use `operation = 2` and carry their concrete u32 command code in header bytes 196..200.
 
 Values a client may send:
 
@@ -102,14 +102,14 @@ The planes matter for delivery semantics:
 
 - **Metadata operations** replicate through the metadata consensus group. The server deduplicates them by `(client, request)` and caches replies, so a retried request gets the cached answer instead of a double apply (exactly-once).
 - **Partition operations** replicate through their partition's consensus group. They are at-least-once: no reply cache, a replay may apply again.
-- **Non-replicated operations** are reads; they bypass consensus and deduplication entirely.
+- **Non-replicated operations** are reads. They bypass consensus and deduplication entirely.
 
 ### Request numbering
 
 `request` is a per-client counter the server's client table tracks for metadata-plane operations:
 
 - Metadata operations must send a strictly increasing `request` (the SDK advances the counter per metadata request).
-- Partition operations and non-replicated operations send the current counter value without advancing it; the server does not track theirs.
+- Partition operations and non-replicated operations send the current counter value without advancing it. The server doesn't track theirs.
 - The counter is a watermark, not a contiguous sequence: any value above the last accepted one is admissible.
 
 `session` is the fence epoch: the value handed back by the login reply. Every request after login must echo it. When the same `client` id registers again, the new registration mints a higher epoch and requests carrying the old one are fenced (rejected as zombies).
@@ -145,7 +145,7 @@ Decode order for a client:
 
 1. Read 256 bytes, check `command`. `13` (`Eviction`) means the session is dead: map the eviction reason to an error and stop. `8` (`Reply`) continues.
 2. Read the remaining `size - 256` body bytes.
-3. If `status` is nonzero, the request failed pre-commit; the status value is the `IggyError` code and the body is empty.
+3. If `status` is nonzero, the request failed pre-commit. The status value is the `IggyError` code and the body is empty.
 4. Otherwise decode the body. For result-framed operations, strip the [result section](#result-section) first.
 
 ### Result section
@@ -160,9 +160,9 @@ count x { index: u32, result: u32 }
 - Success: `count = 0`, and the typed response payload (if any) follows the 4 count bytes.
 - Committed business rejection: one entry `{ index: 0, result: error_code }` and no payload.
 
-The header `status` channel and the result section are mutually exclusive by construction: a reply either failed pre-commit (`status` nonzero, empty body) or committed (`status` zero, result section present). A login-register reply carries the result section only when non-empty; on success its body starts directly with the [login response payload](#login-register).
+The header `status` channel and the result section are mutually exclusive by construction: a reply either failed pre-commit (`status` nonzero, empty body) or committed (`status` zero, result section present). A login-register reply carries the result section only when non-empty. On success its body starts directly with the [login response payload](#login-register).
 
-Replies to non-replicated commands are not result-framed: after `status = 0` the body is the response payload directly.
+Replies to non-replicated commands aren't result-framed: after `status = 0` the body is the response payload directly.
 
 ### EvictionHeader
 
@@ -235,7 +235,7 @@ Both request bodies begin with the `ClientVersionInfo` prefix, so the server can
 [sdk_version_len: u8][sdk_version: UTF-8, 1-255 bytes]
 ```
 
-`protocol_version` is the packed version of the protocol the client was built against. `sdk_name` identifies the SDK (for example `rust-sdk`, `go-sdk`); `sdk_version` is the SDK's own build version.
+`protocol_version` is the packed version of the protocol the client was built against. `sdk_name` identifies the SDK (for example `rust-sdk`, `go-sdk`). `sdk_version` is the SDK's own build version.
 
 After the prefix:
 
@@ -269,11 +269,11 @@ A successful login is a normal `Reply` whose body is:
 
 The client stores `session` and echoes it in every subsequent request header. Logout is command code **39** (`LOGOUT_USER`), `operation = 3` (`Logout`), empty body.
 
-The legacy login commands **38** (`LOGIN_USER`) and **44** (`LOGIN_WITH_PERSONAL_ACCESS_TOKEN`) are refused: the server answers them with an `Eviction` frame, reason `15` (`MalformedLogin`). Only `PING` is accepted before login; every other command on an unauthenticated connection is denied.
+The legacy login commands **38** (`LOGIN_USER`) and **44** (`LOGIN_WITH_PERSONAL_ACCESS_TOKEN`) are refused: the server answers them with an `Eviction` frame, reason `15` (`MalformedLogin`). Only `PING` is accepted before login. Every other command on an unauthenticated connection is denied.
 
 ## Command catalog
 
-The u32 command codes. Replicated commands are identified on the wire by their `operation` byte (see [Operation discriminants](#operation-discriminants)); the code column below is the protocol-level registry and, for non-replicated commands, the value carried in header bytes 196..200.
+The u32 command codes. Replicated commands are identified on the wire by their `operation` byte (see [Operation discriminants](#operation-discriminants)). The code column below is the protocol-level registry and, for non-replicated commands, the value carried in header bytes 196..200.
 
 ```bash
 # System
@@ -390,7 +390,7 @@ Several commands take an optional partition id encoded as 5 fixed bytes:
 [flag: u8][partition_id: u32]
 ```
 
-`flag = 1` means the id is set; `flag = 0` means none (the value bytes are then zero). For consumer-group consumers the partition id is left unset and the server resolves it.
+`flag = 1` means the id is set. `flag = 0` means none (the value bytes are then zero). For consumer-group consumers the partition id is left unset and the server resolves it.
 
 ### Partitioning
 
@@ -436,7 +436,7 @@ Typed values used by user headers and option values. The kind byte:
 | 6 | Int32 | 14 | Float32 |
 | 7 | Int64 | 15 | Float64 |
 
-Integers are little-endian; `Bool` is one byte.
+Integers are little-endian. `Bool` is one byte.
 
 ### User headers block
 
@@ -450,7 +450,7 @@ Fields pair up: first the key, then the value. Keys are `String` kind. Every `le
 
 ### Options block
 
-`CreateStream`, `UpdateStream`, `CreateTopic`, `UpdateTopic`, `CreateUser`, and `UpdateUser` end with a key-value **options block** that reuses the user-headers TLV encoding. The block runs from its start to the end of the payload (no length prefix; the validator requires exact consumption) and may be empty.
+`CreateStream`, `UpdateStream`, `CreateTopic`, `UpdateTopic`, `CreateUser`, and `UpdateUser` end with a key-value **options block** that reuses the user-headers TLV encoding. The block runs from its start to the end of the payload (no length prefix, and the validator requires exact consumption) and may be empty.
 
 On top of the TLV walk, options enforce: string keys only (kind 2, valid UTF-8), no duplicate keys, at most 1024 entries, and at most 100000 bytes total.
 
@@ -460,7 +460,7 @@ Semantics:
 - **Update** requests are patches: keys absent from the block are left alone, never reset. A client built before a key existed cannot erase it.
 - Unknown keys are rejected at the wire edge, never silently skipped.
 
-The catalog is discoverable at runtime with `DESCRIBE_OPTIONS` (code 13), payload `[scope: u8]` with scope `1` = topic, `2` = stream, `3` = user (HTTP: `GET /options/topic`). Today only topics have keys; the stream and user catalogs are empty and any key sent for them is rejected. The topic catalog (`segment_size`, `enforce_fsync`, `message_expiry`, `max_topic_size`, and the rest) with defaults and constraints is documented on the [Topic options](/docs/server/topic-options) page. `UpdateTopic` accepts only `compression_algorithm`, `message_expiry`, and `max_topic_size`; the storage-layout knobs are create-only.
+The catalog is discoverable at runtime with `DESCRIBE_OPTIONS` (code 13), payload `[scope: u8]` with scope `1` = topic, `2` = stream, `3` = user (HTTP: `GET /options/topic`). Today only topics have keys. The stream and user catalogs are empty, and any key sent for them is rejected. The topic catalog (`segment_size`, `enforce_fsync`, `message_expiry`, `max_topic_size`, and the rest) with defaults and constraints is documented on the [Topic options](/docs/server/topic-options) page. `UpdateTopic` accepts only `compression_algorithm`, `message_expiry`, and `max_topic_size`. The storage-layout knobs are create-only.
 
 ### Compression
 
@@ -471,7 +471,7 @@ The `compression_algorithm` value used by topic options:
 | 1, `none` | No compression (default) |
 | 2, `gzip` | Gzip |
 
-Other algorithms (lz4, zstd) are planned but not implemented; any other value is rejected.
+Other algorithms (lz4, zstd) are planned but not implemented. Any other value is rejected.
 
 ## Message batch format
 
@@ -507,7 +507,7 @@ frame = [frame header: 48 bytes][payload][user_headers]
 | 36 | 4 | `payload_length` | u32 | Byte length of the payload. |
 | 40 | 8 | reserved | u64 | Must be zero. |
 
-After the 48 header bytes: `payload` (`payload_length` bytes), then `user_headers` (`user_headers_length` bytes). Note the payload comes **first**.
+After the 48 header bytes: `payload` (`payload_length` bytes), then `user_headers` (`user_headers_length` bytes). The payload comes **first**.
 
 A frame's absolute position is derived, not stored: offset = `base_offset + offset_delta`, timestamp = `base_timestamp + timestamp_delta` for the server-stamped time (`origin_timestamp + timestamp_delta` for producer time).
 
@@ -609,7 +609,7 @@ Patch semantics: absent option keys are left unchanged.
 [stream_id: Identifier][partitions_count: u32][name_len: u8][name: N][options block to end]
 ```
 
-The fixed fields are the shape of the operation: which stream, how many partitions, what name. Every topic setting (`compression_algorithm`, `message_expiry`, `max_topic_size`, `segment_size`, `enforce_fsync`, `messages_required_to_save`, `size_of_messages_required_to_save`, `preallocate_segments`) rides the options block; see [Topic options](/docs/server/topic-options). `partitions_count` is an argument, not a setting: it is consumed at admission and never persisted as an option.
+The fixed fields are the shape of the operation: which stream, how many partitions, what name. Every topic setting (`compression_algorithm`, `message_expiry`, `max_topic_size`, `segment_size`, `enforce_fsync`, `messages_required_to_save`, `size_of_messages_required_to_save`, `preallocate_segments`) rides the options block. See [Topic options](/docs/server/topic-options). `partitions_count` is an argument, not a setting: it is consumed at admission and never persisted as an option.
 
 **Delete topic. Code: 303.**
 
@@ -623,7 +623,7 @@ The fixed fields are the shape of the operation: which stream, how many partitio
 [stream_id: Identifier][topic_id: Identifier][name_len: u8][name: N][options block to end]
 ```
 
-Only `compression_algorithm`, `message_expiry`, and `max_topic_size` are updatable; absent keys are left unchanged.
+Only `compression_algorithm`, `message_expiry`, and `max_topic_size` are updatable. Absent keys are left unchanged.
 
 **Purge topic. Code: 305.**
 
@@ -685,7 +685,7 @@ The 16-byte prefix is followed by a stream of [batch records](#message-batch-for
 [batch: 256-byte batch header + frames]
 ```
 
-`metadata_length` counts the bytes from `stream_id` through `messages_count` inclusive, so a reader can skip straight to the batch. The producer leaves `partition_id`, `base_offset`, and `base_timestamp` zero in the batch header; the server stamps them. Every checksum is producer-computed and verified at admission; the reserved regions must be zero.
+`metadata_length` counts the bytes from `stream_id` through `messages_count` inclusive, so a reader can skip straight to the batch. The producer leaves `partition_id`, `base_offset`, and `base_timestamp` zero in the batch header, and the server stamps them. Every checksum is producer-computed and verified at admission. The reserved regions must be zero.
 
 **Flush unsaved buffer. Code: 102.**
 
@@ -724,7 +724,7 @@ Response body (20 bytes):
 [partition_flag: u8][partition_id: u32][ack: u8]
 ```
 
-The trailing `ack` byte is mandatory on both write commands; a payload without it fails to decode. Ack levels:
+The trailing `ack` byte is mandatory on both write commands. A payload without it fails to decode. Ack levels:
 
 | Value | Level | Meaning |
 |-------|-------|---------|
@@ -795,7 +795,7 @@ Read-only: a member asks for its current partition assignment and the group gene
 [options block to end]
 ```
 
-`permissions_len` and the permissions bytes are present **only** when `has_permissions = 1`; when it is 0 the options block follows immediately. The user option catalog is empty today, so the block is normally empty. `status`: 1 = active, 2 = inactive.
+`permissions_len` and the permissions bytes are present **only** when `has_permissions = 1`. When it is 0 the options block follows immediately. The user option catalog is empty today, so the block is normally empty. `status`: 1 = active, 2 = inactive.
 
 **Delete user. Code: 34.**
 
@@ -833,10 +833,10 @@ As in `CreateUser`, the length field is conditional: with `has_permissions = 0` 
 
 Login and logout are part of the [connection lifecycle](#connection-lifecycle):
 
-- **Login register. Code: 40.** `Operation::Register`; body is `ClientVersionInfo` + credentials, described [above](#login-register).
-- **Login register with PAT. Code: 45.** `Operation::Register`; body is `ClientVersionInfo` + token.
-- **Logout user. Code: 39.** `Operation::Logout`; empty payload.
-- Codes **38** and **44** are the pre-register login shapes; the server rejects both with a `MalformedLogin` eviction.
+- **Login register. Code: 40.** `Operation::Register`. The body is `ClientVersionInfo` + credentials, described [above](#login-register).
+- **Login register with PAT. Code: 45.** `Operation::Register`. The body is `ClientVersionInfo` + token.
+- **Logout user. Code: 39.** `Operation::Logout`. Empty payload.
+- Codes **38** and **44** are the pre-register login shapes. The server rejects both with a `MalformedLogin` eviction.
 
 ### Personal access tokens
 

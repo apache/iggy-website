@@ -36,7 +36,7 @@ batch_size = 1000
 timeout = "30s"
 ```
 
-The target database and table must be pre-created; the connector never issues DDL. `database` and `table` must match `[A-Za-z0-9_]+` or startup fails. Streams must use `schema = "json"`.
+The target database and table must be pre-created. The connector never issues DDL. `database` and `table` must match `[A-Za-z0-9_]+` or startup fails. Streams must use `schema = "json"`.
 
 ### Common Options
 
@@ -58,19 +58,19 @@ Further options cover the label prefix, connect timeout, retry backoff (`retry_d
 ## Output Formats
 
 - **`json`** (default): payloads are sent as a JSON array with `strip_outer_array: true`. Values map to columns by name, so the JSON shape must match the table (use `columns` if the JSON field names differ from the table columns or you need derived expressions).
-- **`csv`**: opt-in for throughput. Doris CSV is positional, so `output_format = "csv"` **requires `columns`** to pin the column order; startup fails without it. Rows are framed with control-character separators and quoted with `enclose`/`escape`, so embedded commas and newlines are safe. JSON `null` and missing keys become SQL `NULL`, and nested objects or arrays are stringified as JSON.
+- **`csv`**: opt-in for throughput. Doris CSV is positional, so `output_format = "csv"` **requires `columns`** to pin the column order. Startup fails without it. Rows are framed with control-character separators and quoted with `enclose`/`escape`, so embedded commas and newlines are safe. JSON `null` and missing keys become SQL `NULL`, and nested objects or arrays are stringified as JSON.
 
 ## Delivery Semantics
 
 Each batch is loaded under a deterministic label derived from the stream, topic, partition, and offset range. Transient failures (HTTP 5xx/408/429, transport errors) are retried in-request with exponential backoff and jitter under the same label, which Doris deduplicates, so an ambiguous success is absorbed rather than doubled. Permanent errors (4xx, `Fail` status, malformed responses) are never retried.
 
-The runtime commits consumer offsets at poll time and does not inspect `consume()`'s return value, so delivery is **at-most-once** across polls: a failure that outlives the retry budget, or a crash mid-load, is not replayed. Keep `batch_size` stable across a manual redrive, since changing it shifts chunk boundaries and defeats label deduplication.
+The runtime commits consumer offsets at poll time and doesn't inspect `consume()`'s return value, so delivery is **at-most-once** across polls: a failure that outlives the retry budget, or a crash mid-load, is not replayed. Keep `batch_size` stable across a manual redrive, since changing it shifts chunk boundaries and defeats label deduplication.
 
 ## Security Notes
 
 - Use `https://` for `fe_url` in production: credentials travel as HTTP Basic auth.
 - The connector preserves the `Authorization` header across the Doris FE-to-BE 307 redirect, validating the target first: scheme downgrades are refused unless `allow_insecure_redirect = true`, and `allowed_redirect_hosts` can pin redirects to known backend endpoints.
-- `columns` and `where` are forwarded verbatim to Doris and evaluated as SQL expressions; keep this config trusted.
+- `columns` and `where` are forwarded verbatim to Doris and evaluated as SQL expressions. Keep this config trusted.
 
 ## Transforms
 

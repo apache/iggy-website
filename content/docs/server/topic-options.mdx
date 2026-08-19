@@ -2,9 +2,9 @@
 title: Topic Options
 ---
 
-Retention, durability, and segment layout are per-topic decisions, made when the topic is created. They used to be server-wide `[system.*]` keys, which gave every knob two homes; the server now [refuses to boot](/docs/server/configuration#relocated-configuration-keys) on the old keys and each topic carries its own values instead.
+Retention, durability, and segment layout are per-topic decisions, made when the topic is created. They used to be server-wide `[system.*]` keys, which gave every knob two homes. The server now [refuses to boot](/docs/server/configuration#relocated-configuration-keys) on the old keys, and each topic carries its own values instead.
 
-Options are key-value pairs sent with `CreateTopic`. Unknown keys are **rejected at the edge, never skipped**: a silently ignored knob would hand the client server defaults without it ever learning. The same mechanism exists for streams and users, but their catalogs are empty today; only topics have option keys.
+Options are key-value pairs sent with `CreateTopic`. Unknown keys are **rejected at the edge, never skipped**: a silently ignored knob would leave the client on server defaults with no way to find out. The same mechanism exists for streams and users, but their catalogs are empty today. Only topics have option keys.
 
 ## The catalog
 
@@ -19,11 +19,11 @@ Options are key-value pairs sent with `CreateTopic`. Unknown keys are **rejected
 | `size_of_messages_required_to_save` | 1 MiB | at most 1 GiB | Flush the journal once it holds this many bytes. Paired with the message count; whichever threshold trips first flushes. |
 | `preallocate_segments` | `false` | `segment_size` x partitions at most 64 GiB per create | Reserve each segment's bytes up front where the filesystem supports it. |
 
-Both retention policies can be active at once. The active segment is **never touched**; deletion is done by the server's segment cleaner (`[data_maintenance.messages]`, enabled by default).
+Both retention policies can be active at once. The active segment is **never touched**. Deletion is done by the server's segment cleaner (`[data_maintenance.messages]`, enabled by default).
 
 Value forms are forgiving: byte sizes accept a raw number of bytes or a string like `"128 MiB"`, expiry accepts microseconds or a humantime string like `"7 days"`, booleans accept `true`/`false`. Create admission re-parses and re-encodes what you send, so a string `segment_size=128MiB` is stored as the number it names.
 
-A note on `preallocate_segments`: it reserves exactly `segment_size` of real disk per partition the moment the topic is created (and again as segments rotate). With the default 1 GiB segment size that is 1 GiB per partition up front, which is why it is opt-in and why one create is **capped at 64 GiB** of total reservation.
+`preallocate_segments` reserves exactly `segment_size` of real disk per partition the moment the topic is created (and again as segments rotate). With the default 1 GiB segment size that's 1 GiB per partition up front, which is why it's opt-in and why one create is **capped at 64 GiB** of total reservation.
 
 ## Setting options
 
@@ -37,11 +37,11 @@ iggy topic create my-stream my-topic 1 none \
   --set enforce_fsync=true
 ```
 
-In the CLI, `compression_algorithm`, `message_expiry`, and `max_topic_size` also have first-class parameters on `iggy topic create`; `--set` covers the storage knobs that have no named parameter of their own. Values are sent as strings and parsed server-side, so `iggy options topic` (below) tells you exactly what this server accepts.
+In the CLI, `compression_algorithm`, `message_expiry`, and `max_topic_size` also have first-class parameters on `iggy topic create`. `--set` covers the storage knobs that have no named parameter of their own. Values are sent as strings and parsed server-side, so `iggy options topic` (below) tells you exactly what this server accepts.
 
 SDKs pass options as a parameter on the create call (`TopicCreateOptions::raw` in Rust, an `options` dictionary or list in Node, Python, Go, Java, C#, and C++). The HTTP API takes them as a plain string map in the create body.
 
-Keys you do not send are resolved to the defaults above by the admitting server and stored as **derived** entries. `GetTopic` returns both blocks, explicit and derived, so the effective value of every knob is always visible, along with who chose it.
+Keys you don't send are resolved to the defaults above by the admitting server and stored as **derived** entries. `GetTopic` returns both blocks, explicit and derived, so the effective value of every knob is always visible, along with who chose it.
 
 ## Create-only vs updatable
 
@@ -51,7 +51,7 @@ Keys you do not send are resolved to the defaults above by the admitting server 
 - `message_expiry`
 - `max_topic_size`
 
-Updates are **patches**: a key you do not send keeps its current value.
+Updates are **patches**: a key you don't send keeps its current value.
 
 The storage knobs (`segment_size`, `enforce_fsync`, `messages_required_to_save`, `size_of_messages_required_to_save`, `preallocate_segments`) are **create-only**. They describe how a partition's storage is laid down: changing `segment_size` mid-segment would leave segments sized by different caps, and preallocation can only act on a file not yet opened. A topic gets them at creation and keeps them, so its segments stay uniform. This is also why the server refuses to boot on the old config keys instead of ignoring them: a topic created while an old key was silently dropped could never be given the setting afterwards.
 
@@ -73,6 +73,6 @@ Discovery matters most on the binary transports: TCP, QUIC, and WebSocket carry 
 
 ## Durability
 
-Single-node durability is a per-topic decision. For the strongest guarantee, create the topic with `enforce_fsync=true`; every write is then **fsynced before it is acknowledged**. Without it, the flush thresholds (`messages_required_to_save`, `size_of_messages_required_to_save`) bound how much buffered data a crash can lose, at much higher throughput.
+Single-node durability is a per-topic decision. For the strongest guarantee, create the topic with `enforce_fsync=true`. Every write is then **fsynced before it is acknowledged**. Without it, the flush thresholds (`messages_required_to_save`, `size_of_messages_required_to_save`) bound how much buffered data a crash can lose, at much higher throughput.
 
 In cluster mode, durability comes from quorum replication: a write is acknowledged once a majority of replicas hold it. See [Clustering](/docs/clustering/vsr).

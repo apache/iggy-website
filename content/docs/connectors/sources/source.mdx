@@ -42,7 +42,7 @@ pub struct SourceConfig {
 }
 ```
 
-The two flags at the end are optional and default to `false`: `verbose` switches the connector's per-batch logging to info level, and `benchmark` emits per-batch timing events for performance measurement.
+`verbose` and `benchmark` are optional and default to `false`. `verbose` switches the connector's per-batch logging to info level, and `benchmark` emits per-batch timing events for performance measurement.
 
 **Main runtime config (config.toml):**
 
@@ -109,7 +109,7 @@ IGGY_CONNECTORS_SOURCE_RANDOM_PLUGIN_CONFIG_PAYLOAD_SIZE=200
 
 ## Sample implementation
 
-Let's implement the example source connector, which will simply generate a random batch of messages at the configured interval, optionally stopping after a total message limit.
+Let's implement the example source connector, which generates a random batch of messages at the configured interval and optionally stops after a total message limit.
 
 Additionally, our source connector will have its own state, which can be used e.g. to track the overall progress or store some relevant information when producing the data from the actual external sources or tooling.
 
@@ -119,7 +119,7 @@ Also, when implementing the source connector, make sure to use the `source_conne
 
 And finally, each source should have its own, custom configuration, which is passed along with the unique plugin ID and optional state via expected `new()` method.
 
-The full, compiling implementation lives in the repository at [core/connectors/sources/random_source](https://github.com/apache/iggy/tree/master/core/connectors/sources/random_source); the snippets below mirror it.
+The full, compiling implementation lives in the repository at [core/connectors/sources/random_source](https://github.com/apache/iggy/tree/master/core/connectors/sources/random_source). The snippets below mirror it.
 
 Let's start by defining the internal state and the public source connector along with its own configuration.
 
@@ -202,7 +202,7 @@ At a bare minimum, we need to add the following dependencies to the `Cargo.toml`
 - tokio
 - tracing
 
-This particular example additionally uses `humantime`, `rand`, `rmp-serde`, `simd-json`, and `uuid`.
+This example also uses `humantime`, `rand`, `rmp-serde`, `simd-json`, and `uuid`.
 
 Before we make use of the `Source` trait, let's define the internal payload of the message that will be produced (e.g. as if it was pulled from some external database or so).
 
@@ -216,7 +216,7 @@ struct Record {
 }
 ```
 
-Next, a few helpers: `serialize_state()` encodes the state to MessagePack via the `ConnectorState::serialize()` helper, and `generate_messages()` builds a random number of messages (within `messages_range`), each carrying a JSON-serialized `Record` with `payload_size` random characters of text.
+`serialize_state()` encodes the state to MessagePack via `ConnectorState::serialize()`. `generate_messages()` builds a random number of messages (within `messages_range`), each carrying a JSON-serialized `Record` with `payload_size` random characters of text.
 
 ```rust
 impl RandomSource {
@@ -267,7 +267,7 @@ impl RandomSource {
 }
 ```
 
-Now, let's implement the `Source` trait for our `RandomSource` struct. Each `poll()` waits for the configured `interval` to mimic the behavior of a real-world external source, stops producing once `max_count` messages were generated (when it is set), and returns the updated state along with the `ProducedMessages` - the runtime persists that state and hands it back to `new()` after a restart.
+Now, let's implement the `Source` trait for our `RandomSource` struct. Each `poll()` waits for the configured `interval` to mimic a real-world external source, stops producing once `max_count` messages have been generated (if it's set), and returns the updated state along with the `ProducedMessages`. The runtime persists that state and hands it back to `new()` after a restart.
 
 ```rust
 #[async_trait]

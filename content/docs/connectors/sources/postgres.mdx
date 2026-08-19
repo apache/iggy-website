@@ -88,7 +88,7 @@ By default (no `payload_column`), each row is wrapped in a JSON envelope:
 }
 ```
 
-The stream config should use `schema = "json"`. Flat-schema sinks such as Iceberg need the `unwrap_envelope` transform to extract the `data` field; see the [transforms documentation](/docs/connectors/transforms).
+The stream config should use `schema = "json"`. Flat-schema sinks such as Iceberg need the `unwrap_envelope` transform to extract the `data` field. See the [transforms documentation](/docs/connectors/transforms).
 
 ### Payload Column Extraction
 
@@ -101,6 +101,6 @@ With `mode = "cdc"` the connector reads changes from a logical replication slot 
 - The builtin backend creates (or reuses) a logical replication slot using the `test_decoding` output plugin. The default slot name is `iggy_slot`. No publication is created or required, since `test_decoding` ignores publications entirely.
 - PostgreSQL must run with `wal_level = logical`, and the connection must be direct (no pooler) where replication requires it.
 - `capture_operations` filters which operations (`INSERT`, `UPDATE`, `DELETE`) are emitted.
-- The `pg_replicate` backend (based on Supabase's ETL framework) is a placeholder and is **not implemented**: selecting `cdc_backend = "pg_replicate"` fails at startup unless the `cdc_pg_replicate` build feature is enabled, and the backend returns an error even when it is.
+- The `pg_replicate` backend (based on Supabase's ETL framework) is **not implemented**: selecting `cdc_backend = "pg_replicate"` fails at startup unless the `cdc_pg_replicate` build feature is enabled, and the backend returns an error even when it is.
 
-When decommissioning a CDC connector, drop the replication slot to stop WAL retention; see the upstream README for details.
+When decommissioning a CDC connector, drop the replication slot to stop WAL retention. See the upstream README for details.

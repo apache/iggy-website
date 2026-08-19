@@ -8,7 +8,7 @@ Moreover, it contains both, the `decoders` and `encoders` modules, implementing 
 
 ## Traits
 
-A source produces messages to the configured stream and topic, a sink consumes messages from the configured stream(s) and topic(s):
+A source produces messages to the configured stream and topic. A sink consumes messages from the configured stream(s) and topic(s):
 
 ```rust
 #[async_trait]
@@ -53,7 +53,7 @@ The macros generate the C FFI symbols loaded by the runtime: `iggy_sink_open`, `
 
 ## State
 
-Source connectors can persist their position between restarts. Each batch of `ProducedMessages` may carry an optional `ConnectorState` - the runtime saves it to a file after the batch is sent to Iggy, and passes the last saved state to `new()` on the next startup. `ConnectorState` wraps raw bytes and provides `serialize`/`deserialize` helpers backed by MessagePack. Sinks do not manage state - their offsets are tracked by Iggy consumer groups. See the **[Observability page](/docs/connectors/observability)** for where and how state files are stored.
+Source connectors can persist their position between restarts. Each batch of `ProducedMessages` may carry an optional `ConnectorState` - the runtime saves it to a file after the batch is sent to Iggy, and passes the last saved state to `new()` on the next startup. `ConnectorState` wraps raw bytes and provides `serialize`/`deserialize` helpers backed by MessagePack. Sinks don't manage state. Their offsets are tracked by Iggy consumer groups. See the **[Observability page](/docs/connectors/observability)** for where and how state files are stored.
 
 ## Retry utilities
 
@@ -80,7 +80,7 @@ The SDK includes support for Protocol Buffers (protobuf) format with both encodi
 
 ### Configuration Example
 
-Here's a complete example configuration for using Protocol Buffers with Iggy connectors. Note that no protobuf-specific plugin ships with the runtime - the example assumes a custom source and sink you implement yourself; the `schema = "proto"` stream setting and the `proto_convert` transform work with any connector.
+Here's a complete example configuration for using Protocol Buffers with Iggy connectors. No protobuf-specific plugin ships with the runtime, so the example assumes a custom source and sink you implement yourself. The `schema = "proto"` stream setting and the `proto_convert` transform work with any connector.
 
 **Main runtime config (config.toml):**
 
@@ -149,9 +149,9 @@ type_url_prefix = "type.googleapis.com"
 strict_mode = false
 ```
 
-Note that the format-conversion transforms define no per-key defaults - every non-optional key shown above must be present, or the configuration fails to deserialize (`schema_path`, `message_type`, `field_mappings`, and `descriptor_set` are the optional ones).
+The format-conversion transforms define no per-key defaults. Every non-optional key shown above must be present, or the configuration fails to deserialize (`schema_path`, `message_type`, `field_mappings`, and `descriptor_set` are the optional ones).
 
-Note the differences between the two `[[streams]]` shapes: a source produces to a single `topic` and can tune batching via `batch_length` and `linger_time`, while a sink consumes from a list of `topics` and can additionally set `batch_length`, `poll_interval`, and `consumer_group`.
+The two `[[streams]]` shapes differ: a source produces to a single `topic` and can tune batching via `batch_length` and `linger_time`, while a sink consumes from a list of `topics` and can additionally set `batch_length`, `poll_interval`, and `consumer_group`.
 
 ### Key Configuration Options
 
@@ -170,7 +170,7 @@ Note the differences between the two `[[streams]]` shapes: a source produces to 
 - **`field_mappings`**: Mapping of field names for transformation (e.g., `"old_field" = "new_field"`)
 - **`conversion_options`**: Fine-tuning knobs: `validate_messages`, `pretty_json`, `include_metadata`, `type_url_prefix`, `strict_mode`
 
-The `schema_registry_url` field is reserved and currently not implemented - the SDK never contacts a schema registry; schemas are loaded only from `schema_path` or `descriptor_set`.
+The `schema_registry_url` field is reserved and currently not implemented. The SDK never contacts a schema registry, and schemas are loaded only from `schema_path` or `descriptor_set`.
 
 ### Supported Features
 

@@ -39,7 +39,7 @@ Alternatively, build from source by cloning the [repository](https://github.com/
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-A word about credentials: a bare `iggy-server` boot does **not** create the root user with the well-known `iggy`/`iggy` pair. It generates a random password and prints it **exactly once** to the logs. The `--with-default-root-credentials` flag switches to the development credentials (username: `iggy`, password: `iggy`), and `--fresh` wipes the data directory first, so the root user is created anew with them. You can also set `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` yourself; the environment **takes precedence** over the flag, and **only the first boot** on an empty data directory reads these values.
+A bare `iggy-server` boot does **not** create the root user with the well-known `iggy`/`iggy` pair. It generates a random password and prints it **exactly once** to the logs. The `--with-default-root-credentials` flag switches to the development credentials (username: `iggy`, password: `iggy`), and `--fresh` wipes the data directory first, so the root user is created anew with them. You can also set `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` yourself. The environment **takes precedence** over the flag, and **only the first boot** on an empty data directory reads these values.
 
 All the data used by the server will be persisted under the `local_data` directory, unless specified differently in the configuration.
 
@@ -117,7 +117,7 @@ We could make use of more advanced components such as [`ClientProvider`](https:/
 
 If you're eager to find out how to build more advanced (and configurable) applications, check the Rust [examples](/docs/sdk/rust/examples). Nevertheless, let's focus on implementing our producer side :)
 
-Next, we need to authenticate the user, as all the available actions (except the `ping` and `login`) require the user to be authenticated and have the appropriate permissions e.g. you might be able to send or poll the messages, but you won't be able to create the stream or topic. For the sake of simplicity, we will use the development credentials for the root user (username: `iggy`, password: `iggy`), that can do anything and cannot be deleted. These credentials exist only because we started the server with them (the Docker env vars or the `--with-default-root-credentials` flag above); a server booted without them generates a random root password and prints it once to the logs. You can easily create more users and assign the specific permissions to them, however, this is out of scope for this tutorial.
+Next, we need to authenticate the user, as all the available actions (except the `ping` and `login`) require the user to be authenticated and have the appropriate permissions e.g. you might be able to send or poll the messages, but you won't be able to create the stream or topic. For the sake of simplicity, we will use the development credentials for the root user (username: `iggy`, password: `iggy`), that can do anything and cannot be deleted. These credentials exist only because we started the server with them (the Docker env vars or the `--with-default-root-credentials` flag above). A server booted without them generates a random root password and prints it once to the logs. You can easily create more users and assign the specific permissions to them, however, this is out of scope for this tutorial.
 
 ```rust
 client
@@ -153,7 +153,7 @@ So far, so good, however, before we will be able to publish any messages to our 
 
 Since our `IggyClient` implements the common [Client](https://github.com/apache/iggy/blob/master/core/sdk/src/clients/client.rs) trait, you can find lots of the different methods to interact with the server, also from the administrative point of view, e.g. creating the streams, topics etc.
 
-One thing worth mentioning is that, these methods are **not idempotent** - for example, if you were to try creating the stream with the same name which already exists on the server, you would receive the specific error. In such a case, you can simply check for an error and move on. When creating a stream, we only provide its name - the server assigns the numeric ID automatically. Stream, topic and partition IDs are all assigned **starting from 0**. Let's do this then :)
+These methods are **not idempotent** - for example, if you were to try creating the stream with the same name which already exists on the server, you would receive the specific error. In such a case, you can simply check for an error and move on. When creating a stream, we only provide its name - the server assigns the numeric ID automatically. Stream, topic and partition IDs are all assigned **starting from 0**. Let's do this then :)
 
 ```rust
 use iggy::prelude::*;
@@ -199,7 +199,7 @@ async fn init_system(client: &IggyClient) {
 }
 ```
 
-Every field of `TopicCreateOptions` left as `None` resolves to the **server defaults**. It is also where the per-topic durability knobs live: `segment_size`, `enforce_fsync` and the flush thresholds (`messages_required_to_save`, `size_of_messages_required_to_save`) can all be set at topic creation.
+Every field of `TopicCreateOptions` left as `None` resolves to the **server defaults**. It's also where the per-topic durability knobs live: `segment_size`, `enforce_fsync` and the flush thresholds (`messages_required_to_save`, `size_of_messages_required_to_save`) can all be set at topic creation.
 
 Finally, let's send some messages into our stream. We will implement the basic loop with an interval between each iteration to simulate publishing the batch of messages. Since the streaming server works directly with the binary data, and couldn't care less about the (de)serialization format for the message payload, it's really up to you, how to efficiently stream the messages for your use case.
 

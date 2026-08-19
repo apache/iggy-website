@@ -2,7 +2,7 @@
 title: InfluxDB Source
 ---
 
-The InfluxDB source connector polls InfluxDB on an interval and produces the resulting rows as messages into an Iggy stream. It supports both InfluxDB V2 (OSS 2.x / Cloud, Flux queries) and InfluxDB V3 (Core / Enterprise, SQL queries), selected with the `version` option, and tracks its position with a timestamp cursor stored in persistent connector state, so restarts resume where they left off.
+The InfluxDB source connector polls InfluxDB on an interval and produces the resulting rows as messages into an Iggy stream. It supports both InfluxDB V2 (OSS 2.x / Cloud, Flux queries) and InfluxDB V3 (Core / Enterprise, SQL queries), selected with the `version` option. A timestamp cursor stored in persistent connector state tracks the position, so restarts resume where they left off.
 
 This page is a curated subset of the documentation. The canonical reference, including the full cursor semantics and stuck-timestamp handling, is the upstream [influxdb_source README](https://github.com/apache/iggy/tree/master/core/connectors/sources/influxdb_source) in the `apache/iggy` repository.
 
@@ -39,7 +39,7 @@ poll_interval = "5s"
 batch_size = 500
 ```
 
-InfluxDB V2 takes an `org` and a Flux query; V3 takes a `db` and a SQL query:
+InfluxDB V2 takes an `org` and a Flux query. V3 takes a `db` and a SQL query:
 
 ```toml
 # V3 variant
@@ -56,7 +56,7 @@ LIMIT $limit OFFSET $offset
 '''
 ```
 
-Omitting `version` defaults to `"v2"` for backward compatibility. The query template must contain the `$cursor` placeholder (enforced at startup); `$limit` is strongly recommended so `batch_size` bounds each query. V3 queries additionally need `OFFSET $offset` unless stuck-batch detection is disabled.
+Omitting `version` defaults to `"v2"` for backward compatibility. The query template must contain the `$cursor` placeholder (enforced at startup). `$limit` is strongly recommended so `batch_size` bounds each query. V3 queries also need `OFFSET $offset` unless stuck-batch detection is disabled.
 
 ### Common Options
 
@@ -76,17 +76,17 @@ Omitting `version` defaults to `"v2"` for backward compatibility. The query temp
 | `include_metadata` | bool | `true` | Include all row columns in the payload |
 | `stuck_batch_cap_factor` | u32 | `10` | V3 only: cap on batch inflation for tied timestamps (max `100`, `0` disables) |
 
-Further options cover `payload_column` (extract a single column as the payload; required for `text` and `raw` formats) and resilience: `timeout` (`10s`), `max_retries` (`3`), `retry_delay` / `retry_max_delay`, startup health-check retries, and a circuit breaker (`circuit_breaker_threshold` `5`, `circuit_breaker_cool_down` `30s`). See the upstream [influxdb_source README](https://github.com/apache/iggy/tree/master/core/connectors/sources/influxdb_source) for the full list.
+Further options cover `payload_column` (extract a single column as the payload, required for `text` and `raw` formats) and resilience: `timeout` (`10s`), `max_retries` (`3`), `retry_delay` / `retry_max_delay`, startup health-check retries, and a circuit breaker (`circuit_breaker_threshold` `5`, `circuit_breaker_cool_down` `30s`). See the upstream [influxdb_source README](https://github.com/apache/iggy/tree/master/core/connectors/sources/influxdb_source) for the full list.
 
 ## Cursor-Based Polling
 
-On each poll the cursor (an RFC 3339 timestamp) is substituted into the query template; after a successful batch it advances to the highest timestamp seen. The two versions differ deliberately:
+On each poll the cursor (an RFC 3339 timestamp) is substituted into the query template. After a successful batch it advances to the highest timestamp seen. The two versions differ deliberately:
 
-- **V2** uses inclusive `>=` semantics, so the query must sort by the cursor field (`|> sort(columns: ["_time"])`); startup fails for `>=`-style queries lacking a sort. `range()`-style queries pass that check without a sort, but should keep it anyway, since the skip count below depends on ordered rows. Rows at the cursor timestamp are re-fetched after an advance, and the connector skips exactly the already-delivered ones using a persisted row count, preventing duplicates.
+- **V2** uses inclusive `>=` semantics, so the query must sort by the cursor field (`|> sort(columns: ["_time"])`). Startup fails for `>=`-style queries lacking a sort. `range()`-style queries pass that check without a sort, but should keep it anyway, since the skip count below depends on ordered rows. Rows at the cursor timestamp are re-fetched after an advance, and the connector skips exactly the already-delivered ones using a persisted row count, preventing duplicates.
 - **V3** uses strict `WHERE time > '$cursor'`, so no rows are re-delivered across batches. Because InfluxDB 3's query engine has no stable order for rows sharing one timestamp, the connector pages through tied rows with `OFFSET $offset`, inflating the batch size up to `stuck_batch_cap_factor` times `batch_size` before tripping the circuit breaker.
 
 ## Payload Formats
 
-- **`json`** (default): each row becomes a JSON object. V3 emits flat rows with native JSON types; V2 wraps each row in an envelope (`measurement`, `field`, `timestamp`, `value`, `row`) with all values as strings coerced to bool/int/float where possible, since annotated CSV carries no types. A string field containing `"42"` arrives as the number `42` under V2 (coerced) but stays the string `"42"` under V3; values that cannot be coerced stay strings under V2. Migrating consumers must update deserialization.
+- **`json`** (default): each row becomes a JSON object. V3 emits flat rows with native JSON types. V2 wraps each row in an envelope (`measurement`, `field`, `timestamp`, `value`, `row`) with all values as strings coerced to bool/int/float where possible, since annotated CSV carries no types. A string field containing `"42"` arrives as the number `42` under V2 (coerced) but stays the string `"42"` under V3. Values that can't be coerced stay strings under V2. Migrating consumers must update deserialization.
 - **`text`**: the value of `payload_column` is produced as a UTF-8 string.
 - **`raw`**: the value of `payload_column` is base64-decoded and produced as raw bytes.

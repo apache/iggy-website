@@ -12,35 +12,35 @@ The SDK is built around the `IIggyClient` interface, which aggregates every feat
 dotnet add package Apache.Iggy --prerelease
 ```
 
-The SDK targets .NET 8 and .NET 10 (`net8.0` and `net10.0`). Stable versions on NuGet stop at `0.8.0`, which predates the current wire protocol and cannot talk to a current server. The `0.9.0` line ships as **prerelease versions** (`0.9.0-edge.x` at the time of writing), so `--prerelease` is required, not optional.
+The SDK targets .NET 8 and .NET 10 (`net8.0` and `net10.0`). Stable versions on NuGet stop at `0.8.0`, which predates the current wire protocol and cannot talk to a current server. The `0.9.0` line ships as **prerelease versions** (`0.9.0-edge.x` at the time of writing), so `--prerelease` is required.
 
 ## Supported protocols
 
 The SDK supports two transport protocols:
 
-- **TCP** - binary protocol for optimal performance and lower latency (recommended). Over TCP the SDK speaks the VSR consensus framing, the only wire protocol the server accepts; see [Connection semantics](#connection-semantics)
+- **TCP** - binary protocol for optimal performance and lower latency (recommended). Over TCP the SDK speaks the VSR consensus framing, the only wire protocol the server accepts. See [Connection semantics](#connection-semantics)
 - **HTTP** - RESTful JSON API for stateless operations. `BaseAddress` must then be a full URI such as `http://127.0.0.1:3000` (the server's default HTTP port is 3000, TCP is 8090)
 
 Some operations are **TCP-only** and throw `FeatureUnavailableException` on HTTP: joining/leaving a consumer group, `GetMeAsync`, `DeleteSegmentsAsync`, and `SendBinaryRequestAsync`.
 
 ## Connection semantics
 
-Over TCP every request is wrapped in a 256-byte consensus header (Viewstamped Replication), the client registers a consensus session at login, and writes are replicated before they are acknowledged. The `IIggyClient` surface is unchanged; what changes is the behavior around connections, groups, and failures:
+Over TCP every request is wrapped in a 256-byte consensus header (Viewstamped Replication), the client registers a consensus session at login, and writes are replicated before they are acknowledged. The `IIggyClient` surface is unchanged. What changes is the behavior around connections, groups, and failures:
 
 - **Login binds a session.** `LoginUserAsync` / `LoginWithPersonalAccessTokenAsync` run the register handshake, and the session lives for as long as the connection. Logging out, being evicted, or losing the connection ends it, and the next login registers a fresh one.
 - **Leader redirection is automatic.** The client reads the cluster roster, follows the current leader, and re-checks it when a request is refused because the node stopped being primary. `GetCurrentAddress()` reports the node the client currently talks to.
 - **The client picks partitions.** Balanced and message-key partitioning are resolved client-side (the message-key hash matches the Rust SDK byte for byte), and consumer-group polls round-robin over the partitions the coordinator assigned to this client.
-- **Consumer groups are assignment-based.** `JoinConsumerGroupAsync` makes this client a member; the assignment is synced on demand and refreshed on every `PingAsync`. The TCP client pings on its own every `HeartbeatInterval` (5 seconds by default), so an idle session survives the server's heartbeat verification and assignments stay fresh.
+- **Consumer groups are assignment-based.** `JoinConsumerGroupAsync` makes this client a member. The assignment is synced on demand and refreshed on every `PingAsync`. The TCP client pings on its own every `HeartbeatInterval` (5 seconds by default), so an idle session survives the server's heartbeat verification and assignments stay fresh.
 - **Credentials are bounds-checked locally.** A username outside 3-50 bytes, a password outside 3-100 bytes, or a personal access token outside 1-255 bytes is rejected before the request is framed.
-- **Consumer offsets need an explicit partition.** `StoreOffsetAsync` / `DeleteOffsetAsync` do not accept a `null` partition id under VSR; passing one throws client-side.
-- **Polling a topic that does not exist returns an empty poll** rather than throwing. The server answers an unresolved topic with the empty-poll reply shape, so the client cannot tell it apart from a topic with no messages; check the topic exists first if the distinction matters.
+- **Consumer offsets need an explicit partition.** `StoreOffsetAsync` / `DeleteOffsetAsync` do not accept a `null` partition id under VSR. Passing one throws client-side.
+- **Polling a topic that does not exist returns an empty poll** rather than throwing. The server answers an unresolved topic with the empty-poll reply shape, so the client cannot tell it apart from a topic with no messages. Check the topic exists first if the distinction matters.
 
 ### Failed requests
 
 The SDK replays a request whenever the server says it never admitted it. Two exceptions surface to the caller:
 
 - `IggyInvalidStatusCodeException` carries the server status code, with `FromServer` telling apart a verdict the cluster reported from a failure the client raised itself.
-- `VsrRequestOutcomeUnknownException` means no server verdict arrived after the request was written (the connection was lost, the call was cancelled, or the server evicted the session mid-flight), so the cluster may or may not have committed it. The SDK will not replay it on a new session, because that would bypass server-side deduplication; re-issuing it is **the caller's decision**.
+- `VsrRequestOutcomeUnknownException` means no server verdict arrived after the request was written (the connection was lost, the call was cancelled, or the server evicted the session mid-flight), so the cluster may or may not have committed it. The SDK will not replay it on a new session, because that would bypass server-side deduplication. Re-issuing it is **the caller's decision**.
 
 The high-level abstractions handle the unknown-outcome case differently:
 

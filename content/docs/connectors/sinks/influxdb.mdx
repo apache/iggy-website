@@ -36,7 +36,7 @@ precision = "us"
 batch_size = 500
 ```
 
-InfluxDB V2 organizes data as `org` + `bucket`; V3 uses a single `db` field instead. Omitting `version` defaults to `"v2"` for backward compatibility. The write body, batching, and retry behavior are identical between versions; the connector handles the differing endpoints, auth header styles, and precision spellings internally.
+InfluxDB V2 organizes data as `org` + `bucket`. V3 uses a single `db` field instead. Omitting `version` defaults to `"v2"` for backward compatibility. The write body, batching, and retry behavior are identical between versions. The connector handles the differing endpoints, auth header styles, and precision spellings internally.
 
 ```toml
 # V3 variant: org/bucket are replaced by db
@@ -63,7 +63,7 @@ token = "replace_with_secret_token"
 | `payload_format` | string | `json` | `json`, `text`, or `base64` |
 | `include_metadata` | bool | `true` | Inject stream/topic/partition fields into each point (the `offset` tag is always written regardless) |
 
-The `include_checksum`, `include_origin_timestamp`, `include_stream_tag`, `include_topic_tag`, and `include_partition_tag` flags also default to `true`; disable them individually to slim down points. Resilience options cover `timeout` (`30s`), `max_retries` (`3`), `retry_delay` / `retry_max_delay`, startup health-check retries, and a circuit breaker (`circuit_breaker_threshold` `5`, `circuit_breaker_cool_down` `30s`). See the upstream [influxdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/influxdb_sink) for the full list.
+The `include_checksum`, `include_origin_timestamp`, `include_stream_tag`, `include_topic_tag`, and `include_partition_tag` flags also default to `true`. Disable them individually to slim down points. Resilience options cover `timeout` (`30s`), `max_retries` (`3`), `retry_delay` / `retry_max_delay`, startup health-check retries, and a circuit breaker (`circuit_breaker_threshold` `5`, `circuit_breaker_cool_down` `30s`). See the upstream [influxdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/influxdb_sink) for the full list.
 
 ## Payload Formats
 

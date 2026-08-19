@@ -29,7 +29,7 @@ consumer_group = "delta_sink_connector"
 table_uri = "file:///tmp/iggy_delta_table"
 ```
 
-The target Delta table must already exist at `table_uri`: the connector opens it at startup and fails if it is missing. It does not create tables. Only JSON payloads are supported (`schema = "json"` on the stream); a batch containing another payload type fails.
+The target Delta table must already exist at `table_uri`: the connector opens it at startup and fails if it's missing. It doesn't create tables. Only JSON payloads are supported (`schema = "json"` on the stream). A batch containing another payload type fails.
 
 ### Options
 
@@ -42,7 +42,7 @@ Each backend has its own credential options, required when `storage_backend_type
 
 - **S3**: `aws_s3_access_key`, `aws_s3_secret_key`, `aws_s3_region`, `aws_s3_endpoint_url` (for S3-compatible stores like MinIO), `aws_s3_allow_http` (default `false`, for local development).
 - **Azure**: `azure_storage_account_name`, `azure_container_name`, and either `azure_storage_account_key` or `azure_storage_sas_token` (not both).
-- **GCS**: `gcs_service_account_key` (the service account JSON as a string; the bucket comes from the `gs://` URI).
+- **GCS**: `gcs_service_account_key` (the service account JSON as a string, with the bucket taken from the `gs://` URI).
 
 ### S3 example
 
@@ -59,15 +59,15 @@ aws_s3_region = "us-east-1"
 
 JSON values are coerced to the Delta table schema before writing:
 
-- **Timestamp columns**: ISO 8601 / RFC 3339 strings (e.g. `"2021-11-11T22:11:58Z"`) are converted to microsecond timestamps; numeric timestamps pass through.
+- **Timestamp columns**: ISO 8601 / RFC 3339 strings (e.g. `"2021-11-11T22:11:58Z"`) are converted to microsecond timestamps. Numeric timestamps pass through.
 - **String columns**: non-string values are converted to their string representation.
 - Coercions apply recursively to nested structs and arrays.
 
-The table schema is captured once at startup and not refreshed, so restart the connector after changing the table schema.
+The table schema is captured once at startup and not refreshed, so restart the connector after changing it.
 
 ## Batching & Transactions
 
-Every poll batch is written to Parquet buffers and committed to the Delta log as a single transaction. The stream's `batch_length` therefore controls Delta commit granularity: small batches produce many small files and table versions, so prefer larger batches for production tables (and compact periodically). There is no retry on failed writes; a failed batch surfaces as a connector error.
+Every poll batch is written to Parquet buffers and committed to the Delta log as a single transaction. The stream's `batch_length` therefore controls Delta commit granularity: small batches produce many small files and table versions, so prefer larger batches for production tables (and compact periodically). There is no retry on failed writes. A failed batch surfaces as a connector error.
 
 ## Transforms
 

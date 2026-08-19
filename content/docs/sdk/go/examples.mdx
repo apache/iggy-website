@@ -16,7 +16,7 @@ If an example fails to log in, the server data directory (`local_data` by defaul
 
 ## Getting started
 
-The [producer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/producer/main.go) creates `sample-stream` and `sample-topic` (if missing) and sends 5 batches of 10 messages to partition `0`; the [consumer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/consumer/main.go) polls them from offset `0` and exits after 5 batches. Note that stream, topic, and partition IDs are **0-based**.
+The [producer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/producer/main.go) creates `sample-stream` and `sample-topic` (if missing) and sends 5 batches of 10 messages to partition `0`. The [consumer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/consumer/main.go) polls them from offset `0` and exits after 5 batches. Stream, topic, and partition IDs are **0-based**.
 
 Run both from the `examples/go` directory:
 
@@ -25,7 +25,7 @@ go run ./getting-started/producer/main.go
 go run ./getting-started/consumer/main.go
 ```
 
-You can run multiple producers and consumers simultaneously to observe how messages are distributed across clients.
+Run multiple producers and consumers at once to see how messages are distributed across clients.
 
 Both binaries accept the same flags:
 

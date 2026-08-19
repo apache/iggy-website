@@ -2,7 +2,7 @@
 title: Iggy CLI
 ---
 
-The Iggy CLI is a command-line interface for managing an Iggy server: streams, topics, partitions, messages, users, tokens and more. It lives in the core repository under the `core/cli` directory. The crate is named `iggy-cli`, while the installed binary is named `iggy`.
+The Iggy CLI is a command-line interface for managing an Iggy server: streams, topics, partitions, messages, users, tokens and more. It lives in the core repository under the `core/cli` directory. The crate is named `iggy-cli`, the installed binary `iggy`.
 
 This page covers installing the CLI, connecting to a server, authenticating, and managing connection contexts. The full command tree is documented in the [command reference](/docs/cli/commands).
 
@@ -32,7 +32,7 @@ docker run --rm -it --network host --entrypoint iggy apache/iggy -u iggy -p iggy
 
 `--network host` works on **Linux**. On macOS and Windows, point the CLI at the host instead: `--tcp-server-address host.docker.internal:8090`.
 
-Once installed, run `iggy` without arguments to print an overview of the available commands, or head to the [command reference](/docs/cli/commands).
+Once installed, run `iggy` without arguments to print an overview of the available commands, or see the [command reference](/docs/cli/commands).
 
 ## Connecting to a server
 
@@ -77,7 +77,7 @@ Commands that talk to the server require credentials. The CLI resolves them in t
 4. `-u, --username <user>` with `-p, --password <password>`. When `-p` is omitted, the CLI prompts for the password interactively (or reads one line from stdin when piped).
 5. The `IGGY_USERNAME` and `IGGY_PASSWORD` environment variables (both must be set).
 
-`-u`, `-t` and `-n` are **mutually exclusive**. Avoid `-p` with the password inline where possible: it lands in your **shell history**. Prefer `iggy login`, the interactive prompt, or the environment variables.
+`-u`, `-t` and `-n` are **mutually exclusive**. Avoid passing the password inline with `-p`: it lands in your **shell history**. Prefer `iggy login`, the interactive prompt, or the environment variables.
 
 ```bash
 # Interactive password prompt
@@ -107,7 +107,7 @@ iggy session status
 iggy logout
 ```
 
-`iggy session status` only checks whether a token exists in the local keyring; an expired token **still reports as active**. Run `iggy me` to verify the session against the server.
+`iggy session status` only checks whether a token exists in the local keyring. An expired token **still reports as active**. Run `iggy me` to verify the session against the server.
 
 ### Personal access tokens
 
@@ -121,7 +121,7 @@ iggy -u iggy -p iggy pat create my-token --store-token
 iggy -n my-token stream list
 ```
 
-`--store-token` is mutually exclusive with an expiry: stored tokens **never expire**. Stored tokens are **namespaced per server address**, so a token stored for one server is not visible when connecting to another. Alternatively, create a token with an expiry and pass its value with `-t`:
+`--store-token` is mutually exclusive with an expiry: stored tokens **never expire**. They're also **namespaced per server address**, so a token stored for one server isn't visible when connecting to another. Alternatively, create a token with an expiry and pass its value with `-t`:
 
 ```bash
 iggy -u iggy -p iggy pat create ci-token 7d
@@ -152,9 +152,9 @@ iggy context show production
 iggy context delete production
 ```
 
-There is no `--context` flag: the active context is persistent state, switched with `iggy context use <name>`. Flags passed on the command line override the corresponding values from the active context.
+There's no `--context` flag: the active context is persistent state, switched with `iggy context use <name>`. Flags passed on the command line override the corresponding values from the active context.
 
-Contexts are stored in `contexts.toml`, and the active context name in `.active_context`, both under the Iggy home directory: `~/.iggy` by default, overridable with the `IGGY_HOME` environment variable. The `default` context always exists and **cannot be deleted or redefined**; deleting the currently active context switches back to `default`. Context names may contain letters, digits, hyphens and underscores.
+Contexts are stored in `contexts.toml`, and the active context name in `.active_context`, both under the Iggy home directory: `~/.iggy` by default, overridable with the `IGGY_HOME` environment variable. The `default` context always exists and **cannot be deleted or redefined**. Deleting the currently active context switches back to `default`. Context names may contain letters, digits, hyphens and underscores.
 
 ## Shell completions
 
