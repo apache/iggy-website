@@ -59,9 +59,9 @@ Segments store **batch records**, not individual messages. The record is byte-id
 frame = [frame header: 48 bytes][payload][user_headers]
 ```
 
-The 256-byte batch header carries `partition_id`, `base_offset`, `base_timestamp`, `origin_timestamp`, `batch_length`, `batch_checksum` (XxHash3-64), and `message_count`. The rest is reserved and must be zero. Each 48-byte frame header carries `checksum` (XxHash3-64), `id` (u128), `offset_delta` (u32), `timestamp_delta` (u32), and the two lengths. A message's absolute offset is `base_offset + offset_delta`, and timestamps resolve the same way against the base. All fields are **little-endian**, and records are stored contiguously with no padding.
+The 256-byte batch header carries `partition_id`, `base_offset`, `base_timestamp`, `origin_timestamp`, `batch_length`, `batch_checksum` (XxHash3-64), and `message_count`. The rest is reserved and must be zero. Each 48-byte frame header carries `checksum` (XxHash3-64), `id` (u128), `offset_delta` (u32), `timestamp_delta` (u32), and the two lengths. A message's absolute offset is `base_offset + offset_delta`; its server timestamp is the flat `base_timestamp`, while `timestamp_delta` resolves producer time against `origin_timestamp`. All fields are **little-endian**, and records are stored contiguously with no padding.
 
-The full byte-level tables live on the [Schema](/docs/server/schema#message-batch-format) page. What lands on disk is exactly what the producer sent, with the server stamping `partition_id` at ingestion and `base_offset` / `base_timestamp` (plus a `batch_checksum` recompute) at persistence.
+The full byte-level tables live on the [Message batches](/docs/binary-protocol/messages) page. Absent at-rest encryption, what lands on disk is exactly what the producer sent, with the server stamping `partition_id` at admission and `base_offset` / `base_timestamp` (plus a `batch_checksum` recompute) at journal append.
 
 ## Indexes
 
@@ -79,36 +79,37 @@ There is no index caching configuration: the in-memory index cache is an interna
 
 ## Write pipeline
 
-Messages flow through admission, replication, and buffering before reaching a segment:
+Messages are admitted, stamped, and buffered in the partition journal, then replicated; committed batches reach a segment once a flush trigger fires:
 
 ```mermaid
 graph TD
   A["Client SendMessages: batch with producer-computed checksums"] --> B["Admission: verify checksums, stamp partition_id"]
-  B --> C["Partition consensus: prepare replicated to the partition's replicas"]
-  C --> D{"Quorum reached?"}
-  D -->|"Yes"| E["Commit: batch buffered in the partition journal"]
-  E --> F{"Flush threshold reached?"}
-  F -->|"count >= messages_required_to_save OR bytes >= size_of_messages_required_to_save"| G["Stamp base_offset / base_timestamp, recompute batch_checksum"]
-  F -->|"No"| E
-  G --> H["MessagesWriter: vectored write to .log + sparse index entry"]
-  H --> I{"enforce_fsync?"}
-  I -->|"Yes"| J["fsync"]
-  I -->|"No"| K["OS writeback"]
-  J --> L{"Segment past segment_size?"}
-  K --> L
-  L -->|"Yes"| M["Seal segment, open next"]
-  L -->|"No"| N["Done"]
+  B --> C["Stamp base_offset / base_timestamp, recompute batch_checksum"]
+  C --> D["Append to the in-memory partition journal"]
+  D --> E["Partition consensus: prepare replicated to the partition's replicas"]
+  E --> F{"Quorum reached?"}
+  F -->|"Yes"| G["Commit"]
+  G --> H{"Flush trigger reached?"}
+  H -->|"No"| W["Stay buffered until a later commit trips the gate"]
+  H -->|"Yes"| I["MessagesWriter: vectored write to .log + sparse index entry"]
+  I --> J{"enforce_fsync?"}
+  J -->|"Yes"| K["fdatasync .log + .index"]
+  J -->|"No"| L["OS writeback"]
+  K --> M{"Segment past segment_size?"}
+  L --> M
+  M -->|"Yes"| N["Seal segment, open next"]
+  M -->|"No"| O["Done"]
 ```
 
 The flush thresholds and fsync policy are **per-topic creation options** (they used to be server-wide config):
 
 - `messages_required_to_save` (default `1024`): count threshold.
 - `size_of_messages_required_to_save` (default `1 MiB`): byte threshold.
-- `enforce_fsync` (default `false`): fsync every segment write.
+- `enforce_fsync` (default `false`): fdatasync the `.log` and `.index` on every flush.
 
-Whichever threshold trips first flushes. These are soft limits: a flush writes whole batches, so the actual flushed count or size can overshoot. The `MessagesWriter` uses **vectored I/O** (`writev`) with up to `MAX_IOV_COUNT = 1024` buffers per syscall, so many buffered batches land in one write.
+A third trigger is independent of these options: when buffered journal bytes reach the active segment's `segment_size`, the flush fires. Whichever trigger trips first flushes. These are soft limits: a flush writes whole batches, so the actual flushed count or size can overshoot. The gate is evaluated on commit events, so a sub-threshold batch stays buffered until a later commit trips it (shutdown flushes unconditionally). The `MessagesWriter` uses **vectored I/O** (`writev`) with up to `MAX_IOV_COUNT = 1024` buffers per syscall, so many buffered batches land in one write.
 
-Every partition belongs to a consensus group (Viewstamped Replication), and writes are prepared and quorum-acknowledged before commit. At HEAD the partition-plane consensus journal is **in-memory**. Durability of message data comes from segment persistence and, in clusters, from the copies on other replicas. The metadata plane (below) has a durable on-disk journal.
+Every partition belongs to a consensus group (Viewstamped Replication), and writes are prepared and quorum-acknowledged before commit. Stamping happens at journal-append time, before replication acks: the primary stamps `base_offset` from the log position and `base_timestamp` from the prepare timestamp, forwards the stamped bytes verbatim, and each backup re-derives the expected pair and refuses a mismatch, so the batch (and its recomputed `batch_checksum`) is byte-identical across replicas. At HEAD the partition-plane consensus journal is **in-memory**. Durability of message data comes from segment persistence and, in clusters, from the copies on other replicas. The metadata plane (below) has a durable on-disk journal.
 
 ## Boot-time segment recovery
 
@@ -186,7 +187,7 @@ key = ""  # 32-byte base64-encoded key
 
 ## Compression
 
-Per-topic payload compression is set with the `compression_algorithm` topic option. Supported algorithms: `none` (default) and `gzip`. Other algorithms (lz4, zstd) are planned but **not implemented**.
+The `compression_algorithm` topic option accepts `none` (default) and `gzip`, but it is a **placeholder today**: the value is persisted and reported back, and no compression is applied anywhere - segments store payloads exactly as sent. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers) in the Iggy repo.
 
 ## Removed and relocated settings
 

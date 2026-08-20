@@ -5,6 +5,7 @@
     "introduction",
     "server",
     "clustering",
+    "binary-protocol",
     "connectors",
     "sdk",
     "cli",

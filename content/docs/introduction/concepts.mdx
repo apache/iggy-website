@@ -35,7 +35,7 @@ The stream is a logical concept, and you might think of it as a **namespace**. F
 
 The topic is also the logical concept, which is a part of the stream. The topic is identified by its unique ID. You could think of topic as an entity being responsible for storing the specific type of the records. For example, you could have a topic for the user events, and another topic for the order events, etc.
 
-The messages are not being stored in the topic directly, but rather in the **partitions**, which are assigned to the topic. The topic can have one or more partitions assigned, that could help achieve higher parallelism and throughput. The topic can also have the **retention policy** assigned, which means that the records are being deleted automatically once they are older than the specified retention period. Topics also support configurable compression (`none`, `gzip`), maximum size limits, and per-topic durability options (`segment_size`, `enforce_fsync`, flush thresholds) set at creation.
+The messages are not being stored in the topic directly, but rather in the **partitions**, which are assigned to the topic. The topic can have one or more partitions assigned, that could help achieve higher parallelism and throughput. The topic can also have the **retention policy** assigned, which means that the records are being deleted automatically once they are older than the specified retention period. Topics also support maximum size limits and per-topic durability options (`segment_size`, `enforce_fsync`, flush thresholds) set at creation, plus a `compression_algorithm` option (a placeholder today: no compression is applied yet).
 
 ## Partition
 
@@ -74,7 +74,7 @@ Consumer groups provide horizontal scaling for message consumption. When multipl
 
 <MessageHeaderDiagram />
 
-In the SDKs, each message carries a 64-byte in-memory header (little-endian fields). On the wire and on disk, messages travel inside batch records with a compact 48-byte per-message frame. See the [binary schema](/docs/server/schema) for the exact encodings.
+In the SDKs, each message carries a 64-byte in-memory header (little-endian fields). On the wire and on disk, messages travel inside batch records with a compact 48-byte per-message frame. See the [Binary Protocol](/docs/binary-protocol) section for the exact encodings.
 
 | Field | Bytes | Type | Description |
 |-------|-------|------|-------------|

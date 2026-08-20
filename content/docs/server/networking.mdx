@@ -17,7 +17,7 @@ Iggy supports four transport protocols simultaneously, each optimized for differ
 
 ## Binary protocol
 
-Every request and reply on the stateful transports starts with a fixed 256-byte header (the same Viewstamped Replication header layout the cluster uses internally), followed by the command payload. The `iggy_binary_protocol` crate provides zero-copy serialization for these headers, and foreign SDKs implement the same contract natively. See the [protocol schema](/docs/server/schema) for the full specification.
+Every request and reply on the stateful transports starts with a fixed 256-byte header (the same Viewstamped Replication header layout the cluster uses internally), followed by the command payload. The `iggy_binary_protocol` crate provides zero-copy serialization for these headers, and foreign SDKs implement the same contract natively. See the [Binary Protocol](/docs/binary-protocol) section for the full specification.
 
 ## Connection handling across shards
 

@@ -1139,7 +1139,7 @@ export function DocsHero() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--color-fd-primary)_0%,transparent_60%)] opacity-[0.07]" />
       <div className="absolute top-0 right-0 w-64 h-64 bg-fd-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
-      <div className="relative z-10">
+      <div className="relative">
         <div className="flex flex-col items-center text-center mb-8">
           <Logo className="mb-5" />
           <h2 className="text-2xl md:text-3xl font-bold text-fd-foreground m-0 mb-2">
