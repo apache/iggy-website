@@ -12,7 +12,7 @@ Options are key-value pairs sent with `CreateTopic`. Unknown keys are **rejected
 |--------|---------|-------------|-------------|
 | `max_topic_size` | unlimited | | Delete the oldest sealed segments once the topic grows past this size. |
 | `message_expiry` | none | | Delete sealed segments older than this. |
-| `compression_algorithm` | `none` | `none` or `gzip` | Payload compression. |
+| `compression_algorithm` | `none` | `none` or `gzip` | Placeholder: stored and reported, no compression applied yet. |
 | `segment_size` | 1 GiB | 512-byte multiple, at least 1 MiB, at most 1 GiB | Soft size limit per segment: a segment may close one whole batch past it. |
 | `enforce_fsync` | `false` | | fsync every write to this topic's partitions. |
 | `messages_required_to_save` | 1024 | non-zero, at most 16777216 | Flush the journal once it holds this many messages. |

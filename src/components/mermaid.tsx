@@ -57,11 +57,14 @@ function MermaidSVG({ chart }: { chart: string }) {
     }),
   );
 
-  const scaled = svg
-    .replaceAll('font-size="13"', 'font-size="15"')
-    .replaceAll('font-size="12"', 'font-size="14"')
-    .replaceAll('font-size="11"', 'font-size="14"')
-    .replaceAll('font-size="10"', 'font-size="13"');
+  // Zoom the whole SVG for readability. Bumping font-size attributes instead
+  // would grow text after layout, overflowing node boxes sized for the
+  // original metrics and colliding adjacent nodes.
+  const scaled = svg.replace(
+    / width="([0-9.]+)" height="([0-9.]+)"/,
+    (_, width, height) =>
+      ` width="${Math.round(Number(width) * 1.15)}" height="${Math.round(Number(height) * 1.15)}"`,
+  );
 
   return (
     <div
