@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Apache Iggy (Incubating) website -- a static documentation and marketing site built with **Next.js + Fumadocs + Tailwind CSS** (versions pinned in `package.json`). Output is a fully static export (no server runtime).
+Apache Iggy website -- a static documentation and marketing site built with **Next.js + Fumadocs + Tailwind CSS** (versions pinned in `package.json`). Output is a fully static export (no server runtime).
 
 ## Commands
 

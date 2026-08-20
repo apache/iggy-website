@@ -22,7 +22,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Downloads",
-  description: "Official release artifacts of Apache Iggy (Incubating)",
+  description: "Official release artifacts of Apache Iggy",
 };
 
 const releases = [
@@ -182,7 +182,6 @@ export default function DownloadsPage() {
           >
             downloads directory
           </Link>{" "}
-          after they are approved by the Apache Incubator PMC.
         </p>
 
         <h2 className="mb-4 mt-14 text-2xl font-bold text-fd-foreground">
@@ -216,11 +215,6 @@ export default function DownloadsPage() {
               verifying Apache downloads
             </Link>
             .
-          </li>
-          <li>
-            Because Iggy is still in the Apache Incubator, releases are{" "}
-            <strong className="text-fd-foreground">incubating releases</strong>{" "}
-            and are not yet official ASF products.
           </li>
         </ul>
 

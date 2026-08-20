@@ -36,7 +36,7 @@ export default function CommunityPage() {
     <CommunityLayout>
       <CommunityHeader
         title="Community"
-        description="Apache Iggy is built in the open by contributors, committers, mentors and users. These pages collect the people, practices and resources that keep the project moving."
+        description="Apache Iggy is built in the open by contributors, committers, and users. These pages collect the people, practices and resources that keep the project moving."
       />
 
       <div className="grid gap-4 md:grid-cols-2">

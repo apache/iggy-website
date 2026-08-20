@@ -23,11 +23,11 @@ import "./global.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Apache Iggy (Incubating)",
+    default: "Apache Iggy",
     template: "%s | Apache Iggy",
   },
   description:
-    "Apache Iggy (Incubating) is a persistent message streaming platform written in Rust, supporting QUIC, TCP and HTTP transport protocols, capable of processing millions of messages per second.",
+    "Apache Iggy is a persistent message streaming platform written in Rust, supporting QUIC, TCP and HTTP transport protocols, capable of processing millions of messages per second.",
   icons: { icon: "/img/favicon.png" },
 };
 

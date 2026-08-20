@@ -101,10 +101,6 @@ export function SiteFooter() {
           ))}
         </div>
         <div className="mt-12 border-t border-fd-border pt-8 text-xs leading-relaxed text-fd-muted-foreground/70">
-          <p>
-            Apache Iggy is an effort undergoing incubation at The Apache
-            Software Foundation (ASF), sponsored by the Apache Incubator.
-          </p>
           <p className="mt-4">
             Copyright &copy; {new Date().getFullYear()} The Apache Software
             Foundation, Licensed under the Apache License, Version 2.0.

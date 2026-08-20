@@ -1,5 +1,5 @@
 github:
-  description: "Apache Iggy (Incubating) Website"
+  description: "Apache Iggy Website"
   homepage: https://iggy.apache.org/
   labels:
     - rust

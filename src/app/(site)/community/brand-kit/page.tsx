@@ -89,13 +89,6 @@ export default function BrandKitPage() {
           first mention.
         </li>
         <li>
-          While the project is incubating, use{" "}
-          <strong className="text-fd-foreground">
-            Apache Iggy (Incubating)
-          </strong>{" "}
-          where formal ASF context is needed.
-        </li>
-        <li>
           Do not imply that non-release artifacts, nightly builds or downstream
           packages are official Apache releases.
         </li>

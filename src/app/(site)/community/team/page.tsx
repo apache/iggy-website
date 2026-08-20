@@ -25,24 +25,24 @@ import {
 } from "../_components/community-layout";
 
 export const metadata: Metadata = {
-  title: "Team",
-  description: "Apache Iggy PPMC members, mentors and committers.",
+  title: "Apache Iggy Team",
+  description: "Apache Iggy PMC members, committers and contributors.",
 };
 
 const members = [
-  { name: "Grzegorz Koszyk", apacheId: "gkoszyk", roles: ["PPMC Member"] },
-  { name: "Hubert Gruszecki", apacheId: "hgruszecki", roles: ["PPMC Member"] },
-  { name: "Hulk Lin", apacheId: "hulk", roles: ["Mentor", "PPMC Member"] },
-  { name: "Kranti Parisa", apacheId: "kranti", roles: ["PPMC Member"] },
-  { name: "Patryk Huzarski", apacheId: "patryk", roles: ["PPMC Member"] },
-  { name: "Piotr Gankiewicz", apacheId: "piotr", roles: ["PPMC Member"] },
-  { name: "Zili Chen", apacheId: "tison", roles: ["Mentor", "PPMC Member"] },
-  { name: "Hao Ding", apacheId: "xuanwo", roles: ["Mentor", "PPMC Member"] },
+  { name: "Kranti Parisa", apacheId: "kranti", roles: ["PMC Chair"] },
+  { name: "Grzegorz Koszyk", apacheId: "gkoszyk", roles: ["PMC Member"] },
+  { name: "Hao Ding", apacheId: "xuanwo", roles: ["PMC Member"] },
+  { name: "Hubert Gruszecki", apacheId: "hgruszecki", roles: ["PMC Member"] },
+  { name: "Hulk Lin", apacheId: "hulk", roles: ["PMC Member"] },
+  { name: "Patryk Huzarski", apacheId: "patryk", roles: ["PMC Member"] },
+  { name: "Piotr Gankiewicz", apacheId: "piotr", roles: ["PMC Member", "Iggy Original Creator"] },
   {
     name: "Yonik Seeley",
     apacheId: "yonik",
-    roles: ["Champion", "Mentor", "PPMC Member"],
+    roles: ["PMC Member"],
   },
+  { name: "Zili Chen", apacheId: "tison", roles: ["PMC Member"] },
   { name: "Atharva Lade", apacheId: "atharva", roles: ["Committer"] },
   {
     name: "Bakytgerey Ashirbekov",
@@ -50,8 +50,8 @@ const members = [
     roles: ["Committer"],
   },
   { name: "Bartosz Ciesla", apacheId: "bciesla", roles: ["Committer"] },
-  { name: "Kyle Downey", apacheId: "kdowney", roles: ["Committer"] },
   { name: "Krishna Vishal", apacheId: "krishna", roles: ["Committer"] },
+  { name: "Kyle Downey", apacheId: "kdowney", roles: ["Committer"] },
   { name: "Lukasz Zborek", apacheId: "lzborek", roles: ["Committer"] },
   { name: "Maciej Modzelewski", apacheId: "maciej", roles: ["Committer"] },
   {
@@ -65,20 +65,16 @@ const members = [
 
 const roleDescriptions = [
   {
-    title: "Champion",
-    body: "The champion helps introduce the podling to the Apache Incubator and supports the project through incubation.",
+    title: "PMC Chair",
+    body: "The PMC Chair is a PMC member appointed by the ASF Board of Directors as an officer of the Foundation and Vice President of Apache Iggy. The Chair serves as the primary point of contact between the Board and the project and is responsible for submitting regular reports on the health of the project. The Chair has no additional authority or decision-making power over other PMC members.",
   },
   {
-    title: "Mentor",
-    body: "Mentors are experienced Apache members who guide the podling on Apache governance, releases, community health and ASF policy.",
-  },
-  {
-    title: "PPMC Member",
-    body: "The Podling Project Management Committee stewards the project while it is in incubation, including community growth, releases and project oversight.",
+    title: "PMC Member",
+    body: "The Project Management Committee (PMC) is responsible for the management and oversight of the Apache Iggy project. While committers have the ability to update the code, only the PMC as a body has the authority to vote on formal releases of the project's software. The PMC is also responsible for voting in new committers and PMC members, and for the project's legal, IP, trademark, and community affairs following ASF policy.",
   },
   {
     title: "Committer",
-    body: "Committers have write access to project repositories and help review, merge, test, document and discuss project work in public.",
+    body: "Committers have read-write access to the code repository, signed the CLA, and use an @apache.org email. There's no timeline or specific requirement to become a committer, but active contributors are strong candidates. As a committer, you shape the project's future by reviewing and merging code, testing release candidates, participating in discussions, and contributing in various ways. Active committers may be invited to join the PMC.",
   },
 ];
 
@@ -87,19 +83,22 @@ export default function TeamPage() {
     <CommunityLayout>
       <CommunityHeader
         title="Team"
-        description="We would like to thank the members, mentors and committers who help build Apache Iggy and guide the project through incubation."
+        description="We'd like to thank the following members and committers to the Apache Iggy project who have helped get the project to where it is today. "
       />
 
       <p className="mb-8 max-w-3xl text-base leading-relaxed text-fd-muted-foreground">
         This page mirrors the public Apache roster for convenience. The canonical
         project roster is maintained by the Apache Software Foundation on{" "}
-        <ExternalLink href="https://people.apache.org/phonebook.html?podling=iggy">
+        <ExternalLink href="https://people.apache.org/committers-by-project.html#iggy">
           people.apache.org
         </ExternalLink>
         .
       </p>
 
       <h2 className="mb-4 text-2xl font-bold text-fd-foreground">Members</h2>
+      <p className="mb-8 max-w-3xl text-base leading-relaxed text-fd-muted-foreground">
+        Members are grouped by role in the order of PMC Chair, PMC Member, and Committer, and sorted alphabetically by public name within each group.
+      </p>
       <div className="overflow-x-auto rounded-xl border border-fd-border">
         <table className="w-full text-left text-sm text-fd-foreground">
           <thead>
@@ -141,7 +140,10 @@ export default function TeamPage() {
       <h2 className="mb-4 mt-12 text-2xl font-bold text-fd-foreground">
         Roles
       </h2>
-      <div className="grid gap-4 md:grid-cols-2">
+      <p className="mb-8 max-w-3xl text-base leading-relaxed text-fd-muted-foreground">
+        The Apache Iggy project recognizes the following roles, each representing a distinct type of contribution to the project’s development:
+      </p>
+      <div className="grid gap-4">
         {roleDescriptions.map((role) => (
           <section
             key={role.title}

@@ -24,9 +24,9 @@ import { LandingCodeTabs } from "@/components/code-tabs";
 import { BenchmarkSection } from "@/components/benchmark-chart";
 
 export const metadata: Metadata = {
-  title: "Apache Iggy (Incubating) | Hyper-Efficient Message Streaming",
+  title: "Apache Iggy | Hyper-Efficient Message Streaming written in Rust.",
   description:
-    "Apache Iggy (Incubating) is a high-performance, persistent message streaming platform written in Rust, capable of processing millions of messages per second with ultra-low latency.",
+    "Apache Iggy is a high-performance, persistent message streaming platform written in Rust, capable of processing millions of messages per second with ultra-low latency.",
 };
 
 const heroStats = [
@@ -151,7 +151,7 @@ export default function HomePage() {
           </h1>
 
           <p className="mx-auto mt-8 max-w-3xl text-lg font-normal leading-relaxed text-[#aaafb6] md:text-xl">
-            Apache Iggy&trade; (Incubating) is a high-performance, persistent
+            Apache Iggy&trade; is a high-performance, persistent
             message streaming platform written in Rust, capable of processing{" "}
             <span className="font-medium text-[#ff9103]">
               millions of messages per second
@@ -601,24 +601,11 @@ export default function HomePage() {
           </div>
           <div className="mt-12 border-t border-[#3d4450] pt-8 text-xs leading-relaxed text-[#636b75]">
             <p>
-              Apache Iggy is an effort undergoing incubation at The Apache
-              Software Foundation (ASF), sponsored by the Apache Incubator.
-              Incubation is required of all newly accepted projects until a
-              further review indicates that the infrastructure, communications,
-              and decision making process have stabilized in a manner consistent
-              with other successful ASF projects. While incubation status is not
-              necessarily a reflection of the completeness or stability of the
-              code, it does indicate that the project has yet to be fully
-              endorsed by the ASF.
-            </p>
-            <p className="mt-4">
               Copyright &copy; {new Date().getFullYear()} The Apache Software
               Foundation, Licensed under the Apache License, Version 2.0.
             </p>
             <p className="mt-4">
-              Apache&reg;, the names of Apache projects, and the feather logo
-              are either registered trademarks or trademarks of the Apache
-              Software Foundation in the United States and/or other countries.
+              Apache&reg;, the names of Apache projects, and the feather logo are either registered trademarks or trademarks of the Apache Software Foundation in the United States and/or other countries. All other marks mentioned may be trademarks or registered trademarks of their respective owners.
             </p>
           </div>
         </div>

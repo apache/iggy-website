@@ -1,4 +1,4 @@
-Welcome to Apache Iggy (Incubating)
+Welcome to Apache Iggy
 
 # Website
 

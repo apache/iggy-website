@@ -60,11 +60,6 @@ export default function HowToReleasePage() {
       </h2>
       <ul className="list-disc space-y-2 pl-6 text-base leading-relaxed text-fd-muted-foreground">
         <li>
-          <ExternalLink href="https://incubator.apache.org/guides/releasemanagement.html">
-            Apache Incubator release management
-          </ExternalLink>
-        </li>
-        <li>
           <ExternalLink href="https://www.apache.org/legal/release-policy.html">
             ASF release policy
           </ExternalLink>
@@ -75,11 +70,6 @@ export default function HowToReleasePage() {
           </ExternalLink>
         </li>
       </ul>
-
-      <p className="mt-8 max-w-3xl text-sm leading-relaxed text-fd-muted-foreground">
-        Because Apache Iggy is incubating, release managers should make sure the
-        release follows both project practice and Apache Incubator policy.
-      </p>
     </CommunityLayout>
   );
 }

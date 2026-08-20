@@ -309,7 +309,7 @@ const checklist = [
         description:
           "The project uses the Apache project name consistently with trademark attribution.",
         status:
-          "YES. Continue using Apache Iggy (Incubating) in formal contexts until graduation.",
+          "YES. Continue using Apache Iggy in formal contexts until graduation.",
       },
       {
         id: "TB20",
@@ -351,6 +351,11 @@ export default function GraduationChecklistPage() {
         title="Graduation Checklist"
         description="A working maturity assessment for Apache Iggy as it prepares for eventual graduation from the Apache Incubator."
       />
+      <section className="mb-10 rounded-xl border border-fd-border bg-fd-card p-5">
+        <p className="text-base leading-relaxed text-fd-muted-foreground">
+          IMPORTANT NOTE: As of <b>August 19, 2026</b>, Apache Iggy has graduated from the Apache Incubator and is now an Apache Top-Level Project (TLP).
+        </p>
+      </section>
       <section className="mb-10 rounded-xl border border-fd-border bg-fd-card p-5">
 
         <h2 className="mb-3 text-2xl font-bold text-fd-foreground">
