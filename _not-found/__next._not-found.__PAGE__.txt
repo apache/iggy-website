@@ -1,0 +1,25 @@
+1:"$Sreact.fragment"
+2:I[22016,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],""]
+3:I[97367,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"OutletBoundary"]
+4:"$Sreact.suspense"
+8:I[97367,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"ViewportBoundary"]
+9:I[97367,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"MetadataBoundary"]
+a:I[27201,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"IconMark"]
+c:I[39756,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"default"]
+d:I[37457,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"default"]
+10:I[17751,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"RootProvider"]
+11:I[58298,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js","/_next/static/chunks/3-_96y-evozm0.js"],"default"]
+:HL["/_next/static/chunks/3jv-apu6h_o7v.css","style"]
+7:X
+f:X
+f:C
+0:{"buildId":"GZSJMYdi5HSVDwam_Xi3X","data":[{"rsc":["$","$1","c",{"children":[["$","main",null,{"className":"flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center","children":[["$","p",null,{"className":"font-mono text-sm font-semibold uppercase tracking-widest text-[#ff9103]","children":"404"}],["$","h1",null,{"className":"text-3xl font-extrabold tracking-tight text-fd-foreground md:text-4xl","children":"This page could not be found"}],["$","p",null,{"className":"max-w-md text-fd-muted-foreground","children":"The page you are looking for was moved, renamed, or never existed."}],["$","$L2",null,{"href":"/docs","className":"mt-2 inline-flex items-center rounded-lg bg-[#ff9103] px-6 py-3 text-sm font-semibold text-[#0e0f11] transition-colors hover:bg-[#ffa703]","children":"Back to documentation"}]]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":"$@6","staleTime":"$7","varyParams":null},{"rsc":["$","$1","h",{"children":[["$","meta",null,{"name":"robots","content":"noindex"}],["$","$L8",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$L9",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"404: Page not found | Apache Iggy"}],["$","meta","1",{"name":"description","content":"Apache Iggy is a persistent message streaming platform written in Rust, supporting QUIC, TCP and HTTP transport protocols, capable of processing millions of messages per second."}],["$","link","2",{"rel":"icon","href":"/img/favicon.png"}],["$","$La","3",{}]]}]}]}],null]}],"isPartial":"$@b","staleTime":"$7","varyParams":null},{"rsc":["$","$1","c",{"children":[null,["$","$Lc",null,{"parallelRouterKey":"children","template":["$","$Ld",null,{}]}]]}],"isPartial":"$@e","staleTime":"$7","varyParams":"$f"},{"rsc":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/3jv-apu6h_o7v.css","precedence":"next"}],["$","script","script-0",{"src":"/_next/static/chunks/38rey5e_rx_o9.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/2tvyahbdutabx.js","async":true}]],["$","html",null,{"lang":"en","suppressHydrationWarning":true,"children":["$","body",null,{"className":"flex min-h-screen flex-col font-sans antialiased","children":["$","$L10",null,{"search":{"options":{"type":"static"}},"theme":{"defaultTheme":"dark"},"children":["$","$Lc",null,{"parallelRouterKey":"children","error":"$11","errorStyles":[],"errorScripts":[["$","script","script-0",{"src":"/_next/static/chunks/3-_96y-evozm0.js","async":true}]],"template":["$","$Ld",null,{}],"notFound":[["$","main",null,{"className":"flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center","children":[["$","p",null,{"className":"font-mono text-sm font-semibold uppercase tracking-widest text-[#ff9103]","children":"404"}],["$","h1",null,{"className":"text-3xl font-extrabold tracking-tight text-fd-foreground md:text-4xl","children":"This page could not be found"}],["$","p",null,{"className":"max-w-md text-fd-muted-foreground","children":"The page you are looking for was moved, renamed, or never existed."}],["$","$L2",null,{"href":"/docs","className":"mt-2 inline-flex items-center rounded-lg bg-[#ff9103] px-6 py-3 text-sm font-semibold text-[#0e0f11] transition-colors hover:bg-[#ffa703]","children":"Back to documentation"}]]}],[]]}]}]}]}]]}],"isPartial":"$@12","staleTime":"$7","varyParams":null}],"isUpgradeableISRFallback":false,"a":"$@13","rootVaryParams":null,"needsRuntimeRequest":"$@14"}
+5:null
+7:300
+14:true
+7:C
+13:0
+b:"$undefined"
+e:"$undefined"
+12:"$undefined"
+6:"$undefined"

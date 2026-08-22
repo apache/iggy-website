@@ -1,0 +1,22 @@
+1:"$Sreact.fragment"
+2:I[22016,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js","/_next/static/chunks/241-fa32f9zay.js","/_next/static/chunks/2rm4slghu_nz1.js","/_next/static/chunks/250gopd52txql.js","/_next/static/chunks/0n3fueko2xquo.js","/_next/static/chunks/2asgh_giu-vcb.js","/_next/static/chunks/1njepl5wox-ou.js"],""]
+3:I[97367,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"OutletBoundary"]
+4:"$Sreact.suspense"
+8:I[97367,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"ViewportBoundary"]
+9:I[97367,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"MetadataBoundary"]
+a:I[27201,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"IconMark"]
+c:I[39756,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"default"]
+d:I[37457,["/_next/static/chunks/38rey5e_rx_o9.js","/_next/static/chunks/2tvyahbdutabx.js"],"default"]
+7:X
+f:X
+f:C
+0:{"buildId":"GZSJMYdi5HSVDwam_Xi3X","data":[{"rsc":["$","$1","c",{"children":[["$","main",null,{"className":"min-h-screen px-6 py-16 md:px-12","children":["$","article",null,{"className":"mx-auto max-w-5xl","children":[["$","header",null,{"className":"mb-10","children":[["$","time",null,{"className":"text-sm font-medium text-fd-muted-foreground","children":"August 16, 2023"}],["$","h1",null,{"className":"mt-3 text-3xl font-extrabold tracking-tight text-fd-foreground md:text-5xl","children":"Welcome to the changelog"}],["$","p",null,{"className":"mt-4 text-base text-fd-muted-foreground","children":["By ","piotr"]}],["$","div",null,{"className":"mt-8 h-px bg-fd-border"}]]}],["$","div",null,{"className":"fd-prose prose dark:prose-invert max-w-none prose-headings:text-fd-foreground prose-headings:font-bold prose-p:text-fd-foreground/85 prose-p:leading-relaxed prose-a:text-fd-primary prose-a:no-underline hover:prose-a:underline prose-strong:text-fd-foreground prose-code:text-fd-foreground/80 prose-li:text-fd-foreground/85 prose-blockquote:border-fd-primary prose-blockquote:text-fd-muted-foreground prose-img:rounded-lg","children":[["$","p",null,{"children":"Welcome to the changelog, in which you will read about all the changes that we make to the project."}],"\n",["$","p",null,{"children":"For the time being, I haven't documented all the changes that I've made to the project, but since there's already a few of us working on the different parts of the project, I think it's a good idea to start documenting them, especially when there are some breaking changes or the new features being added to the server, that should be implemented in the client SDK as well :)"}],"\n",["$","p",null,{"children":"Stay tuned for the updates and the upcoming features, such as optional message headers!"}]]}],["$","footer",null,{"className":"mt-16 border-t border-fd-border pt-8","children":["$","$L2",null,{"href":"/blogs","className":"inline-flex items-center gap-2 text-sm font-medium text-fd-primary transition-colors hover:opacity-80","children":"← Back to all posts"}]}]]}]}],[["$","script","script-0",{"src":"/_next/static/chunks/2asgh_giu-vcb.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/1njepl5wox-ou.js","async":true}]],["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":"$@6","staleTime":"$7","varyParams":null},{"rsc":["$","$1","h",{"children":[null,["$","$L8",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$L9",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Welcome to the changelog | Apache Iggy"}],["$","link","1",{"rel":"icon","href":"/img/favicon.png"}],["$","$La","2",{}]]}]}]}],null]}],"isPartial":"$@b","staleTime":"$7","varyParams":null},{"rsc":["$","$1","c",{"children":[null,["$","$Lc",null,{"parallelRouterKey":"children","template":["$","$Ld",null,{}]}]]}],"isPartial":"$@e","staleTime":"$7","varyParams":"$f"},{"rsc":["$","$1","c",{"children":[null,["$","$Lc",null,{"parallelRouterKey":"children","template":["$","$Ld",null,{}]}]]}],"isPartial":"$@10","staleTime":"$7","varyParams":"$f"}],"isUpgradeableISRFallback":false,"a":"$@11","rootVaryParams":null,"needsRuntimeRequest":"$@12"}
+5:null
+12:true
+7:300
+7:C
+11:0
+b:"$undefined"
+e:"$undefined"
+10:"$undefined"
+6:"$undefined"
