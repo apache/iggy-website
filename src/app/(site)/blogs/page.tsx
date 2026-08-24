@@ -19,6 +19,7 @@
 
 import Link from "next/link";
 import { blogPosts } from "@/lib/source";
+import { resolveAuthors } from "@/lib/authors";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -70,7 +71,12 @@ export default function BlogIndex() {
                       day: "numeric",
                     })}
                     {post.author && (
-                      <span className="ml-2 opacity-70">by {post.author}</span>
+                      <span className="ml-2 opacity-70">
+                        by{" "}
+                        {resolveAuthors(post.author)
+                          .map((author) => author.name)
+                          .join(" & ")}
+                      </span>
                     )}
                   </time>
                   <h2 className="mt-2 text-2xl font-bold tracking-tight text-fd-foreground transition-colors group-hover:text-fd-primary md:text-3xl">

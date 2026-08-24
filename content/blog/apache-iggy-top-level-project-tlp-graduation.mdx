@@ -1,0 +1,83 @@
+---
+title: Apache Iggy™ Graduates to a Top-Level Project
+author: piotr, kranti
+tags: ["tlp", "top level project", "graduation", "announcement"]
+date: 2026-08-24
+---
+## Apache Iggy™
+
+We've got some amazing news to share: as of August 19th, 2026, Apache Iggy has officially graduated after a unanimously positive [vote](https://lists.apache.org/thread/dsnzqldshkg104n0t2g2q1czbz7tcbz6) from the Apache Incubator and is now an **Apache Software Foundation Top-Level Project (TLP)**. This is a special milestone for us.
+
+What started more than three years ago as a small experiment to learn Rust and explore the internals of message streaming has grown into an independent Apache project with contributors and users from around the world. And somehow, the journey from joining the Apache Incubator to becoming a TLP took only about **a year and a half**.
+
+## The origins
+
+It all began in March 2023 out of **Piotr Gankiewicz’s** pure curiosity. There was no corporate mandate or missing tool driving it - just an engineering desire to learn messaging internals and finally pick up Rust for real. Sure, the market was already flooded with message streaming tools like Apache Kafka, but that didn't matter. Engineers still build new database engines all the time, driven by an obsession with latency, performance, efficiency and operational simplicity - and a simple "let's just build what we desire" attitude. Besides, the name Iggy - short for Italian Greyhound, small but unmatched in speed - deserved a project of its own.
+
+The initial plan was simple: build a basic append-only log server, get comfortable with Rust, and call it a day. But it didn't stay simple. Performance is a deep rabbit hole - developers quickly find themselves constantly optimizing, modularizing, and chasing efficiency. Fast-forward to today, and Iggy is a persistent streaming platform built on a **thread-per-core** design with **io_uring** for disk/network I/O, **[VSR](https://github.com/apache/iggy/blob/master/assets/vsr.pdf)** (Viewstamped Replication Revisited) for consensus, and single-digit millisecond P99+ latencies.
+
+But technology is only part of the story. **The bigger change happened when other people started contributing.**
+
+The moment someone you’ve never met spends their own time submitting a pull request, reporting an issue, improving documentation, testing something or simply participating in a technical discussion, a personal experiment starts becoming something else. It becomes a **community**.
+
+Contributors came and went. Some submitted a single PR. Others stayed and eventually became committers and members of the project. Creating our [Discord](https://discord.gg/apache-iggy) community made it easier for people to ask questions, propose ideas and interact with developers. GitHub remained the place where technical decisions and project work could happen openly and remain searchable.
+
+As described in our [2023 post about building message streaming in Rust](https://iggy.apache.org/blogs/2023/12/29/building-message-streaming-in-rust/), the project had already transformed from a “solo side project to complete in three weeks” into something much bigger.
+
+## Joining the Apache Incubator
+
+As the community grew, we faced a more important question: **How do we make sure Iggy remains truly open source for the long term?**
+
+We wanted contributors and users to know that the project’s future wouldn’t depend on a single individual or company, and that its license couldn’t suddenly change because someone’s commercial strategy changed. The Apache Software Foundation was a natural home.
+
+In early 2025, we [proposed](https://cwiki.apache.org/confluence/spaces/INCUBATOR/pages/340036264/Iggy+Proposal) Apache Iggy to the Apache Incubator, and LaserData Inc. transferred ownership of the Iggy source code to the Apache Software Foundation through the ASF Software Grant process. That transition changed much more than the project’s name. 
+
+There was no longer an “owner” of Iggy making unilateral decisions. The project would operate through Apache’s community governance: public discussions, votes, releases, committers, PPMC members and consensus. Learning to operate this way was an important part of incubation.
+
+**Kranti Parisa** led much of Iggy’s journey into the Apache Software Foundation, from helping drive the original Incubator proposal and onboarding process through the project’s graduation. With graduation, Kranti has been appointed Chair of the Apache Iggy Project Management Committee (Iggy PMC). The Chair is not the leader of an Apache project (the PMC collectively governs it), but serves as the project’s liaison with the ASF Board and helps ensure the health and governance of the project.
+
+We also owe a special thank you to **Yonik Seeley**, our Apache Champion and Mentor, who helped us navigate the path into the ASF and supported the community throughout incubation. And to our mentors **Hulk Lin**, **Zili Chen**, and **Hao Ding**, whose guidance around Apache governance, releases and community building helped us reach this milestone.
+
+## From a podling to a community
+
+During roughly 18 months in the Apache Incubator, Iggy grew to:
+
+* more than **4,500 GitHub stars**
+* more than **120 contributors**
+* nearly **3,000 pull requests**
+* more than **700 members** in the broader Discord community
+* more than **500K cumulative downloads**
+
+Those numbers are exciting, but graduation isn’t really about GitHub stars or download counts. It’s about whether a project has developed a healthy, diverse and self-governing community capable of sustaining itself.
+
+![Apache Iggy graduates to a Top Level Project - 4500+ GitHub stars, 120+ contributors, 2700+ pull requests, 700+ Discord members and 500K+ cumulative downloads](/apache-iggy-top-level-project-tlp-graduation/iggy-tlp-stats.png)
+
+Our PPMC members became PMC members. Contributors became committers. New people joined discussions, reviewed code, proposed features, helped with releases, tested the software and challenged technical decisions. The complete Apache Iggy community, including PMC members, mentors and committers, is listed on our [Team](https://iggy.apache.org/community/team/) page.
+
+And there are many more contributors and users, across the world, beyond that list who have helped through code, documentation, issues, discussions, testing, integrations and community support.
+
+**Apache Iggy exists because of all of them.**
+
+Less than three and a half years after the first line of Iggy was written, and about a year and a half after entering the Apache Incubator, **we’re now an Apache Top-Level Project**.
+
+## What's next
+
+Graduation isn’t the finish line. If anything, it’s the beginning of Iggy’s next chapter.
+
+There are several important technical areas we’re working on and discussing with the community:
+* [Release](https://github.com/apache/iggy/discussions/3885) the next version of Iggy with one of our most requested capabilities: **clustering** based on [VSR](https://github.com/apache/iggy/blob/master/assets/vsr.pdf), bringing Iggy closer to highly available production deployments.
+* Complete the initial **[Kafka protocol gateway](https://github.com/apache/iggy/discussions/3253)**, making it easier for existing applications and ecosystems to work with Iggy.
+* Explore multi-leader replication per partition, tiered storage, message registry and embedded KV capabilities.
+* Continue expanding the connector runtime, including additional sources, sinks and optimizations.
+* And, perhaps most importantly, keep experimenting with how far we can push modern hardware, operating systems and Rust to build faster and more efficient streaming infrastructure.
+
+The roadmap will continue to evolve through community discussion - as it should.
+
+## Thank you
+Apache Iggy becoming a Top-Level Project is an achievement that belongs to everyone who helped get it here. Thank you and congratulations to the entire Apache Iggy community.
+
+Let's enter the **[Third Wave](https://www.streamingdata.tech/i/203596806/apache-iggy)** of message streaming technology together. It is an incredible time to build, especially as real-time data becomes the foundation for a new generation of AI and systems of intelligence.
+
+-\
+Piotr Gankiewicz & Kranti Parisa\
+Apache Iggy PMC.

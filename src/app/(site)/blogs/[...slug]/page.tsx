@@ -18,6 +18,7 @@
  */
 
 import { blogPosts } from "@/lib/source";
+import { resolveAuthors } from "@/lib/authors";
 import { notFound } from "next/navigation";
 import { getMDXComponents } from "@/mdx-components";
 import Link from "next/link";
@@ -58,6 +59,7 @@ export default async function BlogPost(props: {
 
   const MDX = page.body;
   const date = new Date(page.date);
+  const postAuthors = resolveAuthors(page.author);
 
   return (
     <main className="min-h-screen px-6 py-16 md:px-12">
@@ -73,10 +75,40 @@ export default async function BlogPost(props: {
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-fd-foreground md:text-5xl">
             {page.title}
           </h1>
-          {page.author && (
-            <p className="mt-4 text-base text-fd-muted-foreground">
-              By {page.author}
-            </p>
+          {postAuthors.length > 0 && (
+            <div className="mt-6 flex flex-wrap gap-x-10 gap-y-4">
+              {postAuthors.map((author) => (
+                <div key={author.name} className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={author.image}
+                    alt={author.name}
+                    className="h-11 w-11 rounded-full border border-fd-border object-cover"
+                  />
+                  <div>
+                    {author.url ? (
+                      <a
+                        href={author.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm font-semibold text-fd-foreground transition-colors hover:text-fd-primary"
+                      >
+                        {author.name}
+                      </a>
+                    ) : (
+                      <span className="text-sm font-semibold text-fd-foreground">
+                        {author.name}
+                      </span>
+                    )}
+                    {author.title && (
+                      <p className="text-xs text-fd-muted-foreground">
+                        {author.title}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
           <div className="mt-8 h-px bg-fd-border" />
         </header>
