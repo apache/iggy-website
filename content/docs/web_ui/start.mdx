@@ -94,6 +94,9 @@ services:
       - IGGY_HTTP_ADDRESS=0.0.0.0:80
       - IGGY_TCP_ENABLED=true
       - IGGY_TCP_ADDRESS=0.0.0.0:3000
+      # The init container below reaches this service by its compose name,
+      # so publish that name rather than localhost.
+      - IGGY_NODE_ADVERTISED_ADDRESS=iggy
       - IGGY_QUIC_ENABLED=false
       - IGGY_WEBSOCKET_ENABLED=false
     ports:

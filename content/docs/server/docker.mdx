@@ -10,6 +10,7 @@ Two properties of the published image matter for any deployment:
 
 - The working directory is `/app` and the `iggy-server` and `iggy` binaries are on `PATH` (`/usr/local/bin`). The default data directory `local_data` therefore resolves to `/app/local_data` - **mount your volume there**, or set `IGGY_SYSTEM_PATH` and mount that path instead.
 - The image bakes in no address overrides, so the server binds the loopback defaults (`127.0.0.1`) and is **unreachable from outside the container** even with published ports. Set `IGGY_TCP_ADDRESS=0.0.0.0:8090` (and the equivalent for every other transport you expose) alongside the `-p` flags.
+- The wildcard says nothing about where clients reach the container, so the server refuses to start until `IGGY_NODE_ADVERTISED_ADDRESS` supplies that address. Use `localhost` when the ports are published to the host, the compose service name when the clients are containers on the same network, and the external hostname or load balancer name when they are further away. The value reaches clients through cluster metadata, which they read to follow redirects and to learn where to reconnect.
 
 Below is an example `docker-compose.yml` which overrides the default configuration (see [Configuration](/docs/server/configuration)) with environment variables. If you prefer using the configuration file, you can mount it as a volume and provide the path to it with the `IGGY_CONFIG_PATH` environment variable.
 
@@ -34,6 +35,7 @@ services:
       - IGGY_ROOT_PASSWORD=Secret123
       - IGGY_TCP_ADDRESS=0.0.0.0:8090
       - IGGY_HTTP_ADDRESS=0.0.0.0:3000
+      - IGGY_NODE_ADVERTISED_ADDRESS=localhost
       - IGGY_QUIC_ENABLED=false
       - IGGY_WEBSOCKET_ENABLED=false
     ports:
@@ -53,6 +55,7 @@ docker run -d --name iggy \
   --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=Secret123 \
   -e IGGY_TCP_ADDRESS=0.0.0.0:8090 -e IGGY_HTTP_ADDRESS=0.0.0.0:3000 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
   -p 8090:8090 -p 3000:3000 \
   -v iggy:/app/local_data \
   apache/iggy:latest
@@ -84,7 +87,7 @@ The repository root carries its own `Dockerfile` and `docker-compose.yml` for bu
 docker build -t iggy .
 ```
 
-Or use `docker compose up` directly from the repository root. That image **differs from the published one**: it sets the `0.0.0.0` listener addresses via `ENV` and keeps its data at `/local_data`.
+Or use `docker compose up` directly from the repository root. That image **differs from the published one**: it sets the `0.0.0.0` listener addresses via `ENV` and keeps its data at `/local_data`. Its compose file publishes the ports to the host, so it declares `IGGY_NODE_ADVERTISED_ADDRESS=localhost`.
 
 ### Running the CLI inside the container
 
@@ -106,7 +109,7 @@ helm install iggy ./helm/charts/iggy
 
 ### Chart components
 
-- **Server Deployment** - runs `apache/iggy` with the pod security context the server needs: seccomp profile `Unconfined` (for `io_uring`) plus the `IPC_LOCK` capability (for memory locking). Listener addresses are set to `0.0.0.0` via `server.env`, and the data volume mounts at `/app/local_data`.
+- **Server Deployment** - runs `apache/iggy` with the pod security context the server needs: seccomp profile `Unconfined` (for `io_uring`) plus the `IPC_LOCK` capability (for memory locking). Listener addresses are set to `0.0.0.0` via `server.env`, and the data volume mounts at `/app/local_data`. The chart supplies `IGGY_NODE_ADVERTISED_ADDRESS` as the in-cluster Service DNS name; override it with `server.advertisedAddress` when clients arrive through a LoadBalancer or an Ingress. Images that predate the setting, including the `0.7.0` pinned by default, log the variable as unknown and start anyway.
 - **Server Service** - exposes the `http` (3000), `quic` (8080), and `tcp` (8090) ports. WebSocket is not exposed by the chart.
 - **Web UI Deployment + Service** - a separate `apache/iggy-web-ui` deployment on port 3050, enabled by default (`ui.enabled`).
 - **Secret** - root user credentials from `server.users.root` (default `iggy`/`changeit`). Point `existingSecret` at your own Secret in production.
@@ -120,6 +123,9 @@ helm install iggy ./helm/charts/iggy
 # values.yaml (excerpt, chart defaults)
 server:
   replicaCount: 1
+  # The address clients dial, published in cluster metadata. Empty falls
+  # back to the in-cluster Service DNS name.
+  advertisedAddress: ""
   image:
     repository: apache/iggy
     tag: "0.7.0"
