@@ -19,6 +19,9 @@ The site is built with [Fumadocs](https://fumadocs.dev/) on
 
 ## Working locally
 
+The required Node version is in `.nvmrc`, and as an `engines` floor in
+`package.json`.
+
 ```bash
 npm install
 npm run dev     # local server with hot reload
@@ -28,6 +31,9 @@ npm run build   # static output in ./out
 Run `npm run build` before opening a pull request: MDX that renders in `dev`
 can still fail the static build, most often through a malformed frontmatter
 block or a component that is used but not imported.
+
+Add a new page to the `pages` array of its directory's `meta.json`. Left out, it
+builds and deploys but never appears in the sidebar.
 
 ## Making a change
 
@@ -40,6 +46,9 @@ Small corrections such as a broken link, a stale command or a wrong default
 are welcome as direct pull requests; there is no need to open an issue first. For
 larger changes such as new pages, restructured navigation or a reorganised
 section, please open an issue to discuss the shape before writing it.
+
+The site is a static export with no redirects, so a page's path is its permanent
+URL. Do not rename or move a published page: it breaks every existing link to it.
 
 ## Documenting the broker
 
@@ -70,8 +79,10 @@ Contributors do not need to touch either branch.
 
 ## Getting help
 
-- [Discord](https://discord.gg/apache) for questions and discussion
 - [dev@iggy.apache.org](mailto:dev@iggy.apache.org), the project's development
-  mailing list ([subscribe](mailto:dev-subscribe@iggy.apache.org))
+  mailing list, for project decisions and anything that should stay on the
+  public record ([subscribe](mailto:dev-subscribe@iggy.apache.org))
+- [Discord](https://discord.gg/apache-iggy) for informal conversation and quick
+  questions
 - [GitHub issues](https://github.com/apache/iggy-website/issues) for problems
   with the site or its documentation
