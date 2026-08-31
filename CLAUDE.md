@@ -49,7 +49,7 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 - Client components must be marked with `"use client"`.
 - Mermaid diagrams are supported in MDX via `src/components/mermaid.tsx` (client-rendered, theme-aware).
 - Blog frontmatter schema is defined in `source.config.ts` using Zod.
-- Node.js v20+ required (`.nvmrc`).
+- Node.js v24+ required (`.nvmrc`).
 - `.npmrc` sets `legacy-peer-deps=true`.
 - Commits follow conventional commits: `type(scope): subject`, e.g. `fix(docs): ...`.
 
