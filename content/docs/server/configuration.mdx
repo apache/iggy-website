@@ -10,12 +10,17 @@ A config file doesn't have to be complete. It is **merged over the embedded defa
 [system]
 path = "/var/lib/iggy"
 
+[node]
+advertised_address = "iggy-1"
+
 [tcp]
 address = "0.0.0.0:8090"
 
 [http]
 address = "0.0.0.0:3000"
 ```
+
+Both listeners here bind a wildcard, which tells the server nothing about where clients reach it, so [`[node]`](#node) has to name that address explicitly - without it this file is refused at boot.
 
 ## How configuration loads
 
@@ -413,7 +418,7 @@ Tunables for the internal bus that ships consensus traffic between replicas and 
 
 ### `[node]`
 
-This node's own client-facing identity, read only while `cluster.enabled = false`. In cluster mode the roster answers the same question per node, so a value here takes no effect and the server says so at startup.
+This node's own client-facing identity. The address is read only while `cluster.enabled = false`: in cluster mode the roster answers the same question per node, so the address itself is ignored and the server says so at startup. The key is still validated in every mode, so a malformed value refuses boot even with `cluster.enabled = true`.
 
 | Key | Default | Description |
 |-----|---------|-------------|
