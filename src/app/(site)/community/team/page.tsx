@@ -50,6 +50,7 @@ const members = [
     roles: ["Committer"],
   },
   { name: "Bartosz Ciesla", apacheId: "bciesla", roles: ["Committer"] },
+  { name: "Chengxi Luo", apacheId: "chengxi", roles: ["Committer"] },
   { name: "Krishna Vishal", apacheId: "krishna", roles: ["Committer"] },
   { name: "Kyle Downey", apacheId: "kdowney", roles: ["Committer"] },
   { name: "Lukasz Zborek", apacheId: "lzborek", roles: ["Committer"] },
