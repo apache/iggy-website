@@ -19,6 +19,8 @@
 
 import { RootProvider } from "fumadocs-ui/provider/next";
 import type { Metadata } from "next";
+import Script from "next/script";
+import { Matomo } from "@/components/matomo";
 import "./global.css";
 
 export const metadata: Metadata = {
@@ -41,6 +43,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         >
           {children}
         </RootProvider>
+        {/* Snippet supplied by the Apache Privacy Team */}
+        <Script id="matomo" strategy="afterInteractive">
+          {`var _paq = window._paq = window._paq || [];
+_paq.push(["setDoNotTrack", true]);
+_paq.push(["disableCookies"]);
+_paq.push(['trackPageView']);
+_paq.push(['enableLinkTracking']);
+(function() {
+  var u="https://analytics.apache.org/";
+  _paq.push(['setTrackerUrl', u+'matomo.php']);
+  _paq.push(['setSiteId', '80']);
+  var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+  g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+})();`}
+        </Script>
+        <Matomo />
       </body>
     </html>
   );
