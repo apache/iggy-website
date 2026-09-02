@@ -11,6 +11,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Check docs links
+        run: npm run check:links
+
+      - name: Check licence headers
+        run: npm run check:headers
+
+      - name: Validate .asf.yaml
+        run: >-
+          python3 -c "import sys,yaml; yaml.safe_load(open('.asf.yaml'));
+          print('.asf.yaml parses')"
+
   build:
     runs-on: ubuntu-latest
     steps:

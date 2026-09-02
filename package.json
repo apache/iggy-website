@@ -8,6 +8,9 @@
     "prebuild": "node scripts/fetch-github-stars.mjs",
     "build": "next build",
     "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "check:links": "node scripts/check-docs-links.mjs",
+    "check:headers": "node scripts/check-license-headers.mjs",
     "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
