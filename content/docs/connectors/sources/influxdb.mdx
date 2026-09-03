@@ -1,5 +1,6 @@
 ---
 title: InfluxDB Source
+description: "Poll InfluxDB on an interval and produce the resulting rows into an Iggy stream, on both InfluxDB V2 and V3."
 ---
 
 The InfluxDB source connector polls InfluxDB on an interval and produces the resulting rows as messages into an Iggy stream. It supports both InfluxDB V2 (OSS 2.x / Cloud, Flux queries) and InfluxDB V3 (Core / Enterprise, SQL queries), selected with the `version` option. A timestamp cursor stored in persistent connector state tracks the position, so restarts resume where they left off.

@@ -1,5 +1,6 @@
 ---
 title: Message batches
+description: "The batch layout messages travel and rest in, from the 256-byte batch header down to individual message frames."
 ---
 
 Messages travel and rest in exactly one layout, the **batch**: the `SendMessages` body, the replicated record, the persisted segment record, and the poll reply all share it. There is no other message encoding.
