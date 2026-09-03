@@ -8,6 +8,10 @@
     "prebuild": "node scripts/fetch-github-stars.mjs && node scripts/generate-docs-markdown.mjs",
     "build": "next build",
     "start": "next start",
+    "pretypecheck": "node scripts/fetch-github-stars.mjs",
+    "typecheck": "tsc --noEmit",
+    "check:links": "node scripts/check-docs-links.mjs",
+    "check:headers": "node scripts/check-license-headers.mjs",
     "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
