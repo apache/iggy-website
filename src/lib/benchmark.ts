@@ -17,23 +17,16 @@
  * under the License.
  */
 
-"use client";
-
-export default function Error({
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
-  return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 p-8">
-      <h2 className="text-xl font-semibold">Something went wrong</h2>
-      <button
-        onClick={reset}
-        className="rounded-lg bg-fd-primary px-4 py-2 text-sm font-medium text-fd-primary-foreground"
-      >
-        Try again
-      </button>
-    </div>
-  );
-}
+// The published latency figures, in milliseconds. Everything on the homepage
+// that quotes a latency reads from here: the hero in (home)/page.tsx and the
+// table, chart and stat tiles in components/benchmark-chart.tsx.
+//
+// This lives outside the chart component because that component is a client
+// component, and a server component cannot read a value through the client
+// boundary - it gets a client reference rather than the data.
+//
+// Update these when a new benchmark run is published.
+export const LATENCY_MS = {
+  producer: { avg: 0.466, median: 0.349, p95: 0.886, p99: 0.976, p999: 1.114 },
+  consumer: { avg: 0.357, median: 0.351, p95: 0.446, p99: 0.495, p999: 0.566 },
+};

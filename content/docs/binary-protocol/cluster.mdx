@@ -1,5 +1,6 @@
 ---
 title: Server-to-server
+description: "The replica-to-replica plane: its dedicated TCP port, command discriminants, and traffic that never reaches a client."
 ---
 
 Replicas talk to each other with the same 256-byte [framing](/docs/binary-protocol/framing) the client protocol uses, on a **dedicated TCP port**, with their own set of `command` discriminants. None of these frames ever appears on a client connection, and a client cannot reach this plane: it is a separate listener, gated by a handshake.

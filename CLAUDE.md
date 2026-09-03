@@ -59,4 +59,5 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 - Push to `main` triggers `.github/workflows/deploy.yml` (also daily cron and manual dispatch), which builds and force-orphan-pushes `out/` to the `asf-site` branch -> iggy.apache.org.
 - Push to `staging` triggers `stage.yml`, same flow to `asf-staging` -> iggy.staged.apache.org. Use it to preview large changes.
 - `asf-site` and `asf-staging` are generated artifacts. Never edit them by hand.
+- Both workflows copy `.asf.yaml` and `.htaccess` into `out/` before publishing. The `.htaccess` sets `ErrorDocument 404 /404.html`; without it the ASF web server answers unknown paths with its own bare "Not Found" body instead of the site's 404 page (the status code is 404 either way).
 - Branch-to-URL mapping is configured via `.asf.yaml` (Apache infrastructure).

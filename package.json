@@ -3,11 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/fetch-github-stars.mjs",
+    "predev": "node scripts/fetch-github-stars.mjs && node scripts/generate-docs-markdown.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/fetch-github-stars.mjs",
+    "prebuild": "node scripts/fetch-github-stars.mjs && node scripts/generate-docs-markdown.mjs",
     "build": "next build",
     "start": "next start",
+    "pretypecheck": "node scripts/fetch-github-stars.mjs",
+    "typecheck": "tsc --noEmit",
+    "check:links": "node scripts/check-docs-links.mjs",
+    "check:headers": "node scripts/check-license-headers.mjs",
     "postinstall": "fumadocs-mdx"
   },
   "dependencies": {

@@ -1,5 +1,6 @@
 ---
 title: Storage Engine
+description: "The segmented append-only log, and how streams, topics, partitions and segments map onto files on disk."
 ---
 
 Iggy's storage engine is built around the concept of a **segmented append-only log**. Every piece of data flows through a well-defined hierarchy: System -> Streams -> Topics -> Partitions -> Segments. This page covers how data is stored, indexed, flushed, recovered, and cleaned up on disk.

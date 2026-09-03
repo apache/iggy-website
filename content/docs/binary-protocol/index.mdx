@@ -1,5 +1,6 @@
 ---
 title: Binary Protocol
+description: "Binary protocol 0.11.0: one wire format across TCP, QUIC and WebSocket, covering both the client and replica planes."
 ---
 
 Iggy speaks one binary protocol over its three binary transports: TCP, QUIC, and WebSocket. Commands, responses, data models, and status codes are the same on all of them. The HTTP transport is separate: it exposes the same operations as JSON REST endpoints, listed in [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http).

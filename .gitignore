@@ -12,6 +12,8 @@ tsconfig.tsbuildinfo
 
 # Build-time generated
 src/github-stars.json
+public/docs.md
+public/docs/**/*.md
 
 # System files
 .DS_Store
