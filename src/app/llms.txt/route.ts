@@ -20,7 +20,7 @@
 import { llms } from "fumadocs-core/source/llms";
 import { source } from "@/lib/source";
 import { publishedPosts } from "@/lib/blog";
-import { SITE_DESCRIPTION, SITE_URL, absoluteUrl } from "@/lib/site";
+import { SITE_DESCRIPTION, absoluteUrl } from "@/lib/site";
 
 export const dynamic = "force-static";
 
@@ -42,10 +42,6 @@ https://github.com/apache/iggy.
 - Command line and web administration: ${absoluteUrl("/docs/cli")} and ${absoluteUrl("/docs/web_ui")}
 - Downloading a release: ${absoluteUrl("/downloads")}
 - Contributing, or reaching the project's mailing lists and Discord: ${absoluteUrl("/community")}
-
-Every documentation page has a Markdown copy at the same path with a .md
-suffix, so ${absoluteUrl("/docs/server/security")} is also served as
-${SITE_URL}/docs/server/security.md.
 `;
 
 export function GET(): Response {
