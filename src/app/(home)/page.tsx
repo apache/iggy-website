@@ -21,7 +21,8 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
 import { LandingCodeTabs } from "@/components/code-tabs";
-import { BenchmarkSection, LATENCY_MS } from "@/components/benchmark-chart";
+import { BenchmarkSection } from "@/components/benchmark-chart";
+import { LATENCY_MS } from "@/lib/benchmark";
 
 export const metadata: Metadata = {
   title: "Apache Iggy | Hyper-Efficient Message Streaming written in Rust.",

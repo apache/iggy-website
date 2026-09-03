@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { LATENCY_MS } from "@/lib/benchmark";
+
 const PRODUCER_BENCHMARK_URL =
   "https://benchmarks.iggy.apache.org/benchmarks/4bc63b0e-f0fb-44b5-8c42-6159603a5653";
 const CONSUMER_BENCHMARK_URL =
@@ -13,14 +15,6 @@ const Y_TOP_PAD = 20;
 const Y_TICKS = [0, 0.2, 0.4, 0.6, 0.8, 1];
 const X_MAX = 800;
 const SAMPLES = 160;
-
-// The published latency figures, in milliseconds. Everything on the homepage
-// that quotes a latency reads from here, including the hero in page.tsx.
-// Update these when a new benchmark run is published.
-export const LATENCY_MS = {
-  producer: { avg: 0.466, median: 0.349, p95: 0.886, p99: 0.976, p999: 1.114 },
-  consumer: { avg: 0.357, median: 0.351, p95: 0.446, p99: 0.495, p999: 0.566 },
-};
 
 const PRODUCER_AVG_MS = LATENCY_MS.producer.avg;
 const CONSUMER_AVG_MS = LATENCY_MS.consumer.avg;
