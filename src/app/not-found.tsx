@@ -24,6 +24,14 @@ export const metadata: Metadata = {
   title: "404: Page not found",
 };
 
+const RECOVERY_LINKS = [
+  { href: "/", label: "Home" },
+  { href: "/docs", label: "Documentation" },
+  { href: "/blogs", label: "Blog" },
+  { href: "/downloads", label: "Downloads" },
+  { href: "/community", label: "Community" },
+];
+
 export default function NotFound() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
@@ -42,6 +50,31 @@ export default function NotFound() {
       >
         Back to documentation
       </Link>
+      <nav
+        aria-label="Where to go next"
+        className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-fd-muted-foreground"
+      >
+        {RECOVERY_LINKS.map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
+            className="transition-colors hover:text-fd-primary"
+          >
+            {link.label}
+          </Link>
+        ))}
+      </nav>
+      <p className="mt-6 max-w-md text-xs text-fd-muted-foreground">
+        Every page on this site is listed in{" "}
+        <a href="/sitemap.xml" className="underline hover:text-fd-primary">
+          /sitemap.xml
+        </a>
+        , and{" "}
+        <a href="/llms.txt" className="underline hover:text-fd-primary">
+          /llms.txt
+        </a>{" "}
+        summarises the documentation.
+      </p>
     </main>
   );
 }

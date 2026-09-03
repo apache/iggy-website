@@ -1,5 +1,6 @@
 ---
 title: Concepts
+description: "The domain model behind Iggy, and how an append-only streaming log differs from a message broker."
 ---
 
 Iggy is a persistent message streaming platform: messages are stored in a form of an **append-only log**. You can create multiple streams, consisting of topics, which might have one or more partitions assigned, e.g. to achieve the horizontal scalability between many independent consumers or higher system resiliency. You can think of Iggy as an alternative to Kafka or RabbitMQ streams.

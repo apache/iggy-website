@@ -1,5 +1,6 @@
 ---
 title: Elasticsearch Source
+description: "Poll documents from an Elasticsearch index into Iggy streams, incrementally when a timestamp field is configured."
 ---
 
 The Elasticsearch source connector polls documents from an Elasticsearch index and produces them to Iggy streams. With a timestamp field configured, each poll only fetches documents newer than the last one seen, giving incremental, restart-safe ingestion.

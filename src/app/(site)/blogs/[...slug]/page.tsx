@@ -148,8 +148,18 @@ export async function generateMetadata(props: {
   const page = findPostByDateSlug(params.slug);
   if (!page) notFound();
 
+  const date = new Date(page.date);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
   return {
     title: page.title,
     description: page.description,
+    // Set explicitly: the inherited relative canonical loses the trailing slash
+    // on this catch-all route, so it would not match the URL actually served.
+    alternates: {
+      canonical: `/blogs/${year}/${month}/${day}/${getSlug(page.info.path)}/`,
+    },
   };
 }

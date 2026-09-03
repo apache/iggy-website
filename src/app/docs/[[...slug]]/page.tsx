@@ -79,6 +79,12 @@ export async function generateMetadata(props: {
   return {
     title: page.data.title,
     description: page.data.description,
+    alternates: {
+      // Set both: defining alternates here replaces the root's, canonical included.
+      canonical: `${page.url}/`,
+      // The Markdown copy written by scripts/generate-docs-markdown.mjs.
+      types: { "text/markdown": `${page.url}.md` },
+    },
   };
 }
 

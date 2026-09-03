@@ -1,5 +1,6 @@
 ---
 title: Transforms
+description: "Mutate, filter and convert messages as they pass through the connector runtime, and how each transform is configured."
 ---
 
 Transforms mutate, filter, or convert messages as they flow through the connector runtime. They run inside the runtime process, not inside the plugins. For source connectors they're applied after the plugin's messages are decoded and before producing to Iggy. For sink connectors, after consuming from Iggy and before handing the messages to the plugin.

@@ -1,5 +1,6 @@
 ---
 title: ClickHouse Sink
+description: "Insert messages from Iggy streams into ClickHouse tables over the HTTP interface."
 ---
 
 The ClickHouse sink connector consumes messages from Iggy streams and inserts them into ClickHouse tables over the HTTP interface. It supports three insert formats: `json_each_row` (default), `row_binary`, and `string` passthrough for pre-formatted CSV/TSV/JSON payloads.

@@ -1,5 +1,6 @@
 ---
 title: Framing
+description: "The fixed 256-byte header every binary-transport message rides in, and the request, reply and eviction shapes it carries."
 ---
 
 Every message on a binary transport is a fixed **256-byte header** followed by an optional body. The header is a `#[repr(C)]` struct decoded by pointer cast (zero-copy), so field offsets are fixed and enforced at compile time in the server. Three header shapes cross the client boundary:

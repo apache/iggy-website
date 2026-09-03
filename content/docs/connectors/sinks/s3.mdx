@@ -1,5 +1,6 @@
 ---
 title: S3 Sink
+description: "Write messages from Iggy streams to Amazon S3 and S3-compatible object stores such as MinIO, R2, Spaces and B2."
 ---
 
 The S3 sink connector writes messages from Iggy streams to Amazon S3 and S3-compatible object stores (MinIO, Cloudflare R2, DigitalOcean Spaces, Backblaze B2). Messages are buffered in memory and uploaded as files, rotated by size or message count, under configurable path templates with offset ranges in the object names.

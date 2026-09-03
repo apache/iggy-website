@@ -22,9 +22,10 @@ import Image from "next/image";
 import type { Metadata } from "next";
 import { LandingCodeTabs } from "@/components/code-tabs";
 import { BenchmarkSection } from "@/components/benchmark-chart";
+import { LATENCY_MS } from "@/lib/benchmark";
 
 export const metadata: Metadata = {
-  title: "Apache Iggy | Hyper-Efficient Message Streaming written in Rust.",
+  title: "Hyper-Efficient Message Streaming written in Rust",
   description:
     "Apache Iggy is a high-performance, persistent message streaming platform written in Rust, capable of processing millions of messages per second with ultra-low latency.",
 };
@@ -36,7 +37,7 @@ const heroStats = [
     gradient: "from-[#f9923f] via-[#5f87fd] to-[#fa5e8a]",
   },
   {
-    value: "~1 ms",
+    value: `~${LATENCY_MS.producer.avg.toFixed(1)} ms`,
     label: "Avg Write Latency",
     gradient: "from-[#5f87fd] to-[#7d44e0]",
   },
@@ -358,9 +359,9 @@ export default function HomePage() {
                     {item.step}
                   </div>
                   <div className="min-w-0">
-                    <h4 className="text-base font-semibold text-[#fffaeb] mb-1">
+                    <h3 className="text-base font-semibold text-[#fffaeb] mb-1">
                       {item.title}
-                    </h4>
+                    </h3>
                     <p className="text-sm font-light leading-relaxed text-[#aeb5bd] m-0">
                       {item.desc}
                     </p>

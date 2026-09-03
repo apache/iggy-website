@@ -1,5 +1,6 @@
 ---
 title: SurrealDB Sink
+description: "Write messages from Iggy streams into SurrealDB over the HTTP API, one bulk insert per batch."
 ---
 
 The SurrealDB sink connector writes messages from Iggy streams into SurrealDB over the HTTP API. Each batch becomes one SurrealQL bulk `INSERT IGNORE`. Every record gets a deterministic record id derived from stream, topic, partition, offset, and message id, so replayed batches are idempotent and existing records are left untouched.
