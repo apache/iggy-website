@@ -30,7 +30,9 @@ jobs:
         run: npm run build
 
       - name: Copy ASF config
-        run: cp .asf.yaml ./out/.asf.yaml
+        run: |
+          cp .asf.yaml ./out/.asf.yaml
+          cp .htaccess ./out/.htaccess
 
       - name: Publish Iggy Website to asf-site
         if: github.ref == 'refs/heads/main'
