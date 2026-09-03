@@ -11,12 +11,17 @@ A config file doesn't have to be complete. It is **merged over the embedded defa
 [system]
 path = "/var/lib/iggy"
 
+[node]
+advertised_address = "iggy-1"
+
 [tcp]
 address = "0.0.0.0:8090"
 
 [http]
 address = "0.0.0.0:3000"
 ```
+
+Both listeners here bind a wildcard, which tells the server nothing about where clients reach it, so [`[node]`](#node) has to name that address explicitly - without it this file is refused at boot.
 
 ## How configuration loads
 
@@ -36,6 +41,7 @@ Every configuration key can be overridden with an `IGGY_` variable. The name is 
 
 ```bash
 IGGY_TCP_ADDRESS=0.0.0.0:8090          # [tcp] address
+IGGY_NODE_ADVERTISED_ADDRESS=iggy-1    # [node] advertised_address
 IGGY_HTTP_ENABLED=true                 # [http] enabled
 IGGY_SYSTEM_PATH=/var/lib/iggy         # [system] path
 IGGY_SYSTEM_LOGGING_LEVEL=debug        # [system.logging] level
@@ -410,6 +416,14 @@ Tunables for the internal bus that ships consensus traffic between replicas and 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `rebalancing_timeout` | `"30s"` | Maximum time a partition can remain in pending revocation before being force-transferred to the target member. |
+
+### `[node]`
+
+This node's own client-facing identity. The address is read only while `cluster.enabled = false`: in cluster mode the roster answers the same question per node, so the address itself is ignored and the server says so at startup. The key is still validated in every mode, so a malformed value refuses boot even with `cluster.enabled = true`.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `advertised_address` | unset | The address clients dial, published in cluster metadata. A literal IP or a DNS hostname. Left unset, the server derives it from the bind address of the first enabled listener; that fails when the listener binds a wildcard, and the server refuses to start rather than publish an address no client can use. Declaring the unspecified address (`0.0.0.0`, `::`) is refused for the same reason. |
 
 ### `[cluster]`
 

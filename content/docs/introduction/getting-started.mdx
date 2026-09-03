@@ -28,11 +28,12 @@ docker run --rm \
   --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
   -p 8090:8090 \
   -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
   apache/iggy:latest
 ```
 
-`SYS_NICE`, the seccomp setting and the memlock limit are all required by `io_uring` and the thread-per-core architecture; see [Docker & Helm](/docs/server/docker) for the details. `IGGY_TCP_ADDRESS` is needed because the server binds to `127.0.0.1` inside the container by default, which a published port cannot reach. Setting the root credentials explicitly means the username and password used later in this guide will work.
+`SYS_NICE`, the seccomp setting and the memlock limit are all required by `io_uring` and the thread-per-core architecture; see [Docker & Helm](/docs/server/docker) for the details. `IGGY_TCP_ADDRESS` is needed because the server binds to `127.0.0.1` inside the container by default, which a published port cannot reach. `IGGY_NODE_ADVERTISED_ADDRESS` is needed because that wildcard leaves the server with no address to give clients, and it refuses to start rather than publish one nobody can dial. Here the port is published to the host, so `localhost` is that address. Setting the root credentials explicitly means the username and password used later in this guide will work.
 
 Alternatively, build from source by cloning the [repository](https://github.com/apache/iggy) and running:
 
