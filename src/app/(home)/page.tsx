@@ -25,7 +25,7 @@ import { BenchmarkSection } from "@/components/benchmark-chart";
 import { LATENCY_MS } from "@/lib/benchmark";
 
 export const metadata: Metadata = {
-  title: "Apache Iggy | Hyper-Efficient Message Streaming written in Rust.",
+  title: "Hyper-Efficient Message Streaming written in Rust",
   description:
     "Apache Iggy is a high-performance, persistent message streaming platform written in Rust, capable of processing millions of messages per second with ultra-low latency.",
 };
@@ -359,9 +359,9 @@ export default function HomePage() {
                     {item.step}
                   </div>
                   <div className="min-w-0">
-                    <h4 className="text-base font-semibold text-[#fffaeb] mb-1">
+                    <h3 className="text-base font-semibold text-[#fffaeb] mb-1">
                       {item.title}
-                    </h4>
+                    </h3>
                     <p className="text-sm font-light leading-relaxed text-[#aeb5bd] m-0">
                       {item.desc}
                     </p>
