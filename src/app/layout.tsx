@@ -97,13 +97,23 @@ const structuredData = {
   ],
 };
 
+/**
+ * JSON-LD has to be injected as raw text: React would HTML-escape it as a child
+ * and the quotes would end up as entities. The object above is built from
+ * constants in this file, so nothing here is user input, but JSON.stringify does
+ * not escape "<" -- so escape it, and a stray "</script>" can never close the tag.
+ */
+function serializeJsonLd(data: unknown): string {
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="flex min-h-screen flex-col font-sans antialiased">
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
         />
         <RootProvider
           search={{ options: { type: "static" as const } }}
