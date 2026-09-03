@@ -17,32 +17,61 @@
  * under the License.
  */
 
-import { writeFileSync } from "fs";
+import { writeFileSync, readFileSync, existsSync } from "fs";
 
-const FALLBACK = "3.9K";
+// Only used when there is no previously fetched value on disk. Keep it roughly
+// current: a stale fallback silently ships a wrong number on the site.
+const FALLBACK = "4.7K";
+
+const OUT = new URL("../src/github-stars.json", import.meta.url);
 
 function formatStars(count) {
   return count >= 1000 ? `${(count / 1000).toFixed(1)}K` : String(count);
 }
 
-async function main() {
-  let stars = FALLBACK;
+function existingStars() {
+  if (!existsSync(OUT)) return null;
   try {
-    const res = await fetch("https://api.github.com/repos/apache/iggy");
+    const value = JSON.parse(readFileSync(OUT, "utf8")).stars;
+    return typeof value === "string" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function main() {
+  // The anonymous GitHub API limit is per IP, and shared CI runners hit it
+  // routinely. Actions exposes GITHUB_TOKEN, which raises the limit a long way.
+  const token = process.env.GITHUB_TOKEN;
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+  let stars = null;
+  try {
+    const res = await fetch("https://api.github.com/repos/apache/iggy", { headers });
     if (res.ok) {
       const data = await res.json();
       if (data.stargazers_count) {
         stars = formatStars(data.stargazers_count);
       }
+    } else {
+      console.warn(`GitHub stars: API returned ${res.status} ${res.statusText}`);
     }
   } catch (e) {
-    console.warn("Failed to fetch GitHub stars, using fallback:", e.message);
+    console.warn("GitHub stars: fetch failed:", e.message);
   }
 
-  writeFileSync(
-    new URL("../src/github-stars.json", import.meta.url),
-    JSON.stringify({ stars }),
-  );
+  if (stars === null) {
+    // Never overwrite a good value with a worse one.
+    const previous = existingStars();
+    stars = previous ?? FALLBACK;
+    console.warn(
+      previous
+        ? `GitHub stars: keeping previously fetched ${previous}`
+        : `GitHub stars: no previous value, using fallback ${FALLBACK}`,
+    );
+  }
+
+  writeFileSync(OUT, JSON.stringify({ stars }));
   console.log(`GitHub stars: ${stars}`);
 }
 
