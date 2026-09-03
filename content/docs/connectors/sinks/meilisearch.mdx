@@ -1,5 +1,6 @@
 ---
 title: Meilisearch Sink
+description: "Index messages from Iggy streams as documents in a Meilisearch index through the official Rust SDK."
 ---
 
 The Meilisearch sink connector consumes messages from Iggy streams and indexes them as documents in a Meilisearch index through the official Rust SDK. It can create the index on startup and waits for Meilisearch indexing tasks to complete by default, so task failures surface as connector errors.

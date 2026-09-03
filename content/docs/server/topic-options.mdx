@@ -1,5 +1,6 @@
 ---
 title: Topic Options
+description: "Per-topic retention, durability and segment layout options, set when the topic is created."
 ---
 
 Retention, durability, and segment layout are per-topic decisions, made when the topic is created. They used to be server-wide `[system.*]` keys, which gave every knob two homes. The server now [refuses to boot](/docs/server/configuration#relocated-configuration-keys) on the old keys, and each topic carries its own values instead.

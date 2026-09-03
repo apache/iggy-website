@@ -1,5 +1,6 @@
 ---
 title: Apache Doris Sink
+description: "Load JSON messages from Iggy streams into a pre-created Apache Doris table through the Stream Load HTTP API."
 ---
 
 The Apache Doris sink connector consumes JSON messages from Iggy streams and writes them to a pre-created Doris table via Doris's Stream Load HTTP API. Batches are loaded under deterministic labels so that in-request retries deduplicate instead of doubling rows.

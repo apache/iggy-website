@@ -1,5 +1,6 @@
 ---
 title: PHP SDK
+description: "The experimental PHP SDK, a native extension wrapping the Rust SDK, and how to build it from source."
 ---
 
 The Iggy PHP SDK is a native PHP extension built in Rust with [ext-php-rs](https://github.com/davidcole1340/ext-php-rs). It wraps the Rust SDK and exposes a synchronous `Iggy\Client`: each call drives the extension's internal Tokio runtime and blocks the calling PHP thread until the operation completes. The source code is available on [GitHub](https://github.com/apache/iggy/tree/master/foreign/php).

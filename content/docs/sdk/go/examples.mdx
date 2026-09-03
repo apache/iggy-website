@@ -1,5 +1,6 @@
 ---
 title: Examples
+description: "Runnable Go examples from the core repository, and how to start a server they can connect to."
 ---
 
 A runnable getting-started example lives in the [examples/go](https://github.com/apache/iggy/tree/master/examples/go) directory of the core repository. Its `go.mod` carries a `replace` directive pointing at the in-repo SDK, so the example always builds against the SDK source in the same checkout. The examples are exercised in CI via `scripts/run-examples-from-readme.sh --language go`.
