@@ -22,6 +22,7 @@ import Image from "next/image";
 import type { Metadata } from "next";
 import { LandingCodeTabs } from "@/components/code-tabs";
 import { BenchmarkSection } from "@/components/benchmark-chart";
+import { LATENCY_MS } from "@/lib/benchmark";
 
 export const metadata: Metadata = {
   title: "Apache Iggy | Hyper-Efficient Message Streaming written in Rust.",
@@ -36,7 +37,7 @@ const heroStats = [
     gradient: "from-[#f9923f] via-[#5f87fd] to-[#fa5e8a]",
   },
   {
-    value: "~1 ms",
+    value: `~${LATENCY_MS.producer.avg.toFixed(1)} ms`,
     label: "Avg Write Latency",
     gradient: "from-[#5f87fd] to-[#7d44e0]",
   },
