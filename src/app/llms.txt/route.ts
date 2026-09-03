@@ -35,13 +35,13 @@ https://github.com/apache/iggy.
 
 ## When to use this site
 
-- Running or configuring the server, including storage, networking and clustering: /docs/server and /docs/clustering.
-- Writing a producer or consumer in a given language: /docs/sdk.
-- Talking to the server directly over QUIC, TCP or HTTP: /docs/binary-protocol.
-- Moving data in or out of Iggy without writing code: /docs/connectors.
-- Command line and web administration: /docs/cli and /docs/web_ui.
-- Downloading a release: /downloads.
-- Contributing, or reaching the project's mailing lists and Discord: /community.
+- Running or configuring the server, including storage, networking and clustering: ${absoluteUrl("/docs/server")} and ${absoluteUrl("/docs/clustering")}
+- Writing a producer or consumer in a given language: ${absoluteUrl("/docs/sdk")}
+- Talking to the server directly over QUIC, TCP or HTTP: ${absoluteUrl("/docs/binary-protocol")}
+- Moving data in or out of Iggy without writing code: ${absoluteUrl("/docs/connectors")}
+- Command line and web administration: ${absoluteUrl("/docs/cli")} and ${absoluteUrl("/docs/web_ui")}
+- Downloading a release: ${absoluteUrl("/downloads")}
+- Contributing, or reaching the project's mailing lists and Discord: ${absoluteUrl("/community")}
 `;
 
 export function GET(): Response {
@@ -53,9 +53,16 @@ export function GET(): Response {
     })
     .join("\n");
 
+  // The helper emits site-relative links; llms.txt consumers want absolute ones.
+  const docsIndex = llms(source)
+    .index()
+    .replace(/\]\((\/[^)\s]*)\)/g, (_match, path: string) => `](${absoluteUrl(path)})`)
+    // One H1 per file: the helper's top-level heading becomes a section.
+    .replace(/^# /gm, "## ");
+
   const body = [
     INTRO,
-    llms(source).index(),
+    docsIndex,
     `## Blog\n\nThe ten most recent posts. The full list is at ${absoluteUrl("/blogs")}.\n\n${posts}\n`,
   ].join("\n");
 

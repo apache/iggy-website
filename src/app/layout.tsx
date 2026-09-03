@@ -67,14 +67,6 @@ const structuredData = {
       name: "The Apache Software Foundation",
       url: "https://www.apache.org/",
       logo: `${SITE_URL}/img/asf_logo.svg`,
-      address: {
-        "@type": "PostalAddress",
-        streetAddress: "1000 N West Street, Suite 1200",
-        addressLocality: "Wilmington",
-        addressRegion: "DE",
-        postalCode: "19801",
-        addressCountry: "US",
-      },
       contactPoint: {
         "@type": "ContactPoint",
         contactType: "technical support",

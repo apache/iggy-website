@@ -24,7 +24,7 @@ import { LandingCodeTabs } from "@/components/code-tabs";
 import { BenchmarkSection } from "@/components/benchmark-chart";
 
 export const metadata: Metadata = {
-  title: "Apache Iggy | Hyper-Efficient Message Streaming written in Rust.",
+  title: "Hyper-Efficient Message Streaming written in Rust",
   description:
     "Apache Iggy is a high-performance, persistent message streaming platform written in Rust, capable of processing millions of messages per second with ultra-low latency.",
 };
