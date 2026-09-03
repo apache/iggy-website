@@ -1,4 +1,4 @@
 {
   "title": "Clustering",
-  "pages": ["vsr", "deploy", "configuration", "security", "client-failover"]
+  "pages": ["vsr", "durability", "deploy", "configuration", "security", "client-failover"]
 }

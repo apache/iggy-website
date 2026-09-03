@@ -1,0 +1,156 @@
+---
+title: Durability
+description: "What survives a crash on a single node, which topic options control it, and what they cost."
+---
+
+> **This page is about single-node durability**: what survives a crash on one
+> machine, which topic options control it, and what they cost. It assumes
+> Linux, since Iggy's storage path is built around `io_uring` and the
+> behaviour described here is specific to Linux filesystems.
+>
+> **In a cluster the guarantee comes from replication rather than from the
+> filesystem**, and the trade-offs are different. See
+> [Cluster Durability](/docs/clustering/durability).
+
+As of now Iggy does not support `O_DIRECT`. Durability is guaranteed by the
+combination of `messages_required_to_save = 1` and `enforce_fsync = true`.
+Direct I/O plus `O_DSYNC` is on the roadmap; that pairing would make a write
+durable on completion of the write itself, removing the need for a separate
+`fdatasync` on the hot path.
+
+## The write path
+
+```text
+produce -> consensus commit -> ACK to client -> flush to file -> fdatasync
+                                    |               |               |
+                              returns here      page cache       durable
+                                                 (kernel)
+```
+
+Three facts follow from this ordering, and they are the whole story:
+
+1. **A write is acknowledged when it commits, and the commit precedes the
+   flush** unless that commit trips a flush threshold.
+2. **The partition journal holding the unflushed remainder is in memory and is
+   not replayed at boot.** A restarting node cannot replay its own journal to
+   recover the unflushed tail.
+3. Therefore **acks are durability-gated only at
+   `messages_required_to_save = 1`**, and segment `.log` files are the sole
+   durable substrate for message payloads on a node.
+
+## Where the knobs live
+
+The durability knobs are **per topic, set at `CreateTopic`**. They are not server
+configuration keys, and placing them in `config.toml` makes the server refuse to
+start with `Config(InvalidConfigurationValue)`. See
+[Topic Options](/docs/server/topic-options).
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `enforce_fsync` | `false` | `fdatasync` the `.log` and `.index` on each flush |
+| `messages_required_to_save` | `1024` | Flush after this many messages |
+| `size_of_messages_required_to_save` | 1 MiB | Flush after this many bytes |
+| `segment_size` | 1 GiB | Soft limit; a segment may close one batch past it |
+| `preallocate_segments` | `false` | Reserve the whole segment up front |
+
+`enforce_fsync` decides whether a flush *syncs*, never whether a flush
+*happens*. The two `required_to_save` thresholds decide when flushes happen, and
+whichever trips first wins.
+
+The `.log` and `.index` fdatasyncs are issued concurrently, so the two round
+trips overlap rather than running one after the other.
+
+One related server-wide key: `system.partition.validate_checksum` (default
+`true`) re-hashes each batch on read. Turning it off serves whatever decodes,
+which can hand a consumer bytes that are provably not the ones that were
+written. See [Configuration](/docs/server/configuration).
+
+## What survives what
+
+Acknowledged messages sit in one of two places, and they behave differently, so
+the answer depends on which. Data that a flush has already written to the file
+is in the kernel's page cache. Data acknowledged since the last flush is in the
+server process's own memory.
+
+| Failure | Already flushed, no fsync | Not yet flushed | `mrts = 1` and `enforce_fsync` |
+| --- | --- | --- | --- |
+| Graceful shutdown (`SIGTERM`, Ctrl-C) | Survives | Survives | Survives |
+| Process crash, `SIGKILL`, panic, OOM kill | Survives | **Lost** | Survives |
+| Machine crash, power loss, kernel panic | **Lost** | **Lost** | Survives |
+
+For flushed data the distinction is the page cache. A process-level crash leaves
+the kernel running and the page cache intact, so anything already written to the
+file survives even without an fsync. Only a machine-level failure loses page
+cache contents, and that is the case fsync exists for.
+
+The unflushed remainder behaves differently. It has not reached a file
+descriptor at all, so the page cache argument does not apply to it. It lives in
+the server process's heap and dies with the process. Systems that write every
+record into the file immediately, and let the kernel decide when to write back,
+pay nothing for a `SIGKILL`. Here it costs everything acknowledged since the
+last flush.
+
+Graceful shutdown is handled. On `SIGTERM` or Ctrl-C the server stops accepting
+work, answers in-flight requests, and then forces a flush of every partition
+past the thresholds before exiting. If that final flush fails the server exits
+non-zero rather than reporting a clean stop. So an orderly restart, a
+`docker stop`, or a Kubernetes pod termination loses nothing.
+
+If the drive has a volatile write cache, `enforce_fsync` issues a real device
+flush rather than merely a kernel writeback.
+
+### Flushes are triggered by volume, never by time
+
+There is no periodic flush. Both thresholds count messages and bytes, and
+nothing flushes a partition simply because time has passed. A busy topic
+therefore has a short exposure window, while a quiet one can hold acknowledged
+messages in memory indefinitely, waiting for a 1024th message that may be hours
+away.
+
+This is worth planning around for low-traffic topics that still matter. Sizing
+`messages_required_to_save` and `size_of_messages_required_to_save` to the
+topic's actual rate bounds the window. Setting `messages_required_to_save` to 1
+removes it.
+
+## The durable configuration
+
+For genuine single-node durability you need both options together:
+
+```
+enforce_fsync = true
+messages_required_to_save = 1
+```
+
+`enforce_fsync` on its own is not enough. Without `messages_required_to_save = 1`
+the ack still precedes the flush, so a crash loses everything acknowledged since
+the last threshold trip, up to 1024 messages or 1 MiB, whichever came first.
+Note that this bound is on the *volume* of unflushed data, not on its age: with
+no periodic flush, the data can be arbitrarily old.
+
+### What it costs
+
+Measured on ext4 with an NVMe drive, 1000-byte messages, one producer:
+
+| Configuration | Throughput |
+| --- | --- |
+| `enforce_fsync = false`, `messages_required_to_save = 1024` | 3544 MB/s |
+| `enforce_fsync = true`, `messages_required_to_save = 1` | 511 MB/s |
+
+Roughly a sevenfold reduction. This measures the two options together; the
+individual contribution of each has not been isolated. Treat it as an order of
+magnitude for planning, not as a number to quote, since it depends heavily on
+the drive and filesystem. See [Benchmarking](/docs/server/benchmarking) for how
+to measure it on your own hardware.
+
+Because these are per-topic options, the cost can be scoped to the topics that
+actually need durability rather than paid across the whole server.
+
+## Recovery
+
+On restart, recovery walks each segment's log, stops at the first batch that
+fails to decode, and truncates the file at that point. Every batch a walk
+accepts passes its own checksum.
+
+A torn or short `.index` is not a problem. It is rebuilt from the log and
+installed by an atomic rename, so only the `.log` file determines what is
+recoverable.

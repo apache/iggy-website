@@ -1,0 +1,103 @@
+---
+title: Cluster Durability
+description: "What an acknowledgement means in a cluster, and when replication is a sound substitute for fsync."
+---
+
+> **This page is about durability in a clustered deployment**: what an
+> acknowledgement actually guarantees, and when replication is a sound
+> substitute for fsync.
+>
+> **For the single-node picture** -- the write path, the topic options that
+> control flushing, and what they cost -- start with
+> [Durability](/docs/server/durability).
+
+## What an acknowledgement means
+
+Iggy replicates with [Viewstamped Replication](/docs/clustering/vsr). An
+operation is committed once a replication quorum has acknowledged it:
+
+| Replicas | Must acknowledge before commit |
+| --- | --- |
+| 2 | 2 |
+| 3 | 2 |
+| 5 | 3 |
+
+The rule is `ceil(n / 2)`, with two replicas special-cased to 2 so that a
+two-replica cluster stays durable, and a cap on very wide clusters. The
+view-change quorum grows to compensate, so a replication quorum and a
+view-change quorum always intersect.
+
+The important consequence: **with default topic options, an acknowledgement
+means the operation is in a quorum's memory, not on any node's disk.**
+Replication is providing the durability, not the filesystem.
+
+## Relying on replication instead of fsync
+
+For a cluster this is a reasonable trade, and it is what most replicated log
+systems do. Leaving `enforce_fsync = false` and `messages_required_to_save` at
+its default keeps the throughput that fsync costs, and accepts that durability
+comes from holding the data in several places rather than from having it on one
+node's platters.
+
+The reasoning holds as long as failures are **independent**. A single node
+losing power is fully covered. The surviving replicas hold the data, and the
+failed node rebuilds from them when it returns.
+
+## Where that reasoning breaks
+
+The assumption that carries this trade is independence, not node count. Two
+properties of Iggy are worth knowing before relying on it.
+
+**The partition journal is in memory and is not replayed at boot.** A restarting
+replica does not recover its own log, so all of its recovery is peer-driven.
+
+This is orderly rather than dangerous: it is what Viewstamped Replication
+prescribes. The state a replica must not forget across a restart, its view and
+log view, is kept in a durable superblock, while the log itself is volatile and
+refetched. A booting replica sits in a recovering status where it acknowledges
+nothing, votes in no election, and initiates nothing, until it has probed for
+the current view and had its log refilled by state transfer. An empty replica
+does not quietly rejoin as a voting member and cannot win an election on an
+empty log.
+
+What it does mean is that the guarantee rests entirely on peers being available
+and holding the data. That is fine when they are. It is not fine when they are
+not, and it is the reason simultaneous failure of a quorum sits outside the
+protocol's model rather than inside it.
+
+**Segment rotation is offset-keyed, so every replica seals at the same offset.**
+This is deliberate: it keeps offset-keyed segment cleanup converging across the
+cluster. The side effect is that under a simultaneous power loss every replica is
+sitting at a similar point in its segment lifecycle rather than at independent
+ones.
+
+Correlated failure is not exotic. A rack losing power, a shared storage fault, a
+bad rollout, an out-of-memory cascade, or a hypervisor failure all take several
+nodes at once, and none of them are covered by the observation that two
+*independent* machines rarely fail at the same moment.
+
+Note also that the exposure is not limited to machine-level events. Because the
+unflushed remainder lives in the server process's memory rather than in the
+kernel's page cache, a correlated *process* failure is enough. An out-of-memory
+cascade, an eviction storm, or a panic that every replica hits on the same input
+will take the unflushed data with it while every machine stays up. See
+[Durability](/docs/server/durability) for what does and does not survive a
+process-level crash.
+
+## Guidance
+
+**Cluster, throughput-oriented.** Leave `enforce_fsync = false` and the default
+`messages_required_to_save`, and rely on replication. Spend the effort on making
+failures genuinely independent instead: replicas should not share a power
+domain, a hypervisor, or a storage backend, because that independence is what
+the trade actually rests on. See [Deployment](/docs/clustering/deploy).
+
+**Cluster, cannot lose acknowledged writes even to a site-wide event.** Set
+`enforce_fsync = true` and `messages_required_to_save = 1` on the topics that
+matter. These are per-topic options, so this can be scoped to the few topics
+that need it rather than paid across every topic on the cluster.
+
+**Single node.** Replication is not available as a fallback and the in-memory
+journal is not replayed at boot, so any data worth keeping needs
+`enforce_fsync = true` and `messages_required_to_save = 1`. See
+[Durability](/docs/server/durability).
