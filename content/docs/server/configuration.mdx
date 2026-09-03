@@ -1,5 +1,6 @@
 ---
 title: Configuration
+description: "The server's TOML configuration, how a file is merged over the embedded defaults, and what each section controls."
 ---
 
 The server reads a single TOML file. A copy of [`core/server/config.toml`](https://github.com/apache/iggy/blob/master/core/server/config.toml) is embedded into the binary and serves as the default configuration, so the server boots with working defaults even without any file on disk. The embedded file is commented throughout and is the authoritative reference for the exact version you're running.

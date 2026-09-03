@@ -1,5 +1,6 @@
 ---
 title: High-level SDK
+description: "IggyPublisher and IggyConsumer for C#, with background batching, retries and automatic offset commits."
 ---
 
 The per-call [`IIggyClient`](/docs/sdk/csharp/guide) API is explicit but verbose - you manage partitioning, batching, retries, and offsets yourself. The high-level `IggyPublisher` and `IggyConsumer` wrap that surface with fluent builders that handle:

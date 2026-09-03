@@ -1,5 +1,6 @@
 ---
 title: HTTP Sink
+description: "Deliver messages from Iggy streams to any HTTP endpoint, from webhooks and REST APIs to serverless functions."
 ---
 
 The HTTP Sink connector consumes messages from Iggy streams and delivers them to any HTTP endpoint: webhooks, REST APIs, serverless functions, or SaaS integrations. This is the transport-level, generic HTTP connector. It's distinct from sinks such as Elasticsearch or Quickwit, which use HTTP internally to talk to one specific system. You bring the URL, headers, and batching strategy, and the sink handles transport, retries, and metadata wrapping.
