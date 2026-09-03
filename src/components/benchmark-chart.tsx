@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { LATENCY_MS } from "@/lib/benchmark";
+
 const PRODUCER_BENCHMARK_URL =
   "https://benchmarks.iggy.apache.org/benchmarks/4bc63b0e-f0fb-44b5-8c42-6159603a5653";
 const CONSUMER_BENCHMARK_URL =
@@ -14,16 +16,22 @@ const Y_TICKS = [0, 0.2, 0.4, 0.6, 0.8, 1];
 const X_MAX = 800;
 const SAMPLES = 160;
 
-const PRODUCER_AVG_MS = 0.466;
-const CONSUMER_AVG_MS = 0.357;
+const PRODUCER_AVG_MS = LATENCY_MS.producer.avg;
+const CONSUMER_AVG_MS = LATENCY_MS.consumer.avg;
+
+const ms = (value: number) => value.toFixed(3);
 
 const latencyRows = [
-  { label: "Avg", producer: "0.466", consumer: "0.357" },
-  { label: "Median", producer: "0.349", consumer: "0.351" },
-  { label: "P95", producer: "0.886", consumer: "0.446" },
-  { label: "P99", producer: "0.976", consumer: "0.495" },
-  { label: "P99.9", producer: "1.114", consumer: "0.566" },
-];
+  { label: "Avg", key: "avg" },
+  { label: "Median", key: "median" },
+  { label: "P95", key: "p95" },
+  { label: "P99", key: "p99" },
+  { label: "P99.9", key: "p999" },
+].map(({ label, key }) => ({
+  label,
+  producer: ms(LATENCY_MS.producer[key as keyof typeof LATENCY_MS.producer]),
+  consumer: ms(LATENCY_MS.consumer[key as keyof typeof LATENCY_MS.consumer]),
+}));
 
 const stats = [
   {
@@ -45,16 +53,16 @@ const stats = [
     detail: "Persistent log reads",
   },
   {
-    value: "0.976",
+    value: ms(LATENCY_MS.producer.p99),
     unit: "ms",
     label: "Producer P99",
-    detail: "0.466 ms average",
+    detail: `${ms(LATENCY_MS.producer.avg)} ms average`,
   },
   {
-    value: "0.495",
+    value: ms(LATENCY_MS.consumer.p99),
     unit: "ms",
     label: "Consumer P99",
-    detail: "0.357 ms average",
+    detail: `${ms(LATENCY_MS.consumer.avg)} ms average`,
   },
 ];
 
