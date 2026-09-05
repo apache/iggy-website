@@ -1,0 +1,124 @@
+# Networking
+
+> The four transports Iggy serves simultaneously, TCP, QUIC, WebSocket and HTTP, and what each is best suited to.
+
+Rendered page: https://iggy.apache.org/docs/server/networking/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/networking.mdx
+
+Iggy supports four transport protocols simultaneously, each optimized for different use cases. All stateful protocols (TCP, QUIC, WebSocket) use the same custom binary wire protocol, while HTTP provides a standard REST API.
+
+## Transport protocols
+
+| Protocol | Default Address | Implementation | Best for |
+|----------|----------------|----------------|----------|
+| TCP | `127.0.0.1:8090` | compio + custom binary protocol | Highest throughput, lowest latency |
+| QUIC | `127.0.0.1:8080` | compio-quic (quinn) | Secure connections out of the box |
+| HTTP | `127.0.0.1:3000` | axum | REST API, web integrations |
+| WebSocket | `127.0.0.1:8092` | compio-ws | Browser clients, bidirectional streaming |
+
+**Performance ranking** (lowest to highest overhead): TCP > QUIC > WebSocket > HTTP
+
+## Binary protocol
+
+Every request and reply on the stateful transports starts with a fixed 256-byte header (the same Viewstamped Replication header layout the cluster uses internally), followed by the command payload. The `iggy_binary_protocol` crate provides zero-copy serialization for these headers, and foreign SDKs implement the same contract natively. See the [Binary Protocol](/docs/binary-protocol) section for the full specification.
+
+## Connection handling across shards
+
+The server runs one shard per core (thread-per-core, shared-nothing). All listeners (every client transport) bind on shard 0 only. Shard 0's coordinator hands accepted plaintext TCP and WebSocket connections to peer shards round-robin by transferring the file descriptor at accept time. From then on the connection lives entirely on its shard. QUIC, TCP with TLS, and HTTP terminate on shard 0, because their per-connection state cannot move between threads. Sockets **never migrate** after accept: an operation that touches a partition owned by another shard rides the internal message bus instead.
+
+## TCP
+
+TCP provides the highest performance as it works directly with binary data without the overhead of HTTP or TLS handshakes (unless TLS is enabled). The full set of keys:
+
+```toml
+[tcp]
+enabled = true
+address = "127.0.0.1:8090"
+
+[tcp.tls]
+enabled = false
+self_signed = true
+cert_file = "core/certs/iggy_cert.pem"
+key_file = "core/certs/iggy_key.pem"
+```
+
+## QUIC
+
+QUIC runs the same binary protocol over UDP, on top of the quinn library, with TLS built in. It isn't quite as fast as TCP, but security comes out of the box (TLS is **mandatory**). Defaults:
+
+```toml
+[quic]
+enabled = true
+address = "127.0.0.1:8080"
+max_concurrent_bidi_streams = 1
+initial_mtu = "1200 B"
+send_window = "64 MiB"
+receive_window = "64 MiB"
+stream_receive_window = "64 MiB"
+keep_alive_interval = "10 s"
+max_idle_timeout = "30 s"
+
+[quic.certificate]
+self_signed = true
+cert_file = ""
+key_file = ""
+```
+
+A few of these are deliberate rather than arbitrary:
+
+- `max_concurrent_bidi_streams = 1`: the SDK opens a fresh stream per command and the server accepts one at a time, so a connection carries one in-flight command. Raising the cap does **not** make handlers concurrent.
+- `initial_mtu = "1200 B"` is the QUIC minimum. MTU discovery probes upward automatically, and boot rejects values below 1200.
+- `stream_receive_window` is the per-stream slice of `receive_window`, equal to it because there is a single stream. Lower it if you ever raise the stream cap.
+- `keep_alive_interval` is one third of `max_idle_timeout`, so two consecutive lost keep-alives fit before the idle timer closes the connection.
+
+## HTTP
+
+The HTTP API is built on [axum](https://github.com/tokio-rs/axum) and provides a standard REST interface. It includes JWT authentication, CORS configuration, and optional TLS.
+
+HTTP is the most accessible protocol but has the highest overhead due to JSON serialization and the stateless nature of HTTP (no persistent connections for consumer groups). You can find all the available endpoints in the [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http) file.
+
+The HTTP server also hosts:
+
+- **Prometheus metrics** at `/metrics` (endpoint configurable via `[http.metrics]`). The route authenticates like every other read: scrapers must present a bearer credential (JWT or personal access token). `/ping` is the *only* route that requires no credential at all.
+- **Embedded Web UI** at `/ui`, which requires `web_ui = true` in `[http]` (**off by default**) on a server built with the `iggy-web` feature (part of the default build).
+
+## WebSocket
+
+WebSocket provides bidirectional streaming over HTTP upgrade. Iggy uses its own `compio-ws` implementation that bridges tungstenite's poll-based model with compio's completion-based I/O, reading frames through a buffered stream with a 128 KiB base buffer that can grow to a 64 MiB cap.
+
+The `[websocket]` section exposes the frame-tuning knobs (`read_buffer_size`, `write_buffer_size`, `max_write_buffer_size`, `max_message_size`, `max_frame_size`, `accept_unmasked_frames`). See [Configuration](/docs/server/configuration). TLS for WebSocket has its own `[websocket.tls]` section.
+
+**Benchmark comparison** (AWS i3en.3xlarge, fsync per message, 4 producers, 40M messages):
+
+- Producer avg latency: TCP 2.61ms vs WebSocket 3.43ms (+31%)
+- Consumer avg latency: TCP 0.70ms vs WebSocket 1.44ms (+106%)
+
+## TLS
+
+Each transport configures TLS in its own section, and the `self_signed` semantics differ per transport:
+
+| Transport | Section | Behavior |
+|-----------|---------|----------|
+| TCP | `[tcp.tls]` | `self_signed = true` generates an ephemeral certificate only while `cert_file` does not exist; an existing PEM pair is loaded instead. |
+| WebSocket | `[websocket.tls]` | Same load-or-generate rule as TCP. |
+| QUIC | `[quic.certificate]` | TLS is mandatory (part of the QUIC spec). `self_signed = true` **always** generates an ephemeral certificate and ignores `cert_file`/`key_file`, logging a warning if the files exist. |
+| HTTP | `[http.tls]` | No `self_signed` option: HTTPS requires real `cert_file`/`key_file`. |
+
+With `self_signed = false`, `cert_file` and `key_file` must both exist. For production, provide proper certificate files everywhere. Ephemeral certificates **change on every start** and cannot be verified by clients.
+
+## Heartbeat
+
+```toml
+[heartbeat]
+enabled = true
+interval = "30 s"
+```
+
+A connection that sends nothing (no request, no ping) for 1.2x the interval has its session released so its consumer groups rebalance off it. Only connections holding a consumer-group membership are evicted. Others are left alone until their socket closes.
+
+Most SDKs (Rust, Go, Python, Node, async Java) ping automatically every 5 seconds from a connected high-level client, well inside the resulting 36-second window. The blocking Java and C# SDKs have **no automatic heartbeat**, so an idle consumer-group member there must ping manually or reconnect after eviction.
+
+## Cluster networking
+
+In cluster mode, listener ports come exclusively from each node's `cluster.nodes` ports entry, including the `tcp_replica` port for the consensus plane, and nodes can advertise different client-facing addresses per client network. Replica-to-replica traffic can be authenticated with a pre-shared key and wrapped in TLS 1.3. See [Clustering configuration](/docs/clustering/configuration) and [Clustering security](/docs/clustering/security).

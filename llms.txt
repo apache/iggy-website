@@ -1,0 +1,131 @@
+# Apache Iggy
+
+> Apache Iggy is a persistent message streaming platform written in Rust, supporting QUIC, TCP and HTTP transport protocols, capable of processing millions of messages per second.
+
+Apache Iggy is a message streaming server, not a hosted service: there is no
+API on this domain to call. This site carries the documentation, blog and
+community pages. The source, releases and issue tracker live at
+https://github.com/apache/iggy.
+
+## When to use this site
+
+- Running or configuring the server, including storage, networking and clustering: https://iggy.apache.org/docs/server/ and https://iggy.apache.org/docs/clustering/
+- Writing a producer or consumer in a given language: https://iggy.apache.org/docs/sdk/
+- Talking to the server directly over QUIC, TCP or HTTP: https://iggy.apache.org/docs/binary-protocol/
+- Moving data in or out of Iggy without writing code: https://iggy.apache.org/docs/connectors/
+- Command line and web administration: https://iggy.apache.org/docs/cli/ and https://iggy.apache.org/docs/web_ui/
+- Downloading a release: https://iggy.apache.org/downloads/
+- Contributing, or reaching the project's mailing lists and Discord: https://iggy.apache.org/community/
+
+## Documentation
+
+- [Welcome](https://iggy.apache.org/docs/): Apache Iggy documentation: how Iggy organizes data into streams, topics, partitions and segments, and where to start.
+- Introduction
+  - [About](https://iggy.apache.org/docs/introduction/about/): What Apache Iggy is: a persistent message streaming platform written in Rust, with QUIC, TCP, WebSocket and HTTP transports.
+  - [Concepts](https://iggy.apache.org/docs/introduction/concepts/): The domain model behind Iggy, and how an append-only streaming log differs from a message broker.
+  - [Architecture](https://iggy.apache.org/docs/introduction/architecture/): Inside the Iggy server: how work is scheduled across cores, how requests are routed, and how a message reaches disk.
+  - [Getting started](https://iggy.apache.org/docs/introduction/getting-started/): A first program with the low-level Rust SDK: create a stream and topic, send messages, then poll them back.
+- Server
+  - [Introduction](https://iggy.apache.org/docs/server/introduction/): What the Iggy server does, and where its releases and Docker images are published.
+  - [Configuration](https://iggy.apache.org/docs/server/configuration/): The server's TOML configuration, how a file is merged over the embedded defaults, and what each section controls.
+  - [Topic Options](https://iggy.apache.org/docs/server/topic-options/): Per-topic retention, durability and segment layout options, set when the topic is created.
+  - [Storage Engine](https://iggy.apache.org/docs/server/storage-engine/): The segmented append-only log, and how streams, topics, partitions and segments map onto files on disk.
+  - [Networking](https://iggy.apache.org/docs/server/networking/): The four transports Iggy serves simultaneously, TCP, QUIC, WebSocket and HTTP, and what each is best suited to.
+  - [Security](https://iggy.apache.org/docs/server/security/): Authentication, authorization, transport encryption and encryption at rest in the Iggy server.
+  - [Docker & Helm](https://iggy.apache.org/docs/server/docker/): Run the Iggy server from the official Docker images, and deploy it with the Helm chart.
+  - [Benchmarking](https://iggy.apache.org/docs/server/benchmarking/): How Iggy is benchmarked, the tooling that ships with it, and the public platform for comparing results.
+- Clustering
+  - [Viewstamped Replication](https://iggy.apache.org/docs/clustering/vsr/): How Apache Iggy replicates data across a cluster with VSR
+  - [Deploy a Cluster](https://iggy.apache.org/docs/clustering/deploy/): Build the binaries and run a three-node Apache Iggy cluster
+  - [Cluster Configuration](https://iggy.apache.org/docs/clustering/configuration/): Reference for the [cluster] settings, consensus timing, and node roster
+  - [Cluster Security](https://iggy.apache.org/docs/clustering/security/): Replica authentication, shared-secret rotation, and TLS for replica traffic
+  - [Client Failover](https://iggy.apache.org/docs/clustering/client-failover/): Local reads, leader redirection, and retryable errors from the client side
+- Binary Protocol
+  - [Binary Protocol](https://iggy.apache.org/docs/binary-protocol/): Binary protocol 0.11.0: one wire format across TCP, QUIC and WebSocket, covering both the client and replica planes.
+  - [Framing](https://iggy.apache.org/docs/binary-protocol/framing/): The fixed 256-byte header every binary-transport message rides in, and the request, reply and eviction shapes it carries.
+  - [Connection lifecycle](https://iggy.apache.org/docs/binary-protocol/connection-lifecycle/): How the protocol version is packed and checked, and the login-register handshake that authenticates a connection.
+  - [Commands](https://iggy.apache.org/docs/binary-protocol/commands/): The catalog of command codes, their operation bytes, and which commands are replicated.
+  - [Shared encodings](https://iggy.apache.org/docs/binary-protocol/encodings/): The primitives command payloads are built from: names, identifiers, consumers and the other shared encodings.
+  - [Message batches](https://iggy.apache.org/docs/binary-protocol/messages/): The batch layout messages travel and rest in, from the 256-byte batch header down to individual message frames.
+  - [Server-to-server](https://iggy.apache.org/docs/binary-protocol/cluster/): The replica-to-replica plane: its dedicated TCP port, command discriminants, and traffic that never reaches a client.
+- Connectors
+  - [Introduction](https://iggy.apache.org/docs/connectors/introduction/): The connector runtime: dynamically loaded source and sink plugins, how data flows through them, and what ships today.
+  - [Runtime](https://iggy.apache.org/docs/connectors/runtime/): How the connector runtime loads plugins, resolves its configuration, and manages connector lifecycles.
+  - [SDK](https://iggy.apache.org/docs/connectors/sdk/): The Sink and Source traits, the connector macros, and the decoders and encoders used to read and write Iggy streams.
+  - [Transforms](https://iggy.apache.org/docs/connectors/transforms/): Mutate, filter and convert messages as they pass through the connector runtime, and how each transform is configured.
+  - [Observability](https://iggy.apache.org/docs/connectors/observability/): Logs, Prometheus metrics, the stats endpoint, OpenTelemetry export and per-source state files for the connector runtime.
+  - Sources
+    - [Source](https://iggy.apache.org/docs/connectors/sources/source/): What source connectors do, and the Source trait every one of them implements.
+    - [Elasticsearch Source](https://iggy.apache.org/docs/connectors/sources/elasticsearch/): Poll documents from an Elasticsearch index into Iggy streams, incrementally when a timestamp field is configured.
+    - [InfluxDB Source](https://iggy.apache.org/docs/connectors/sources/influxdb/): Poll InfluxDB on an interval and produce the resulting rows into an Iggy stream, on both InfluxDB V2 and V3.
+    - [Postgres Source](https://iggy.apache.org/docs/connectors/sources/postgres/): Stream rows from PostgreSQL into Iggy topics by incremental table polling or change data capture over logical replication.
+    - [Random Source](https://iggy.apache.org/docs/connectors/sources/random/): Generate random messages into Iggy streams for testing, benchmarking and verifying a connector pipeline.
+  - Sinks
+    - [Sink](https://iggy.apache.org/docs/connectors/sinks/sink/): What sink connectors do, and the Sink trait every one of them implements.
+    - [ClickHouse Sink](https://iggy.apache.org/docs/connectors/sinks/clickhouse/): Insert messages from Iggy streams into ClickHouse tables over the HTTP interface.
+    - [Delta Lake Sink](https://iggy.apache.org/docs/connectors/sinks/delta/): Write messages from Iggy streams into Delta Lake tables on local disk, S3, Azure Blob Storage or Google Cloud Storage.
+    - [Apache Doris Sink](https://iggy.apache.org/docs/connectors/sinks/doris/): Load JSON messages from Iggy streams into a pre-created Apache Doris table through the Stream Load HTTP API.
+    - [Elasticsearch Sink](https://iggy.apache.org/docs/connectors/sinks/elasticsearch/): Index messages from Iggy streams into an Elasticsearch index using the bulk API.
+    - [HTTP Sink](https://iggy.apache.org/docs/connectors/sinks/http/): Deliver messages from Iggy streams to any HTTP endpoint, from webhooks and REST APIs to serverless functions.
+    - [Iceberg Sink](https://iggy.apache.org/docs/connectors/sinks/iceberg/): Consume messages from Iggy topics and store them in Iceberg tables, with REST catalogs and S3-compatible storage.
+    - [InfluxDB Sink](https://iggy.apache.org/docs/connectors/sinks/influxdb/): Write messages from Iggy streams to InfluxDB as line-protocol points, on both InfluxDB V2 and V3.
+    - [Meilisearch Sink](https://iggy.apache.org/docs/connectors/sinks/meilisearch/): Index messages from Iggy streams as documents in a Meilisearch index through the official Rust SDK.
+    - [MongoDB Sink](https://iggy.apache.org/docs/connectors/sinks/mongodb/): Insert messages from Iggy streams into a MongoDB collection, one document per message.
+    - [Postgres Sink](https://iggy.apache.org/docs/connectors/sinks/postgres/): Store messages from Iggy topics in a PostgreSQL table, with optional table creation and configurable payload storage.
+    - [Quickwit Sink](https://iggy.apache.org/docs/connectors/sinks/quickwit/): Send messages from Iggy streams to a Quickwit index over HTTP, creating the index when it does not exist.
+    - [S3 Sink](https://iggy.apache.org/docs/connectors/sinks/s3/): Write messages from Iggy streams to Amazon S3 and S3-compatible object stores such as MinIO, R2, Spaces and B2.
+    - [Stdout Sink](https://iggy.apache.org/docs/connectors/sinks/stdout/): Print messages from Iggy streams to standard output, for debugging and verifying a connector pipeline.
+    - [SurrealDB Sink](https://iggy.apache.org/docs/connectors/sinks/surrealdb/): Write messages from Iggy streams into SurrealDB over the HTTP API, one bulk insert per batch.
+- SDK
+  - [Introduction](https://iggy.apache.org/docs/sdk/introduction/): The official Iggy client SDKs, their packages and registries, and the transports each one supports.
+  - [Connection Strings](https://iggy.apache.org/docs/sdk/connection-strings/): The canonical reference for Iggy connection strings, covering every scheme, credential form and option.
+  - Rust
+    - [Intro](https://iggy.apache.org/docs/sdk/rust/intro/): The Rust SDK, the primary and most complete Iggy client, and where its source lives.
+    - [Examples](https://iggy.apache.org/docs/sdk/rust/examples/): The Rust SDK examples in the core repository, and how to start a server to run them against.
+    - [High-level SDK](https://iggy.apache.org/docs/sdk/rust/high-level-sdk/): IggyProducer and IggyConsumer: batching, consumer groups and offset commits without the boilerplate.
+    - [Stream Builder](https://iggy.apache.org/docs/sdk/rust/stream-builder/): The stream builder, for event-driven applications that would otherwise repeat producer and consumer setup.
+  - Python
+    - [Python SDK](https://iggy.apache.org/docs/sdk/python/intro/): The Python SDK, a PyO3 wrapper around the Rust SDK, and how to install it.
+    - [Examples](https://iggy.apache.org/docs/sdk/python/examples/): Working Python examples from the core repository, covering connection strings, message headers and TLS.
+  - Java
+    - [Java SDK](https://iggy.apache.org/docs/sdk/java/intro/): The Java SDK, with blocking and CompletableFuture clients over TCP, and which servers they pair with.
+    - [Examples](https://iggy.apache.org/docs/sdk/java/examples/): Runnable Java examples from the core repository, built with Gradle, and how to start a server for them.
+  - Go
+    - [Go SDK](https://iggy.apache.org/docs/sdk/go/intro/): The Go SDK, a blocking client speaking the VSR wire protocol over TCP, and which servers it pairs with.
+    - [Examples](https://iggy.apache.org/docs/sdk/go/examples/): Runnable Go examples from the core repository, and how to start a server they can connect to.
+  - Node
+    - [Node.js SDK](https://iggy.apache.org/docs/sdk/node/intro/): The Node.js and TypeScript SDK, from installation to keeping client and server versions in step.
+    - [Examples](https://iggy.apache.org/docs/sdk/node/examples/): TypeScript examples for the Node.js SDK, exercised by CI so they match the current SDK.
+  - C#
+    - [C# SDK](https://iggy.apache.org/docs/sdk/csharp/intro/): The async-first C# SDK for .NET applications over TCP and HTTP, from installation to creating a client.
+    - [Guide](https://iggy.apache.org/docs/sdk/csharp/guide/): Client configuration and the full low-level IIggyClient API surface for the C# SDK.
+    - [High-level SDK](https://iggy.apache.org/docs/sdk/csharp/high-level-sdk/): IggyPublisher and IggyConsumer for C#, with background batching, retries and automatic offset commits.
+    - [Examples](https://iggy.apache.org/docs/sdk/csharp/examples/): Producer and consumer samples for the C# SDK, built on the high-level publisher and consumer.
+  - C++
+    - [C++ SDK (WIP)](https://iggy.apache.org/docs/sdk/cpp/intro/): The C++ SDK, a CXX bridge over the Rust SDK, and how to build it from source with Bazel.
+  - PHP
+    - [PHP SDK](https://iggy.apache.org/docs/sdk/php/intro/): The experimental PHP SDK, a native extension wrapping the Rust SDK, and how to build it from source.
+- CLI
+  - [Iggy CLI](https://iggy.apache.org/docs/cli/start/): Install the Iggy CLI, connect to a server, authenticate, and manage connection contexts.
+  - [Command Reference](https://iggy.apache.org/docs/cli/commands/): Every iggy CLI command with its arguments, flags, and a runnable example
+- Web UI
+  - [Iggy Web UI](https://iggy.apache.org/docs/web_ui/start/): The Iggy Web UI dashboard, for monitoring server health and browsing streams, topics, messages and users.
+- AI
+  - [Introduction](https://iggy.apache.org/docs/ai/introduction/): The AI-related components of Apache Iggy, and where the MCP server is documented.
+  - [MCP Server](https://iggy.apache.org/docs/ai/mcp/): Run and configure the Apache Iggy MCP server, including transport, Iggy credentials and TLS.
+- FAQ
+  - [FAQ](https://iggy.apache.org/docs/faq/faq/): Common questions about Apache Iggy, including how it compares to Kafka and other message brokers.
+## Blog
+
+The ten most recent posts. The full list is at https://iggy.apache.org/blogs/.
+
+- [Apache Iggy™ Graduates to a Top-Level Project](https://iggy.apache.org/blogs/2026/08/24/apache-iggy-top-level-project-tlp-graduation/): 2026-08-24
+- [Apache Iggy 0.8.0 Release](https://iggy.apache.org/blogs/2026/04/22/release-0.8.0/): 2026-04-22
+- [Apache Iggy's migration journey to thread-per-core architecture powered by io_uring](https://iggy.apache.org/blogs/2026/02/27/thread-per-core-io_uring/): 2026-02-27
+- [Apache Iggy 0.7.0 Release](https://iggy.apache.org/blogs/2026/02/24/release-0.7.0/): 2026-02-24
+- [Apache Iggy 0.6.0 Release](https://iggy.apache.org/blogs/2025/12/09/release-0.6.0/): 2025-12-09
+- [Building WebSocket Protocol in Apache Iggy using io_uring and Completion Based I/O Architecture](https://iggy.apache.org/blogs/2025/11/17/websocket-io-uring/): 2025-11-17
+- [Apache Iggy 0.5.0 Release](https://iggy.apache.org/blogs/2025/08/10/release-0.5.0/): 2025-08-10
+- [Connectors runtime](https://iggy.apache.org/blogs/2025/06/06/connectors-runtime/): 2025-06-06
+- [Zero-copy (de)serialization](https://iggy.apache.org/blogs/2025/05/08/zero-copy-deserialization/): 2025-05-08
+- [Transparent Benchmarking with Apache Iggy](https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks/): 2025-02-17

@@ -1,0 +1,455 @@
+# Configuration
+
+> The server's TOML configuration, how a file is merged over the embedded defaults, and what each section controls.
+
+Rendered page: https://iggy.apache.org/docs/server/configuration/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/configuration.mdx
+
+The server reads a single TOML file. A copy of [`core/server/config.toml`](https://github.com/apache/iggy/blob/master/core/server/config.toml) is embedded into the binary and serves as the default configuration, so the server boots with working defaults even without any file on disk. The embedded file is commented throughout and is the authoritative reference for the exact version you're running.
+
+A config file doesn't have to be complete. It is **merged over the embedded defaults**, so a minimal file overrides only what it names:
+
+```toml
+[system]
+path = "/var/lib/iggy"
+
+[node]
+advertised_address = "iggy-1"
+
+[tcp]
+address = "0.0.0.0:8090"
+
+[http]
+address = "0.0.0.0:3000"
+```
+
+Both listeners here bind a wildcard, which tells the server nothing about where clients reach it, so [`[node]`](#node) has to name that address explicitly - without it this file is refused at boot.
+
+## How configuration loads
+
+Configuration is resolved in three layers. Later layers win:
+
+1. **Embedded defaults**: the `config.toml` compiled into the binary.
+2. **Config file**: the path in `IGGY_CONFIG_PATH`, or `core/server/config.toml` resolved against the current working directory. A missing file is only a warning. The server continues on embedded defaults.
+3. **Environment variables**: any `IGGY_`-prefixed override.
+
+Before the environment is read, the server loads a `.env` file from the working directory, or from the path named by `IGGY_ENV_PATH`.
+
+After boot the server writes the effective configuration, including the addresses it actually bound, to `{system.path}/runtime/current_config.toml`.
+
+### Environment variables
+
+Every configuration key can be overridden with an `IGGY_` variable. The name is the TOML path, uppercased, with dots turned into underscores:
+
+```bash
+IGGY_TCP_ADDRESS=0.0.0.0:8090          # [tcp] address
+IGGY_NODE_ADVERTISED_ADDRESS=iggy-1    # [node] advertised_address
+IGGY_HTTP_ENABLED=true                 # [http] enabled
+IGGY_SYSTEM_PATH=/var/lib/iggy         # [system] path
+IGGY_SYSTEM_LOGGING_LEVEL=debug        # [system.logging] level
+IGGY_SYSTEM_SHARDING_CPU_ALLOCATION=4  # [system.sharding] cpu_allocation
+```
+
+Two variables live outside the config schema: `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` set the root credentials, always as a pair. **Only the first creation** of the root user reads them. On an existing data directory the stored root user is recovered unchanged.
+
+### Secrets
+
+Five values are secret-flagged: `http.jwt.encoding_secret`, `http.jwt.decoding_secret`, `system.encryption.key`, `cluster.auth.shared_secret`, and `cluster.auth.previous_shared_secret`. Prefer setting them through their environment variables (`IGGY_HTTP_JWT_ENCODING_SECRET`, `IGGY_SYSTEM_ENCRYPTION_KEY`, `IGGY_CLUSTER_AUTH_SHARED_SECRET`, and so on) instead of storing them in a file. Secret values are masked in logs and **never serialized** into `runtime/current_config.toml`.
+
+### Validation at boot
+
+- Unknown keys are **silently ignored**. A typo in a key name leaves the default in force, so check spelling when a setting doesn't seem to take effect. The [relocated keys](#relocated-configuration-keys) below are the exception: they refuse boot.
+- `system.segment.archive_expired = true` and `system.recovery.recreate_missing_state = true` are unsupported placeholders. Setting either aborts boot.
+- Several sections validate relationships between keys (QUIC windows, sharding shutdown budgets, metadata journal sizing, partition transfer floors). A violation aborts boot with an error naming the keys. The constraints are listed with their sections below.
+- The `RUST_LOG` environment variable **always takes precedence** over `system.logging.level`.
+
+## Command-line flags
+
+`iggy-server` accepts exactly three flags:
+
+| Flag | Description |
+|------|-------------|
+| `--fresh`, `-f` | Delete the configured data directory (`local_data` by default, see `IGGY_SYSTEM_PATH`) before boot and start on empty state. In cluster mode this wipes **this replica only**; it rejoins and refills by state transfer from the others. Wiping a quorum at the same time destroys committed data. Do not put `--fresh` in a service unit: it would re-transfer the whole dataset on every restart. |
+| `--with-default-root-credentials` | Set `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` to `iggy` unless they are already present in the environment. Only the first creation of the root user reads these values. Development only. |
+| `--replica-id <N>` | Identify this node within `cluster.nodes`. Required when `cluster.enabled = true`; the value must match exactly one `replica_id` in the roster. |
+
+## Relocated configuration keys
+
+Retention, durability, and segment layout are no longer server-wide settings. They became per-topic options set at topic creation. See [Topic options](/docs/server/topic-options). The server **refuses to boot** while any of the old keys is still present, in the config file or in the environment, and the error names the replacement. This is deliberate: the storage knobs are create-only options now, so a topic created while an old key was silently ignored could never be given the setting afterwards.
+
+| Old server key | Replacement |
+|----------------|-------------|
+| `system.topic.max_size` | `max_topic_size` topic option |
+| `system.topic.message_expiry` | `message_expiry` topic option |
+| `system.partition.enforce_fsync` | `enforce_fsync` topic option |
+| `system.partition.messages_required_to_save` | `messages_required_to_save` topic option |
+| `system.partition.size_of_messages_required_to_save` | `size_of_messages_required_to_save` topic option |
+| `system.segment.size` | `segment_size` topic option |
+| `system.segment.preallocate` | `preallocate_segments` topic option |
+| `system.message_deduplication` (whole section) | Removed with the feature. No replacement. |
+| `extra` (whole section) | Removed. Admission caps are compile-time constants. No replacement. |
+
+Other sections from older configs (`[message_saver]`, `[system.state]`, `[system.backup]`, `[system.compression]`, `[tcp.socket]`, segment `cache_indexes`, and similar) were removed without a boot check. Like any unknown key they're silently ignored. Remove them from your file.
+
+## Reference
+
+The tables below list every section with its shipped defaults. In cluster mode, every enabled transport takes its **port** from this node's `cluster.nodes` `ports` entry. The transport's own `address` picks only the bind interface.
+
+### `[http]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Serve the HTTP REST API. |
+| `address` | `"127.0.0.1:3000"` | Bind address and port. |
+| `max_request_size` | `"2 MB"` | Maximum request body size. |
+| `web_ui` | `false` | Serve the embedded Web UI at `/ui`. Requires a server built with the `iggy-web` feature; without it, `true` logs a warning and the server continues. |
+
+HTTP sessions hold live server-side session state (they count against `metadata.clients_table_max`). Consumer group management (create, get, delete) is available over HTTP. Group membership (join, leave) is not and needs a stateful transport.
+
+In cluster mode, followers forward control-plane requests (streams, topics, users, and so on) to the current primary when a cluster-wide JWT key exists (see `[http.jwt]` below). Forwarding does not cover the partition plane: message produce and consumer-offset writes must reach the partition's primary node directly, while message polls read locally on any node.
+
+### `[http.cors]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Handle cross-origin requests with the rules below. |
+| `allowed_methods` | `["GET", "POST", "PUT", "DELETE"]` | Allowed HTTP methods. |
+| `allowed_origins` | `["*"]` | Permitted origins. `"*"` is only valid as the first entry (anything after it is ignored); `"*"` in any other position fails the config. |
+| `allowed_headers` | `["content-type", "authorization"]` | Request headers clients may send. |
+| `exposed_headers` | `["iggy-view"]` | Response headers browsers may read. `iggy-view` carries the current VSR view number. |
+| `allow_credentials` | `false` | Allow cookies and HTTP auth in CORS requests. `true` requires explicit (non-wildcard) origins, headers, and exposed headers. |
+| `allow_private_network` | `false` | Allow requests from private networks. |
+
+### `[http.jwt]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `algorithm` | `"HS256"` | Signing algorithm for self-issued tokens. |
+| `issuer` | `"iggy.apache.org"` | Issuer claim of minted tokens. |
+| `audience` | `"iggy.apache.org"` | Audience claim of minted tokens. |
+| `valid_issuers` | `["iggy.apache.org"]` | Issuers accepted during validation. |
+| `valid_audiences` | `["iggy.apache.org"]` | Audiences accepted during validation. |
+| `access_token_expiry` | `"1 h"` | Access token lifetime. |
+| `clock_skew` | `"5 s"` | Tolerance for clock differences during validation. |
+| `not_before` | `"0 s"` | Time before which a token is not valid. |
+| `encoding_secret` | `""` (empty) | Signing key. Empty means a secure random secret is generated on each server start. |
+| `decoding_secret` | `""` (empty) | Verification key. Same empty-means-random behavior. |
+| `use_base64_secret` | `false` | Treat the configured secrets as base64-encoded. |
+
+There is **no default secret**. With the secrets left empty, each server start mints a random signing key, so issued tokens **do not survive a restart** and are valid only on the node that issued them. If you configure a secret, set it through the environment (`IGGY_HTTP_JWT_ENCODING_SECRET` / `IGGY_HTTP_JWT_DECODING_SECRET`), never commit it, and use a long random value.
+
+In cluster mode the secret has an extra role: a configured secret, identical on every node, makes bearer tokens valid cluster-wide and activates follower-to-primary HTTP forwarding. With `cluster.auth` enabled the JWT key is instead derived from the cluster PSK. Without either, tokens are node-local and forwarding stays disabled.
+
+#### `[[http.jwt.trusted_issuers]]`
+
+Opt-in trust of external token issuers for application-to-application authentication. With none configured, the listener accepts only self-issued HS256 tokens.
+
+```toml
+[[http.jwt.trusted_issuers]]
+issuer = "https://issuer.example.com"
+audience = "iggy.apache.org"
+jwks_url = "https://issuer.example.com/.well-known/jwks.json"
+user_id = 1
+```
+
+`issuer`, `audience`, and `jwks_url` are required per entry. `user_id` is the non-zero iggy user every token from that issuer is remapped onto. It defaults to `0` (root), which is **rejected**, so set it explicitly.
+
+Enabling an issuer opens an outbound JWKS fetch that is reachable before a token's signature is verified: a token naming the issuer with an unknown key id can trigger a fetch to `jwks_url`. The target is fixed (not attacker-chosen), concurrent misses coalesce onto one fetch, and repeats are rate-limited to one outbound request per issuer per short window. The same window bounds how quickly a freshly rotated signing key is picked up.
+
+### `[http.metrics]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Expose Prometheus metrics. |
+| `endpoint` | `"/metrics"` | Metrics path. Must start with `/`. |
+
+The metrics route **requires authentication** like every other read: a missing or invalid bearer credential is rejected with 401. Any authenticated user may scrape. There's no extra RBAC rule. Scrapers present a JWT or a personal access token as the bearer:
+
+```yaml
+scrape_configs:
+  - job_name: "iggy"
+    metrics_path: "/metrics"
+    authorization:
+      type: Bearer
+      credentials: "<personal-access-token>"
+    static_configs:
+      - targets: ["localhost:3000"]
+```
+
+### `[http.tls]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Serve HTTPS. |
+| `cert_file` | `"core/certs/iggy_cert.pem"` | PEM certificate path. |
+| `key_file` | `"core/certs/iggy_key.pem"` | PEM key path. |
+
+HTTP TLS is **file-based only**. There's no `self_signed` option for this listener. Both files must exist when enabled.
+
+### `[tcp]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Serve the TCP binary protocol. |
+| `address` | `"127.0.0.1:8090"` | Bind address and port. |
+
+TCP is the highest-throughput transport. These two keys, plus the TLS block below, are the entire section.
+
+#### `[tcp.tls]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Wrap TCP connections in TLS. |
+| `self_signed` | `true` | Generate an ephemeral loopback certificate, but only while `cert_file` does not exist on disk; an existing PEM pair is loaded instead (the server logs which way it went). `false` requires both files to exist. |
+| `cert_file` | `"core/certs/iggy_cert.pem"` | PEM certificate path. |
+| `key_file` | `"core/certs/iggy_key.pem"` | PEM key path. |
+
+### `[quic]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Serve the QUIC transport. |
+| `address` | `"127.0.0.1:8080"` | Bind address and port. |
+| `max_concurrent_bidi_streams` | `1` | Bidirectional streams a client may keep open on one connection. The SDK opens a fresh stream per command, so `1` caps a connection at one in-flight command. |
+| `initial_mtu` | `"1200 B"` | Initial path MTU before MTU discovery runs. 1200 bytes is the QUIC minimum; values below it are rejected at boot. Values above the real path MTU cause packet loss until black-hole detection resets to 1200. |
+| `send_window` | `"64 MiB"` | Flow-control budget for unacknowledged data in flight to one connection. A ceiling, not a reservation. |
+| `receive_window` | `"64 MiB"` | Flow-control budget for data buffered from one connection, shared by all its streams. |
+| `stream_receive_window` | `"64 MiB"` | Per-stream slice of `receive_window`. Must not exceed `receive_window`; equality is allowed. Lower it below `receive_window` if you raise the stream cap, so one unread stream cannot pin the whole connection window. |
+| `keep_alive_interval` | `"10 s"` | Keep-alive PING interval. One third of `max_idle_timeout`, so two consecutive losses fit before the idle timer closes the connection. `"0 s"` disables. |
+| `max_idle_timeout` | `"30 s"` | Idle time before a connection is closed. `"0 s"` disables (not recommended). |
+
+Raising `max_concurrent_bidi_streams` is a transport decision only: the server's accept loop takes one stream at a time and waits for its reply before accepting the next, so a higher cap does **not** make command handling concurrent.
+
+#### `[quic.certificate]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `self_signed` | `true` | **Always** generate an ephemeral loopback certificate. Unlike TCP and WebSocket, files are ignored even when they exist on disk (the server logs a warning naming the skipped files). `false` requires both files. |
+| `cert_file` | `""` (empty) | PEM certificate path. Required when `self_signed = false`. |
+| `key_file` | `""` (empty) | PEM key path. Required when `self_signed = false`. |
+
+### `[websocket]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Serve the WebSocket transport. |
+| `address` | `"127.0.0.1:8092"` | Bind address and port. |
+| `read_buffer_size` | unset (`"128 KiB"`) | Target minimum size of the frame read buffer. |
+| `write_buffer_size` | unset (`"128 KiB"`) | Target buffer size for batched writes before flush. |
+| `max_write_buffer_size` | unset (unlimited) | Hard ceiling on the write buffer; writes past it error instead of buffering. Must exceed `write_buffer_size` by at least one message. |
+| `max_message_size` | unset (`"64 MiB"`) | Upper bound on one inbound message after fragment reassembly. Must not exceed `message_bus.max_message_size`. |
+| `max_frame_size` | unset (`"16 MiB"`) | Upper bound on one inbound frame before reassembly. Must not exceed `max_message_size`. |
+| `accept_unmasked_frames` | `false` | Accept unmasked client frames in violation of RFC 6455. Strict by default. |
+
+The size knobs are optional. Leaving one unset keeps the `compio-ws` (tungstenite) default shown in parentheses. A malformed size string fails config load.
+
+#### `[websocket.tls]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Serve WSS. |
+| `self_signed` | `true` | Same load-or-generate behavior as `[tcp.tls]`: an existing PEM pair wins, otherwise an ephemeral loopback certificate is generated. |
+| `cert_file` | `"core/certs/iggy_cert.pem"` | PEM certificate path. |
+| `key_file` | `"core/certs/iggy_key.pem"` | PEM key path. |
+
+### TLS across transports
+
+The `self_signed` flag doesn't mean the same thing everywhere:
+
+| Listener | Behavior |
+|----------|----------|
+| TCP, WebSocket | `self_signed = true` generates an ephemeral certificate **only while `cert_file` does not exist**; an existing PEM pair is loaded instead. |
+| QUIC | `self_signed = true` **always** generates an ephemeral certificate and ignores configured files. |
+| HTTP | No `self_signed` option. Files only. |
+| Replica plane | Separate section, `[cluster.tls]`. See [Clustering](/docs/clustering/vsr). |
+
+Ephemeral certificates **change on every start** and are meant for loopback development, not production.
+
+### `[system]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `path` | `"local_data"` | Base directory for all server data. Everything below is relative to it. |
+
+Storage sub-paths chain relative to each other: `[system.runtime] path = "runtime"` (runtime data, including `current_config.toml`), `[system.logging] path = "logs"`, `[system.stream] path = "streams"`, `[system.topic] path = "topics"` (relative to the stream path), `[system.partition] path = "partitions"` (relative to the topic path).
+
+### `[system.logging]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `path` | `"logs"` | Log directory, relative to `system.path`. |
+| `level` | `"info"` | Filter directive in `RUST_LOG` syntax: simple levels or directives like `"warn,server=debug,iggy=trace"`. The `RUST_LOG` environment variable always takes precedence. |
+| `file_enabled` | `true` | Write logs to file as well as stdout. |
+| `max_file_size` | `"500 MB"` | Size at which a log file rotates. `0` means one unbounded file, which disables size-based rotation. |
+| `max_total_size` | `"4 GB"` | Total log budget; oldest files are deleted first. `0` means unlimited archives. Time-based rotation still applies. |
+| `rotation_check_interval` | `"1 h"` | How often rotation status is checked. Avoid values below 1 s. |
+| `retention` | `"7 days"` | How long log files are kept. Avoid values below 1 s. |
+
+### `[system.encryption]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Encrypt stored message payloads and state commands with AES-256-GCM. |
+| `key` | `""` (empty) | 32-byte key, base64-encoded. Required when enabled. Secret-flagged: prefer `IGGY_SYSTEM_ENCRYPTION_KEY`. |
+
+### `[system.partition]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `path` | `"partitions"` | Partition data directory, relative to the topic path. |
+| `validate_checksum` | `true` | Re-hash every batch a disk poll reads and fail the poll closed on a mismatch, so a segment damaged at rest is reported instead of served. `false` serves whatever decodes, which can hand a consumer bytes provably not the ones written. Only turn it off with a corruption guard elsewhere in the stack. |
+
+Durability and flush cadence (`enforce_fsync`, `messages_required_to_save`, `size_of_messages_required_to_save`) are per-topic creation options. See [Topic options](/docs/server/topic-options).
+
+### `[system.segment]` and `[system.recovery]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `system.segment.archive_expired` | `false` | Unsupported placeholder. Setting `true` aborts boot. |
+| `system.recovery.recreate_missing_state` | `false` | Unsupported placeholder. Setting `true` aborts boot. |
+
+Segment size and preallocation are per-topic creation options (`segment_size`, `preallocate_segments`).
+
+### `[system.memory_pool]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Use the pre-allocated buffer pool. |
+| `size` | `"4 GiB"` | Total pool memory. Minimum 512 MiB; must be a multiple of 4096 (page size). |
+| `bucket_capacity` | `8192` | Maximum buffers per bucket. Must be a power of two; minimum 128. |
+
+The pool has 28 buckets with buffer sizes from 4 KiB to 512 MiB.
+
+### `[data_maintenance.messages]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `cleaner_enabled` | `true` | Run the segment cleaner. It deletes the oldest **sealed** segments of topics with a finite `message_expiry` or `max_topic_size`, per partition, best-effort. The active segment is never touched. |
+| `interval` | `"1 m"` | Cleaner run interval. |
+
+### `[heartbeat]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Verify client heartbeats. |
+| `interval` | `"30 s"` | Expected heartbeat interval. |
+
+When enabled, a connection that sends nothing (no request, no PING) for 1.2 x `interval` (36 s at the default) **and** still holds a consumer group membership has its session released, so its groups rebalance off it. A connection holding no membership is left alone and reaped when its socket closes.
+
+The Rust, Go, Python, Node, and async Java SDKs ping automatically every 5 s, well inside the staleness window, but only from a connected high-level client: the Rust and async Java pingers are armed by `connect()`, so a session that logs in without it never pings. The blocking Java and C# SDKs have **no automatic heartbeat**, only a manual ping. Wherever nothing pings, an idle consumer group member is evicted, and only the application can keep it alive (ping) or bring it back (reconnect).
+
+### `[telemetry]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Enable OpenTelemetry export. |
+| `service_name` | `"iggy"` | Reported service name. |
+| `telemetry.logs.transport` | `"grpc"` | Log export transport: `"grpc"` or `"http"`. |
+| `telemetry.logs.endpoint` | `"http://localhost:7281/v1/logs"` | Log export endpoint. |
+| `telemetry.traces.transport` | `"grpc"` | Trace export transport: `"grpc"` or `"http"`. |
+| `telemetry.traces.endpoint` | `"http://localhost:7281/v1/traces"` | Trace export endpoint. |
+
+### `[system.sharding]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `cpu_allocation` | `"numa:auto"` | Number of shards and their CPU affinity. See syntaxes below. |
+| `pin_cores` | `true` | Pin shard threads to dedicated cores, drawn from the process's allowed CPU set (cooperates with systemd `AllowedCPUs=` and container cpusets). Set `false` on hosts where the server shares cores with other workloads. |
+| `inbox_capacity` | `1024` | Per-shard inter-shard inbox capacity. Bounded by design; size for the consensus working set plus peak client-reply fan-out. Raising `[metadata]` or `[partition]` `prepare_queue_depth` raises the capacity needed here. |
+| `shutdown_drain_timeout` | `"10 s"` | Per-shard bus drain budget on shutdown. Slow-fsync hosts may need more. |
+| `shutdown_poll_interval` | `"50 ms"` | Poll cadence for the shutdown flag. Must be less than or equal to `shutdown_drain_timeout`. |
+| `shutdown_join_timeout` | `"30 s"` | Hard deadline for joining shard threads at exit; a wedged shard is abandoned with an error log. Must be at least `shutdown_drain_timeout`. |
+| `reconcile_periodic_interval` | `"1 s"` | Safety tick for the partition reconciliation loop, which also wakes on every metadata commit. |
+
+Valid `cpu_allocation` syntaxes:
+
+- `"all"`: one shard per available CPU core
+- a number, e.g. `4`: four shards pinned to cores 0 to 3
+- a range, e.g. `"5..8"`: three shards on cores 5, 6, 7
+- `"numa:auto"`: all NUMA nodes and cores, NUMA-aware
+- `"numa:nodes=0,1;cores=4;no_ht=true"`: NUMA nodes 0 and 1, four cores each, no hyperthreads
+
+### `[metadata]`
+
+Tunables for the metadata consensus plane (shard 0's VSR replica: users, streams, topics, sessions).
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `prepare_queue_depth` | `32` | Uncommitted metadata ops in flight at once. Submits beyond it are rejected with a transient error the SDKs retry. Capped at 127 by the view-change wire format. |
+| `journal_slots` | `1024` | In-memory index of the metadata WAL, in slots. Larger buys more headroom between forced checkpoints at the cost of memory and bigger WAL rewrites. Boot enforces `journal_slots >= 4 x max(64, prepare_queue_depth)`. |
+| `clients_table_max` | `8192` | Slots in the VSR client table: how many distinct clients (TCP/QUIC/WebSocket virtual clients and HTTP sessions together) hold live session state. When full, the client with the oldest last commit is evicted and re-registers on its next request. The HTTP session cap tracks this at half. Must be between 2 and 65536. |
+
+### `[partition]`
+
+Per-partition consensus plane tunables. Unlike `[metadata]` (one plane on shard 0), a pipeline exists per partition, so raising these **multiplies pinned memory by the partition count**.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `prepare_queue_depth` | `32` | Uncommitted produce and consumer-offset ops in flight per partition. Submits past it spill into a request queue of twice this depth; once both are full the server drops the request without a reply and the client retries on its own timeout. Must be between 1 and 127. |
+| `evicted_ring_capacity` | `4096` | Entries retained per multi-replica partition for journal repair after a peer rejoins. Must be between 1 and 65536. Single-replica partitions retain nothing. |
+| `evicted_ring_bytes_max` | `"16 MiB"` | Byte ceiling for the evicted ring; whichever ring cap trips first evicts. At most `"256 MiB"`. |
+| `transfer_served_cache_bytes_max` | `"2176 MiB"` | Byte budget, **per shard**, for segment payloads kept resident to serve state-transfer chunk requests. The default fits two sealed segments at the 1 GiB ceiling, each with one max-message overshoot. Serving concurrency is `floor(this / max(transfer_artifact_bytes_max, 1 GiB + 64 MiB))`, minimum one; boot warns when it drops below two. At most `"64 GiB"`. |
+| `transfer_artifact_bytes_max` | `"1088 MiB"` | Allocation ceiling for one received state-transfer artifact, per shard (up to four transfers run at once). Boot enforces the floor `1 GiB + message_bus.max_message_size`; the shipped value sits exactly at it. Raising `message_bus.max_message_size` alone therefore refuses boot: raise this by the same amount in the same edit. At most `"64 GiB"`. |
+
+### `[message_bus]`
+
+Tunables for the internal bus that ships consensus traffic between replicas and client traffic between shards.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `max_batch` | `256` | Messages coalesced into one `writev(2)` call. Hard upper bound 512 (`IOV_MAX/2` on Linux). |
+| `max_message_size` | `"64 MiB"` | Wire-level cap on a single framed message. Coupled to `partition.transfer_artifact_bytes_max` and `websocket.max_message_size` (see those keys). |
+| `peer_queue_capacity` | `256` | Bound on the per-peer queue. `cluster.repair_chunk_max` must stay strictly below it. |
+| `reconnect_period` | `"5 s"` | Interval between outbound reconnect attempts to peers. |
+| `close_peer_timeout` | `"2 s"` | Per-peer close drain budget before force-cancellation. |
+| `close_grace` | `"2 s"` | Bound on a single stream shutdown in the TLS-family transports. |
+| `handshake_grace` | `"10 s"` | Bound on a connection's handshake phase, so a slowloris peer cannot pin per-connection resources indefinitely. |
+
+### `[personal_access_token]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `max_tokens_per_user` | `100` | Maximum active tokens per user. |
+| `personal_access_token.cleaner.enabled` | `true` | Periodically remove expired tokens. |
+| `personal_access_token.cleaner.interval` | `"1 m"` | Cleaner run interval. |
+
+### `[consumer_group]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `rebalancing_timeout` | `"30s"` | Maximum time a partition can remain in pending revocation before being force-transferred to the target member. |
+
+### `[node]`
+
+This node's own client-facing identity. The address is read only while `cluster.enabled = false`: in cluster mode the roster answers the same question per node, so the address itself is ignored and the server says so at startup. The key is still validated in every mode, so a malformed value refuses boot even with `cluster.enabled = true`.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `advertised_address` | unset | The address clients dial, published in cluster metadata. A literal IP or a DNS hostname. Left unset, the server derives it from the bind address of the first enabled listener; that fails when the listener binds a wildcard, and the server refuses to start rather than publish an address no client can use. Declaring the unspecified address (`0.0.0.0`, `::`) is refused for the same reason. |
+
+### `[cluster]`
+
+Cluster mode is configured here but documented in [Clustering](/docs/clustering/vsr). The section contains:
+
+| Key | Default | One-liner |
+|-----|---------|-----------|
+| `enabled` | `false` | Participate in a cluster. Requires `--replica-id` at launch. |
+| `name` | `"iggy-cluster"` | Permanent cluster identity, hashed into every superblock on first boot. Renaming against existing data refuses start. |
+| `heartbeat_timeout` | `"5s"` | Primary liveness window; a silent primary triggers a view change. At least `"2s"` and at least 4 x `commit_broadcast_interval`. |
+| `commit_broadcast_interval` | `"500ms"` | How often the primary broadcasts its commit point; this is the liveness signal. |
+| `prepare_retransmit_interval` | `"250ms"` | Retransmit cadence for unacknowledged prepares. |
+| `view_change_retransmit_interval` | `"500ms"` | Retransmit cadence during a view change. |
+| `view_change_status_timeout` | `"5s"` | Backstop for a stalled view change; escalates to a fresh election. At least 4 x `view_change_retransmit_interval`. |
+| `request_start_view_retransmit_interval` | `"1s"` | Re-request cadence for the current view's StartView. |
+| `view_probe_attempts_max` | `5` | Unanswered probes a recovering replica tolerates before electing on its recovered log. Between 1 and 100. |
+| `repair_retry_interval` | `"1s"` | Re-request cadence for a stalled journal-repair stream. |
+| `repair_chunk_max` | `128` | Prepares served per repair round. Must stay strictly below `message_bus.peer_queue_capacity`. Between 1 and 1024. |
+
+Durations are **rounded down** to the consensus 10 ms tick. Values under 10 ms become one tick.
+
+Sub-sections:
+
+- `[cluster.auth]`: replica-to-replica authentication (PSK plus BLAKE3 keyed-MAC handshake). `shared_secret` must be at least 32 bytes of CSPRNG output, identical on every node. Prefer `IGGY_CLUSTER_AUTH_SHARED_SECRET`. `previous_shared_secret` enables rolling key rotation.
+- `[cluster.tls]`: TLS 1.3 on the replica port. Requires `cluster.auth.enabled`. The PSK authenticates the peer, TLS supplies confidentiality.
+- `[[cluster.nodes]]`: the full roster, byte-identical on every node. Each entry has `name`, `ip`, `replica_id`, and `ports` (`tcp`, `quic`, `http`, `websocket`, `tcp_replica`). In cluster mode `ports` is the single source of listener ports: every enabled transport needs an explicit per-node port or the server refuses to start. `advertised_address` and per-CIDR `advertised_addresses` selectors control what clients are told to dial.

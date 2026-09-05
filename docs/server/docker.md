@@ -1,0 +1,179 @@
+# Docker & Helm
+
+> Run the Iggy server from the official Docker images, and deploy it with the Helm chart.
+
+Rendered page: https://iggy.apache.org/docs/server/docker/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/docker.mdx
+
+## Docker
+
+You can easily run the Iggy server with Docker - the official images can be found [here](https://hub.docker.com/r/apache/iggy), simply type `docker pull apache/iggy`.
+
+Two properties of the published image matter for any deployment:
+
+- The working directory is `/app` and the `iggy-server` and `iggy` binaries are on `PATH` (`/usr/local/bin`). The default data directory `local_data` therefore resolves to `/app/local_data` - **mount your volume there**, or set `IGGY_SYSTEM_PATH` and mount that path instead.
+- The image bakes in no address overrides, so the server binds the loopback defaults (`127.0.0.1`) and is **unreachable from outside the container** even with published ports. Set `IGGY_TCP_ADDRESS=0.0.0.0:8090` (and the equivalent for every other transport you expose) alongside the `-p` flags.
+- The wildcard says nothing about where clients reach the container, so the server refuses to start until `IGGY_NODE_ADVERTISED_ADDRESS` supplies that address. Use `localhost` when the ports are published to the host, the compose service name when the clients are containers on the same network, and the external hostname or load balancer name when they are further away. The value reaches clients through cluster metadata, where it is the endpoint they reconnect through.
+
+Below is an example `docker-compose.yml` which overrides the default configuration (see [Configuration](/docs/server/configuration)) with environment variables. If you prefer using the configuration file, you can mount it as a volume and provide the path to it with the `IGGY_CONFIG_PATH` environment variable.
+
+When running the container, **make sure to include the additional capabilities** required by `io_uring` and CPU affinity:
+
+```yaml
+services:
+  iggy:
+    image: apache/iggy:latest
+    container_name: iggy
+    restart: unless-stopped
+    cap_add:
+      - SYS_NICE
+    security_opt:
+      - seccomp:unconfined
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    environment:
+      - IGGY_ROOT_USERNAME=iggy
+      - IGGY_ROOT_PASSWORD=Secret123
+      - IGGY_TCP_ADDRESS=0.0.0.0:8090
+      - IGGY_HTTP_ADDRESS=0.0.0.0:3000
+      - IGGY_NODE_ADVERTISED_ADDRESS=localhost
+      - IGGY_QUIC_ENABLED=false
+      - IGGY_WEBSOCKET_ENABLED=false
+    ports:
+      - "8090:8090"
+      - "3000:3000"
+    volumes:
+      - iggy:/app/local_data
+
+volumes:
+  iggy:
+```
+
+Or when running with `docker run`:
+
+```bash
+docker run -d --name iggy \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=Secret123 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 -e IGGY_HTTP_ADDRESS=0.0.0.0:3000 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
+  -p 8090:8090 -p 3000:3000 \
+  -v iggy:/app/local_data \
+  apache/iggy:latest
+```
+
+### Why these capabilities?
+
+- **`SYS_NICE`** - required for setting CPU affinity (`sched_setaffinity`) in the thread-per-core architecture
+- **`seccomp:unconfined`** - required for `io_uring` syscalls which are blocked by Docker's default seccomp profile
+- **`memlock: -1`** - `io_uring` needs to lock memory pages shared between user space and kernel
+
+### Available images
+
+| Image | Description |
+|-------|-------------|
+| `apache/iggy` | Server + CLI |
+| `apache/iggy-web-ui` | Standalone Web UI |
+| `apache/iggy-connect` | Connectors runtime |
+| `apache/iggy-mcp` | MCP server |
+| `apache/iggy-bench-dashboard` | Benchmark dashboard (server + WASM frontend) |
+
+Images tagged `latest` are based on stable releases. Images tagged `edge` are built from the latest `master` branch.
+
+### Building from source
+
+The repository root carries its own `Dockerfile` and `docker-compose.yml` for building from source (a multi-stage build: Rust compilation including the Web UI, then a minimal runtime image):
+
+```bash
+docker build -t iggy .
+```
+
+Or use `docker compose up` directly from the repository root. That image **differs from the published one**: it sets the `0.0.0.0` address of all four listeners via `ENV` and keeps its data at `/local_data`. Those wildcards are baked into the image, so a plain `docker run` of it refuses to start until you pass `IGGY_NODE_ADVERTISED_ADDRESS` yourself. The repository's compose file publishes the ports to the host, so it declares `IGGY_NODE_ADVERTISED_ADDRESS=localhost`.
+
+### Running the CLI inside the container
+
+The `iggy` CLI is on `PATH` in the official image. With the compose example above (container `iggy`, password `Secret123`):
+
+```bash
+docker exec -it iggy iggy -u iggy -p Secret123 stream list
+```
+
+## Helm charts
+
+Helm charts for Kubernetes deployment are available in the [repository](https://github.com/apache/iggy/tree/master/helm/charts/iggy). Almost everything server-related nests under the `server:` key in `values.yaml`. The chart also bundles a Web UI deployment under `ui:`.
+
+### Quick start
+
+```bash
+helm install iggy ./helm/charts/iggy
+```
+
+### Chart components
+
+- **Server Deployment** - runs `apache/iggy` with the pod security context the server needs: seccomp profile `Unconfined` (for `io_uring`) plus the `IPC_LOCK` capability (for memory locking). Listener addresses are set to `0.0.0.0` via `server.env`, and the data volume mounts at `/app/local_data`. The chart supplies `IGGY_NODE_ADVERTISED_ADDRESS` as the in-cluster Service DNS name; override it with `server.advertisedAddress` when clients arrive through a LoadBalancer or an Ingress. Images that predate the setting, including the `0.7.0` pinned by default, log the variable as unknown and start anyway.
+- **Server Service** - exposes the `http` (3000), `quic` (8080), and `tcp` (8090) ports. WebSocket is not exposed by the chart.
+- **Web UI Deployment + Service** - a separate `apache/iggy-web-ui` deployment on port 3050, enabled by default (`ui.enabled`).
+- **Secret** - root user credentials from `server.users.root` (default `iggy`/`changeit`). Point `existingSecret` at your own Secret in production.
+- **PersistentVolumeClaim** - storage for `/app/local_data`, **disabled by default** (`server.persistence.enabled`), 8Gi when enabled.
+- **ServiceAccount**, **HPA**, **Ingress** - the usual optional plumbing, for both server and UI.
+- **ServiceMonitor** - Prometheus scrape config (optional). The `/metrics` endpoint requires a bearer credential like every other read, so wire a token (e.g. a personal access token stored in a Secret) into `server.serviceMonitor.authorization` - an unauthenticated scrape gets 401.
+
+### Key values
+
+```yaml
+# values.yaml (excerpt, chart defaults)
+server:
+  replicaCount: 1
+  # The address clients dial, published in cluster metadata. Declaring
+  # IGGY_NODE_ADVERTISED_ADDRESS in server.env instead also works, but
+  # setting both is refused at render time. Empty falls back to the
+  # in-cluster Service DNS name.
+  advertisedAddress: ""
+  image:
+    repository: apache/iggy
+    tag: "0.7.0"
+  ports:
+    http: 3000
+    quic: 8080
+    tcp: 8090
+  users:
+    root:
+      username: iggy
+      password: changeit
+  persistence:
+    enabled: false
+    size: 8Gi
+  serviceMonitor:
+    enabled: false
+    # The metrics endpoint requires a bearer credential:
+    # authorization:
+    #   credentials:
+    #     name: iggy-metrics-token
+    #     key: token
+
+ui:
+  enabled: true
+  image:
+    repository: apache/iggy-web-ui
+    tag: "edge"
+
+podSecurityContext:
+  seccompProfile:
+    type: Unconfined
+
+securityContext:
+  capabilities:
+    add:
+      - IPC_LOCK
+
+resources: {}
+```
+
+Customize the values file for your environment and deploy with:
+
+```bash
+helm install iggy ./helm/charts/iggy -f my-values.yaml
+```

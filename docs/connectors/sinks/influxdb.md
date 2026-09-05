@@ -1,0 +1,86 @@
+# InfluxDB Sink
+
+> Write messages from Iggy streams to InfluxDB as line-protocol points, on both InfluxDB V2 and V3.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sinks/influxdb/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sinks/influxdb.mdx
+
+The InfluxDB sink connector consumes messages from Iggy streams and writes them to InfluxDB as line-protocol points. It supports both InfluxDB V2 (OSS 2.x / Cloud) and InfluxDB V3 (Core / Enterprise), selected with the `version` option.
+
+This page is a curated subset of the documentation. The canonical reference is the upstream [influxdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/influxdb_sink) in the `apache/iggy` repository.
+
+## Configuration
+
+```toml
+type = "sink"
+key = "influxdb"
+enabled = true
+version = 0
+name = "InfluxDB sink"
+path = "target/release/libiggy_connector_influxdb_sink"
+plugin_config_format = "toml"
+
+[[streams]]
+stream = "events"
+topics = ["influx_events"]
+schema = "json"
+batch_length = 100
+poll_interval = "5ms"
+consumer_group = "influxdb_sink"
+
+[plugin_config]
+version = "v2"
+url = "http://localhost:8086"
+org = "iggy"
+bucket = "events"
+token = "replace_with_secret_token"
+measurement = "iggy_messages"
+precision = "us"
+batch_size = 500
+```
+
+InfluxDB V2 organizes data as `org` + `bucket`. V3 uses a single `db` field instead. Omitting `version` defaults to `"v2"` for backward compatibility. The write body, batching, and retry behavior are identical between versions. The connector handles the differing endpoints, auth header styles, and precision spellings internally.
+
+```toml
+# V3 variant: org/bucket are replaced by db
+[plugin_config]
+version = "v3"
+url = "http://localhost:8181"
+db = "my-db"
+token = "replace_with_secret_token"
+```
+
+### Common Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `version` | string | `v2` | `v2` or `v3` |
+| `url` | string | **required** | InfluxDB base URL |
+| `org` | string | **required** (v2) | Organization name |
+| `bucket` | string | **required** (v2) | Target bucket |
+| `db` | string | **required** (v3) | Target database |
+| `token` | string | **required** | API token, never logged |
+| `measurement` | string | `iggy_messages` | Line-protocol measurement name |
+| `precision` | string | `us` | Timestamp precision: `ns`, `us`, `ms`, or `s` |
+| `batch_size` | u32 | `500` | Messages per write request |
+| `payload_format` | string | `json` | `json`, `text`, or `base64` |
+| `include_metadata` | bool | `true` | Inject stream/topic/partition fields into each point (the `offset` tag is always written regardless) |
+
+The `include_checksum`, `include_origin_timestamp`, `include_stream_tag`, `include_topic_tag`, and `include_partition_tag` flags also default to `true`. Disable them individually to slim down points. Resilience options cover `timeout` (`30s`), `max_retries` (`3`), `retry_delay` / `retry_max_delay`, startup health-check retries, and a circuit breaker (`circuit_breaker_threshold` `5`, `circuit_breaker_cool_down` `30s`). See the upstream [influxdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/influxdb_sink) for the full list.
+
+## Payload Formats
+
+- **`json`** (default): the message payload is validated as JSON, compact-serialized, and written as a single `payload_json` string field (individual JSON fields do not become separate field entries).
+- **`text`**: the payload is written as a single `payload_text` string field.
+- **`base64`**: the raw payload bytes are base64-encoded into a `payload_base64` string field.
+
+An unrecognized `payload_format` logs a warning and falls back to `json`.
+
+## Reliability
+
+Messages are serialized to line protocol and each polled batch is split into chunks of at most `batch_size` messages, one HTTP POST per chunk. Transient errors (429 and 5xx) are retried with exponential backoff, and after `circuit_breaker_threshold` consecutive failures the connector stops issuing writes until the cool-down window elapses, then probes again. The startup health check retries with its own backoff, so the connector tolerates InfluxDB starting after it.
+
+## Transforms
+
+Transforms can be applied before writing to InfluxDB. See the [transforms documentation](/docs/connectors/transforms) for the available types and their configuration.

@@ -1,0 +1,47 @@
+# Welcome
+
+> Apache Iggy documentation: how Iggy organizes data into streams, topics, partitions and segments, and where to start.
+
+Rendered page: https://iggy.apache.org/docs/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/index.mdx
+
+<DocsHero />
+
+<WhyIggy />
+
+## How Iggy organizes data
+
+Iggy uses a hierarchical model: **streams** contain **topics**, topics contain **partitions**, and partitions store messages in **segments** on disk. This gives you flexible multi-tenancy, parallel processing, and efficient storage all in one.
+
+<StreamHierarchy />
+
+## The append-only log
+
+Every partition is an append-only log. Messages are **immutable** once written, consumers can read from any offset, and you can replay the entire history at any time.
+
+<AppendOnlyLogViz />
+
+## Key capabilities
+
+| Capability | Details |
+|-----------|---------|
+| **Transport** | TCP, QUIC, WebSocket (custom binary protocol), HTTP (REST) |
+| **Performance** | Thread-per-core + io_uring, zero-copy deserialization, custom 4 GiB memory pool |
+| **Security** | TLS on all transports, Argon2id hashing, AES-256-GCM encryption, [granular RBAC](/docs/server/security) with per-stream/per-topic permissions |
+| **Connectors** | [14 sink and 4 source plugins](/docs/connectors/introduction) including PostgreSQL, MongoDB, Elasticsearch, ClickHouse, Apache Iceberg, S3, with data transforms |
+| **AI Integration** | [MCP server](/docs/ai/mcp) with 40+ tools for LLM-driven message streaming management |
+| **Management** | [Web UI](/docs/web_ui/start) dashboard (embedded or standalone), [CLI](/docs/cli/start) with shell completions, Prometheus metrics, OpenTelemetry |
+| **Clustering** | Built on [Viewstamped Replication (VSR)](/docs/clustering/vsr) consensus; single node by default, multi-node via `[cluster]` configuration |
+| **Deployment** | Single binary, [Docker & Helm](/docs/server/docker), NUMA-aware CPU affinity |
+
+## Ecosystem
+
+Iggy is more than just a server. The project includes a full ecosystem of tools:
+
+- **[Connectors Runtime](/docs/connectors/introduction)** - dynamically loaded Rust plugins for data integration: 14 sinks and 4 sources. Ingest from PostgreSQL, Elasticsearch or InfluxDB into Iggy, or forward to MongoDB, Elasticsearch, ClickHouse, Apache Iceberg, Quickwit, S3 and more. Built-in data transforms and Prometheus metrics.
+- **[MCP Server](/docs/ai/mcp)** - Model Context Protocol server exposing 40+ tools for LLM integration. Works with Claude Desktop via stdio and HTTP transports.
+- **[Web UI](/docs/web_ui/start)** - SvelteKit dashboard for stream/topic management, message browsing with JSON/string/XML decoders, user management, and real-time terminal.
+- **[CLI](/docs/cli/start)** - full-featured command-line interface with named connection contexts, session-based login, and shell completions.
+- **[SDKs](/docs/sdk/introduction)** - client libraries for 8 languages (Rust, Python, Java, Go, Node.js, C#, C++, PHP), most with runnable examples.
+- **[Benchmarking](/docs/server/benchmarking)** - built-in `iggy-bench` tool with a Yew/WebAssembly dashboard for performance testing.

@@ -1,0 +1,46 @@
+# Introduction
+
+> What the Iggy server does, and where its releases and Docker images are published.
+
+Rendered page: https://iggy.apache.org/docs/server/introduction/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/introduction.mdx
+
+Iggy server is the most important part of the system as it's responsible for handling all the incoming connections, managing the data and providing the API for the clients. The server is written in Rust and can be run on any platform that supports it.
+
+<ServerEcosystem />
+
+The releases are published to GitHub and can be found [here](https://github.com/apache/iggy/tags). The official Docker images can be found [here](https://hub.docker.com/r/apache/iggy), simply type `docker pull apache/iggy`.
+
+If you compile the source code in release mode, the longer compilation time comes from [LTO](https://doc.rust-lang.org/rustc/linker-plugin-lto.html) enabled in the `[profile.release]` section of the workspace [Cargo.toml](https://github.com/apache/iggy/blob/master/Cargo.toml).
+
+## Running the server
+
+One `iggy-server` binary serves both the single-node and the clustered deployment. The loaded configuration decides which one you get. The server accepts three CLI flags:
+
+| Flag | Purpose |
+|------|---------|
+| `--fresh` | Delete the data directory before starting. **This wipes all data** on that node. |
+| `--with-default-root-credentials` | Set the root credentials to `iggy`/`iggy` on first start, unless `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` are already set. Development only. |
+| `--replica-id <N>` | Select this node's entry in `cluster.nodes`. Required when `cluster.enabled = true`. See [Clustering](/docs/clustering/vsr). |
+
+Configuration comes from the TOML file named by `IGGY_CONFIG_PATH`. Without one, the server boots on the defaults embedded in the binary. Any key can be overridden with an `IGGY_`-prefixed environment variable, and a `.env` file in the working directory (or the file named by `IGGY_ENV_PATH`) is loaded at startup. See [Configuration](/docs/server/configuration) for the full reference.
+
+When no root credentials are provided on the very first start, the server generates a random root password and prints it to the log. That's the *only* time it can be read.
+
+The HTTP API endpoints can be found in [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http) file, which can be used with [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension for VS Code.
+
+In order to see the detailed logs from the server, run it with `RUST_LOG=trace` environment variable.
+
+To seed the example data, start the server with known credentials, then run the seeder from the root of the repository:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+cargo run --bin data-seeder-tool
+```
+
+The seeder logs in as `iggy`/`iggy` by default. Pass `--username` and `--password` to use other credentials.
+
+## Authentication
+
+Only the ping liveness probe and the login handshake itself (username/password, personal access token, or HTTP token refresh, all of which prove a credential) are served without an authenticated session. Every other request requires one and is subject to [permissions](/docs/server/security): fetching server stats, for example, needs the `read_servers` permission (the root user has it), and even the Prometheus `/metrics` scrape **must present a bearer credential**. A session is created by logging in with the user's credentials or personal access token and is valid for the duration of the connection or until the user logs out. Over the HTTP API, authentication is done by providing the `Authorization` header with the `Bearer` token.

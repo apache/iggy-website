@@ -1,0 +1,51 @@
+# Examples
+
+> Working Python examples from the core repository, covering connection strings, message headers and TLS.
+
+Rendered page: https://iggy.apache.org/docs/sdk/python/examples/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/python/examples.mdx
+
+Working examples are available in the [examples/python](https://github.com/apache/iggy/tree/master/examples/python) directory. CI exercises them, so they always match the current SDK:
+
+- **getting-started** - producer and consumer with optional TLS via `TcpConfig`
+- **basic** - producer and consumer using connection strings
+- **message-headers** - user headers with `str`, `bytes`, `bool`, `int`, and `float` values, in two variants: `plain-headers` (plain `dict`, the SDK infers wire types) and `typed-headers` (explicit `HeaderKey`/`HeaderValue`)
+
+## Running the examples
+
+Start an Iggy server first:
+
+```bash
+# Latest release
+docker run --rm \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -p 8090:8090 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  apache/iggy:latest
+
+# Or from the repository source
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and set the `iggy`/`iggy` root credentials the examples default to.
+
+Then, from `examples/python`, install the dependencies and run a producer/consumer pair:
+
+```bash
+# Using uv
+uv sync
+uv run getting-started/producer.py
+uv run getting-started/consumer.py
+
+# Without uv
+python -m venv .venv
+source .venv/bin/activate
+pip install .
+python getting-started/producer.py
+python getting-started/consumer.py
+```
+
+For the quick-start code itself, see the [Python SDK intro](/docs/sdk/python/intro).

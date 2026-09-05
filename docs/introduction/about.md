@@ -1,0 +1,145 @@
+# About
+
+> What Apache Iggy is: a persistent message streaming platform written in Rust, with QUIC, TCP, WebSocket and HTTP transports.
+
+Rendered page: https://iggy.apache.org/docs/introduction/about/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/introduction/about.mdx
+
+**Iggy** is a persistent message streaming platform written in Rust, supporting QUIC, TCP, WebSocket (custom binary specification) and HTTP (regular REST API) transport protocols, **capable of processing millions of messages per second at ultra-low latency**.
+
+Iggy provides **exceptionally high throughput and performance** while utilizing minimal computing resources.
+
+This is **not yet another extension** running on top of existing infrastructure, such as Kafka or SQL database.
+
+Iggy is a persistent message streaming log **built from the ground up** using low-level I/O with **thread-per-core shared nothing architecture**, `io_uring` and `compio` for maximum speed and efficiency.
+
+The name is an abbreviation for the Italian Greyhound - small yet extremely fast dogs, the best in their class. See the lovely [Fabio & Cookie](https://www.instagram.com/fabio.and.cookie/) ❤️
+
+![Iggy Server](/img/iggy_server.png)
+
+---
+
+### Features
+
+- **Highly performant**, persistent append-only log for message streaming
+- **Very high throughput** for both writes and reads
+- **Low latency and predictable resource usage** thanks to the Rust compiled language (no GC) and `io_uring`
+- **Thread per core shared nothing design** together with `io_uring` guarantee the best possible performance on modern `Linux` systems
+- **NUMA-aware sharding** with CPU affinity and memory binding per NUMA node for optimal hardware utilization
+- **User authentication and authorization** with granular permissions, Personal Access Tokens (PAT) and Argon2id password hashing
+- Support for multiple streams, topics and partitions
+- Support for **multiple transport protocols** (QUIC, TCP, WebSocket, HTTP)
+- Fully operational RESTful API which can be optionally enabled
+- Available client SDK in multiple languages
+- **Works directly with binary data**, avoiding enforced schema and serialization/deserialization overhead
+- Custom **zero-copy (de)serialization**, which greatly improves the performance and reduces memory usage
+- **Custom memory pool** with 28 buckets (buffer sizes from 4 KiB to 512 MiB) for pre-allocated, zero-copy message passing
+- Configurable server features (e.g. caching, segment size, data flush interval, transport protocols etc.)
+- Server-side storage of **consumer offsets**
+- Multiple ways of polling the messages:
+  - By offset (using the indexes)
+  - By timestamp (using the time indexes)
+  - First/Last N messages
+  - Next N messages for the specific consumer
+- Possibility of **auto committing the offset** (e.g. to achieve *at-most-once* delivery)
+- **Consumer groups** providing the message ordering and horizontal scaling across the connected clients, with cooperative partition rebalancing
+- **Message expiry** with auto deletion based on the configurable **retention policy**
+- **Multi-tenant** support via abstraction of **streams** which group **topics**
+- **TLS** support for all transport protocols (TCP, QUIC, WebSocket, HTTPS)
+- **[Connectors](/docs/connectors/introduction)** - sinks, sources and data transformations based on the **custom Rust plugins** loaded dynamically at runtime
+- **[Model Context Protocol](/docs/ai/mcp)** - provide context to LLM with **MCP server** exposing 40+ tools for full Iggy management
+- Optional server-side as well as client-side **data encryption** using AES-256-GCM
+- Optional metadata support in the form of **message headers**
+- Support for **OpenTelemetry** logs & traces + Prometheus metrics
+- Built-in **[CLI](/docs/cli/start)** to manage the streaming server installable via `cargo install iggy-cli`
+- Built-in **[Web UI](/docs/web_ui/start)** dashboard (Svelte) that can be embedded directly in the server binary or run as a standalone container
+- Built-in **benchmarking app** to test the performance
+- **Single binary deployment** (no external dependencies)
+- **Accept-time connection distribution** across shards via file descriptor transfer for load balancing
+- Built on **Viewstamped Replication (VSR)** consensus: runs as a single node by default, with multi-node [clustering](/docs/clustering/vsr) available via the `[cluster]` configuration
+
+## Supported languages SDK
+
+| Language | Package | Registry |
+|----------|---------|----------|
+| Rust | [iggy](https://crates.io/crates/iggy) | crates.io |
+| C# | [Apache.Iggy](https://www.nuget.org/packages/Apache.Iggy/) | NuGet |
+| Java | [iggy](https://mvnrepository.com/artifact/org.apache.iggy/iggy) | Maven Central |
+| Python | [apache-iggy](https://pypi.org/project/apache-iggy/) | PyPI |
+| Node.js | [apache-iggy](https://www.npmjs.com/package/apache-iggy) | npm |
+| Go | [iggy-go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) | pkg.go.dev |
+| PHP | [apache/iggy-php](https://packagist.org/packages/apache/iggy-php) | Packagist |
+| C++ | [iggy-cpp](https://github.com/apache/iggy/tree/master/foreign/cpp) | GitHub (WIP) |
+
+## CLI
+
+The interactive CLI is implemented under the `cli` project, to provide the best developer experience. This is a great addition to the Web UI, especially for developers who prefer using the console tools.
+
+Iggy CLI can be installed with `cargo install iggy-cli` and then simply accessed by typing `iggy` in your terminal. It supports named connection contexts (profiles) for managing multiple server connections, shell completions for bash/zsh/fish/elvish/powershell, and session-based login on Linux.
+
+### Web UI
+
+The Web UI provides a comprehensive dashboard for the Iggy server, built with SvelteKit and TypeScript. It can run in two modes:
+
+- **Embedded** - compiled into the server binary (with `iggy-web` feature flag), served at the `/ui` endpoint
+- **Standalone** - as a separate container via `docker pull apache/iggy-web-ui`
+
+Features include stream/topic/partition management, message browser with JSON/string/XML decoders, user management, server logs viewer, real-time terminal, and server configuration overview.
+
+## Connectors
+
+Iggy provides a highly performant and modular **[runtime](/docs/connectors/runtime)** for statically typed, yet dynamically loaded connectors. You can ingest data from external sources and push the data to Iggy streams, or fetch data from Iggy streams and forward it to external systems. **Create your own Rust plugins** by simply implementing either the `Source` or `Sink` trait and **build custom pipelines for the data processing**.
+
+There are currently 14 sinks and 4 sources available. Sinks include PostgreSQL, MongoDB, Elasticsearch, ClickHouse, InfluxDB, Apache Iceberg, Delta Lake, Quickwit and S3. Sources include PostgreSQL, Elasticsearch, InfluxDB and random data generation. See the [connectors documentation](/docs/connectors/introduction) for the full catalog.
+
+The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, and can be fetched via `docker pull apache/iggy-connect`.
+
+## Model Context Protocol
+
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open protocol that standardizes how applications provide context to LLMs. The **[Iggy MCP Server](/docs/ai/mcp)** is an implementation of the MCP protocol for message streaming infrastructure. It exposes 40+ tools covering streams, topics, partitions, messages, consumer groups, users, and more. It supports both HTTP and stdio transports, making it compatible with tools like Claude Desktop and other MCP clients.
+
+The [docker image](https://hub.docker.com/r/apache/iggy-mcp) is available, and can be fetched via `docker pull apache/iggy-mcp`.
+
+### Docker
+
+The official Apache Iggy images can be found on [Docker Hub](https://hub.docker.com/r/apache/iggy). Simply type `docker pull apache/iggy` to pull the image.
+
+You can also find the images for all the different tooling such as Connectors, MCP Server etc. [here](https://hub.docker.com/u/apache?page=1&search=iggy).
+
+Please note that the images tagged as `latest` are based on the official, stable releases, while the `edge` ones are updated directly from latest version of the `master` branch.
+
+You can find the `Dockerfile` and `docker-compose` in the root of the repository. To build and start the server, run: `docker compose up`.
+
+Additionally, you can run the `CLI` which is available in the running container, by executing: `docker exec -it iggy-server /iggy`.
+
+Keep in mind that running the container on operating systems other than Linux, where the Docker is running in the VM, might result in the performance degradation.
+
+Also, when running the container, **make sure to include the additional capabilities**, as you can find in [docker-compose](https://github.com/apache/iggy/blob/master/docker-compose.yml) file:
+
+```yml
+cap_add:
+  - SYS_NICE
+security_opt:
+  - seccomp:unconfined
+ulimits:
+  memlock:
+    soft: -1
+    hard: -1
+```
+
+Or when running with `docker run`:
+
+```
+docker run --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 apache/iggy:latest
+```
+
+### Helm Charts
+
+Helm charts for Kubernetes deployment are available in the [repository](https://github.com/apache/iggy/tree/master/helm/charts/iggy). The chart includes templates for Deployment, Service, ServiceAccount, HPA (Horizontal Pod Autoscaler), Ingress, PersistentVolumeClaim, ServiceMonitor (for Prometheus), and root user credentials Secret.
+
+### Versioning
+
+The official releases follow the regular semver (`0.5.0`) or have a `latest` tag applied (`apache/iggy:latest`).
+
+We also publish edge/dev/nightly releases (e.g. `0.6.0-edge.1` or `apache/iggy:edge`), for both SDKs and the Docker images. These are typically compatible with the latest changes but are not guaranteed to be stable and, as the name suggests, are not recommended for production use.

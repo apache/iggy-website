@@ -1,0 +1,86 @@
+# MongoDB Sink
+
+> Insert messages from Iggy streams into a MongoDB collection, one document per message.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sinks/mongodb/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sinks/mongodb.mdx
+
+The MongoDB sink connector writes messages from Iggy streams to a MongoDB database. Each message is inserted as a document into the configured collection.
+
+## Configuration
+
+```toml
+type = "sink"
+key = "mongodb-sink"
+enabled = true
+version = 1
+name = "MongoDB Sink"
+path = "/path/to/libiggy_connector_mongodb_sink.so"
+verbose = false
+
+[[streams]]
+stream = "my-stream"
+topics = ["my-topic"]
+schema = "json"
+batch_length = 100
+poll_interval = "1s"
+consumer_group = "mongodb-sink-group"
+
+[plugin_config]
+connection_uri = "mongodb://localhost:27017"
+database = "my_database"
+collection = "my_collection"
+batch_size = 100
+include_metadata = true
+include_checksum = true
+include_origin_timestamp = true
+payload_format = "json"
+auto_create_collection = true
+verbose_logging = false
+max_retries = 3
+retry_delay = "1s"
+```
+
+## Plugin config options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `connection_uri` | string | required | MongoDB connection string |
+| `database` | string | required | Target database name |
+| `collection` | string | required | Target collection name |
+| `max_pool_size` | u32 | driver default | Maximum connections in the MongoDB client pool |
+| `batch_size` | u32 | `100` | Number of documents to insert per batch |
+| `include_metadata` | bool | `true` | Include message metadata (offset, timestamp) in documents |
+| `include_checksum` | bool | `true` | Include message checksum |
+| `include_origin_timestamp` | bool | `true` | Include client-provided timestamp |
+| `payload_format` | string | `"binary"` | How to store the payload: `"json"`, `"string"` (alias `"text"`), or `"binary"`; unknown values fall back to binary with a warning |
+| `auto_create_collection` | bool | `false` | Create the collection if it doesn't exist |
+| `verbose_logging` | bool | `false` | Enable detailed logging |
+| `max_retries` | u32 | `3` | Max retry attempts on failure |
+| `retry_delay` | string | `"1s"` | Delay between retries |
+
+## Transforms
+
+You can apply transforms before writing to MongoDB. Every `[transforms.*]` section requires `enabled = true`. See the [transforms documentation](/docs/connectors/transforms) for details.
+
+```toml
+[transforms.add_fields]
+enabled = true
+
+[[transforms.add_fields.fields]]
+key = "source"
+value.static = "iggy"
+
+[[transforms.add_fields.fields]]
+key = "processed_at"
+value.computed = "timestamp_millis"
+
+[[transforms.add_fields.fields]]
+key = "trace_id"
+value.computed = "uuid_v7"
+
+[transforms.delete_fields]
+enabled = true
+fields = ["internal_field"]
+```

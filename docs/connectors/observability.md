@@ -1,0 +1,96 @@
+# Observability
+
+> Logs, Prometheus metrics, the stats endpoint, OpenTelemetry export and per-source state files for the connector runtime.
+
+Rendered page: https://iggy.apache.org/docs/connectors/observability/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/observability.mdx
+
+The connector runtime exposes its health through logs, Prometheus metrics, a stats endpoint, OpenTelemetry export, and per-source state files.
+
+## Logging
+
+The runtime logs via the [tracing](https://docs.rs/tracing/latest/tracing/) crate. The output format is configured in the `[logging]` section:
+
+```toml
+[logging]
+format = "text" # "text" (default) or "json"
+```
+
+Two per-connector flags in the connector configuration files add more detail:
+
+- **`verbose`**: logs additional per-batch details for the connector.
+- **`benchmark`**: emits per-batch timing events on the `iggy_connectors::benchmark` tracing target.
+
+```toml
+type = "source"
+key = "random"
+# ...
+verbose = false
+benchmark = true
+```
+
+## Prometheus metrics
+
+Metrics are served by the runtime HTTP API when the `[http.metrics]` section is enabled (the HTTP API itself is on by default at `127.0.0.1:8081`):
+
+```toml
+[http.metrics]
+enabled = false
+endpoint = "/metrics"
+```
+
+Runtime-level gauges:
+
+- `iggy_connectors_sources_total` - configured source connectors.
+- `iggy_connectors_sources_running` - sources in the `Running` status.
+- `iggy_connectors_sinks_total` - configured sink connectors.
+- `iggy_connectors_sinks_running` - sinks in the `Running` status.
+
+Per-connector counters, labeled with `connector_key` and `connector_type` (`source` or `sink`):
+
+- `iggy_connector_messages_produced_total` - messages received from a source plugin's poll.
+- `iggy_connector_messages_sent_total` - messages sent to Iggy (source).
+- `iggy_connector_messages_consumed_total` - messages consumed from Iggy (sink).
+- `iggy_connector_messages_processed_total` - messages processed and delivered to the sink plugin.
+- `iggy_connector_messages_filtered_total` - messages intentionally dropped by transforms.
+- `iggy_connector_errors_total` - errors encountered.
+
+Per-batch stage timings are recorded in the `iggy_connector_stage_duration_seconds` histogram, labeled with `connector_key`, `connector_type`, and `stage` (`prepare`, `ffi`, `decode`, `iggy_send`, `state_save`, `total`), with buckets ranging from 50 microseconds to 5 seconds.
+
+## Runtime stats
+
+`GET /stats` on the HTTP API returns a JSON snapshot of the runtime: version, process ID, CPU and memory usage (cgroup-aware in containers), uptime, the source/sink totals, and a `connectors` array with per-connector details - key, name, type, plugin version, `enabled`, message counters, error count, and the current status.
+
+The connector statuses are `Starting`, `Running`, `Stopping`, `Stopped`, and `Error`. A connector whose plugin fails to load (missing library, bad configuration) is reported with the `Error` status and the failure message, without blocking the remaining connectors.
+
+## OpenTelemetry
+
+The `[telemetry]` section enables OTLP export of logs and traces:
+
+```toml
+[telemetry]
+enabled = false
+service_name = "iggy-connectors"
+
+[telemetry.logs]
+transport = "grpc" # "grpc" or "http"
+endpoint = "http://localhost:4317"
+
+[telemetry.traces]
+transport = "grpc" # "grpc" or "http"
+endpoint = "http://localhost:4317"
+```
+
+## State files
+
+Source connectors can persist their position (see the [SDK documentation](/docs/connectors/sdk)) into the directory configured in the `[state]` section:
+
+```toml
+[state]
+path = "local_state"
+```
+
+Each source gets one file named `source_{key}.state` (e.g. `local_state/source_random.state`) holding the raw state bytes - by convention MessagePack produced by the SDK helpers. Sinks have no state files. Their progress lives in Iggy consumer groups.
+
+The write is crash-safe: the state is written and fsynced to a `.tmp` file, atomically renamed over the previous file, and the directory entry is fsynced. Files are created with owner-only permissions (`0600`), since state may carry cursors or tokens. An empty or missing state file means the source starts fresh - deleting a state file resets that source's position.

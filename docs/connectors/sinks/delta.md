@@ -1,0 +1,78 @@
+# Delta Lake Sink
+
+> Write messages from Iggy streams into Delta Lake tables on local disk, S3, Azure Blob Storage or Google Cloud Storage.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sinks/delta/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sinks/delta.mdx
+
+The Delta Lake sink connector consumes messages from Iggy streams and writes them to Delta Lake tables on the local filesystem, AWS S3, Azure Blob Storage, or Google Cloud Storage. Each batch is flushed and committed as one atomic Delta transaction.
+
+This page is a curated subset of the documentation. The canonical reference is the upstream [delta_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/delta_sink) in the `apache/iggy` repository.
+
+## Configuration
+
+```toml
+type = "sink"
+key = "delta"
+enabled = true
+version = 0
+name = "Delta Lake sink"
+path = "target/release/libiggy_connector_delta_sink"
+plugin_config_format = "toml"
+
+[[streams]]
+stream = "events"
+topics = ["user_events"]
+schema = "json"
+batch_length = 100
+poll_interval = "5ms"
+consumer_group = "delta_sink_connector"
+
+[plugin_config]
+table_uri = "file:///tmp/iggy_delta_table"
+```
+
+The target Delta table must already exist at `table_uri`: the connector opens it at startup and fails if it's missing. It doesn't create tables. Only JSON payloads are supported (`schema = "json"` on the stream). A batch containing another payload type fails.
+
+### Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `table_uri` | string | **required** | Path or URI of the Delta table: `file://`, `s3://`, `az://`, or `gs://` |
+| `storage_backend_type` | string | none | `s3`, `azure`, or `gcs`. Omit for local filesystem tables |
+
+Each backend has its own credential options, required when `storage_backend_type` selects it:
+
+- **S3**: `aws_s3_access_key`, `aws_s3_secret_key`, `aws_s3_region`, `aws_s3_endpoint_url` (for S3-compatible stores like MinIO), `aws_s3_allow_http` (default `false`, for local development).
+- **Azure**: `azure_storage_account_name`, `azure_container_name`, and either `azure_storage_account_key` or `azure_storage_sas_token` (not both).
+- **GCS**: `gcs_service_account_key` (the service account JSON as a string, with the bucket taken from the `gs://` URI).
+
+### S3 example
+
+```toml
+[plugin_config]
+table_uri = "s3://my-bucket/delta-tables/users"
+storage_backend_type = "s3"
+aws_s3_access_key = "your-access-key"
+aws_s3_secret_key = "your-secret-key"
+aws_s3_region = "us-east-1"
+```
+
+## Type Coercion
+
+JSON values are coerced to the Delta table schema before writing:
+
+- **Timestamp columns**: ISO 8601 / RFC 3339 strings (e.g. `"2021-11-11T22:11:58Z"`) are converted to microsecond timestamps. Numeric timestamps pass through.
+- **String columns**: non-string values are converted to their string representation.
+- Coercions apply recursively to nested structs and arrays.
+
+The table schema is captured once at startup and not refreshed, so restart the connector after changing it.
+
+## Batching & Transactions
+
+Every poll batch is written to Parquet buffers and committed to the Delta log as a single transaction. The stream's `batch_length` therefore controls Delta commit granularity: small batches produce many small files and table versions, so prefer larger batches for production tables (and compact periodically). There is no retry on failed writes. A failed batch surfaces as a connector error.
+
+## Transforms
+
+Transforms can be applied before writing to Delta Lake. See the [transforms documentation](/docs/connectors/transforms) for the available types and their configuration.

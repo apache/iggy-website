@@ -1,0 +1,205 @@
+# Storage Engine
+
+> The segmented append-only log, and how streams, topics, partitions and segments map onto files on disk.
+
+Rendered page: https://iggy.apache.org/docs/server/storage-engine/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/storage-engine.mdx
+
+Iggy's storage engine is built around the concept of a **segmented append-only log**. Every piece of data flows through a well-defined hierarchy: System -> Streams -> Topics -> Partitions -> Segments. This page covers how data is stored, indexed, flushed, recovered, and cleaned up on disk.
+
+<StreamHierarchy />
+
+<AppendOnlyLogViz />
+
+## Directory layout
+
+All data lives under the `system.path` directory (default `local_data`):
+
+```bash
+local_data/
+├── metadata/                        # Metadata plane (see below)
+│   ├── journal.wal                  # Prepare journal: replicated metadata operations
+│   ├── snapshot.bin                 # MessagePack snapshot of the metadata state machine
+│   ├── superblock.a                 # Ping-pong superblock pair: checkpoint record,
+│   └── superblock.b                 #   newest slot wins by sequence
+├── state/
+│   └── log                          # Created at boot; legacy state plumbing
+├── runtime/                         # Runtime data
+├── logs/                            # Server log files
+└── streams/
+    └── {stream_id}/
+        └── topics/
+            └── {topic_id}/
+                └── partitions/
+                    └── {partition_id}/
+                        ├── superblock.a                  # Partition consensus superblock pair
+                        ├── superblock.b
+                        ├── offsets/
+                        │   ├── consumers/                # Stored offsets of individual consumers
+                        │   └── groups/                   # Stored offsets of consumer groups
+                        ├── 00000000000000000000.log      # Segment: batch records
+                        ├── 00000000000000000000.index    # Segment: sparse index
+                        ├── 00000000000016000000.log
+                        └── 00000000000016000000.index
+```
+
+Stream, topic, and partition ids are numeric and **0-based**. Each partition directory holds pairs of `.log` and `.index` files. The filename is the start offset of the segment's first message, zero-padded to 20 digits. Next to the segments, every partition keeps its own superblock pair (replica identity and consensus state for that partition) and an `offsets/` tree for consumer offset storage.
+
+## Segmented log
+
+<SegmentVisualization />
+
+Each partition is a segmented log: an ordered list of **sealed** (read-only) segments plus one **active** (writable) segment. When the active segment reaches the topic's `segment_size` (default 1 GiB), it is sealed and a new active segment starts at the next offset.
+
+`segment_size` is a per-topic creation option, bounded to a 512-byte multiple between 1 MiB and 1 GiB. It's a **soft limit**: rotation fires after the append that crosses it, so the crossing batch lands whole and a sealed segment may run one batch past the configured size. `preallocate_segments` (also per topic) reserves each segment's bytes up front on filesystems that support it. See [Topic options](/docs/server/topic-options).
+
+## On-disk batch format
+
+Segments store **batch records**, not individual messages. The record is byte-identical to the wire encoding: the one layout a `SendMessages` body, the replicated prepare, the persisted segment record, and the poll reply all share. There is **no other message encoding**.
+
+```text
+[batch header: 256 bytes][blob: message frames]
+frame = [frame header: 48 bytes][payload][user_headers]
+```
+
+The 256-byte batch header carries `partition_id`, `base_offset`, `base_timestamp`, `origin_timestamp`, `batch_length`, `batch_checksum` (XxHash3-64), and `message_count`. The rest is reserved and must be zero. Each 48-byte frame header carries `checksum` (XxHash3-64), `id` (u128), `offset_delta` (u32), `timestamp_delta` (u32), and the two lengths. A message's absolute offset is `base_offset + offset_delta`; its server timestamp is the flat `base_timestamp`, while `timestamp_delta` resolves producer time against `origin_timestamp`. All fields are **little-endian**, and records are stored contiguously with no padding.
+
+The full byte-level tables live on the [Message batches](/docs/binary-protocol/messages) page. Absent at-rest encryption, what lands on disk is exactly what the producer sent, with the server stamping `partition_id` at admission and `base_offset` / `base_timestamp` (plus a `batch_checksum` recompute) at journal append.
+
+## Indexes
+
+Each segment has an accompanying `.index` file holding a **sparse index**: one 24-byte entry per flushed write, not per message.
+
+| Field | Bytes | Type | Description |
+|-------|-------|------|-------------|
+| offset | 0..8 | u64 | Absolute offset of the flushed batch |
+| timestamp | 8..16 | u64 | Timestamp of the flushed batch |
+| position | 16..24 | u64 | Byte position of the batch start in the `.log` file |
+
+Little-endian, no header, no padding. To serve a poll, the server binary-searches the index for the closest entry at or below the target offset (or timestamp), seeks to its `position`, and walks batch records from there. Because the index is a sparse hint, a lookup below the indexed range falls back to the segment start rather than failing.
+
+There is no index caching configuration: the in-memory index cache is an internal per-segment structure the server manages itself.
+
+## Write pipeline
+
+Messages are admitted, stamped, and buffered in the partition journal, then replicated; committed batches reach a segment once a flush trigger fires:
+
+```mermaid
+graph TD
+  A["Client SendMessages: batch with producer-computed checksums"] --> B["Admission: verify checksums, stamp partition_id"]
+  B --> C["Stamp base_offset / base_timestamp, recompute batch_checksum"]
+  C --> D["Append to the in-memory partition journal"]
+  D --> E["Partition consensus: prepare replicated to the partition's replicas"]
+  E --> F{"Quorum reached?"}
+  F -->|"Yes"| G["Commit"]
+  G --> H{"Flush trigger reached?"}
+  H -->|"No"| W["Stay buffered until a later commit trips the gate"]
+  H -->|"Yes"| I["MessagesWriter: vectored write to .log + sparse index entry"]
+  I --> J{"enforce_fsync?"}
+  J -->|"Yes"| K["fdatasync .log + .index"]
+  J -->|"No"| L["OS writeback"]
+  K --> M{"Segment past segment_size?"}
+  L --> M
+  M -->|"Yes"| N["Seal segment, open next"]
+  M -->|"No"| O["Done"]
+```
+
+The flush thresholds and fsync policy are **per-topic creation options** (they used to be server-wide config):
+
+- `messages_required_to_save` (default `1024`): count threshold.
+- `size_of_messages_required_to_save` (default `1 MiB`): byte threshold.
+- `enforce_fsync` (default `false`): fdatasync the `.log` and `.index` on every flush.
+
+A third trigger is independent of these options: when buffered journal bytes reach the active segment's `segment_size`, the flush fires. Whichever trigger trips first flushes. These are soft limits: a flush writes whole batches, so the actual flushed count or size can overshoot. The gate is evaluated on commit events, so a sub-threshold batch stays buffered until a later commit trips it (shutdown flushes unconditionally). The `MessagesWriter` uses **vectored I/O** (`writev`) with up to `MAX_IOV_COUNT = 1024` buffers per syscall, so many buffered batches land in one write.
+
+Every partition belongs to a consensus group (Viewstamped Replication), and writes are prepared and quorum-acknowledged before commit. Stamping happens at journal-append time, before replication acks: the primary stamps `base_offset` from the log position and `base_timestamp` from the prepare timestamp, forwards the stamped bytes verbatim, and each backup re-derives the expected pair and refuses a mismatch, so the batch (and its recomputed `batch_checksum`) is byte-identical across replicas. At HEAD the partition-plane consensus journal is **in-memory**. Durability of message data comes from segment persistence and, in clusters, from the copies on other replicas. The metadata plane (below) has a durable on-disk journal.
+
+## Boot-time segment recovery
+
+At startup the server recovers every partition from its files, tolerating a torn tail from a crash:
+
+1. Sweep leftovers: `.staging` files and orphan `.index` files (an index without its `.log`) are deleted. A `.log` is **never deleted**.
+2. For each segment, read the segment's bounds (offsets, timestamps, size) from the 24-byte sparse index.
+3. If the index is missing or torn, walk the `.log` batch by batch and recover the bounds from the records themselves. This isn't tail-only: with the default `enforce_fsync = false`, a torn index can appear mid-chain, and the log walk recovers it.
+4. If neither the index nor the log holds one whole batch, the segment is recovered as empty: sizes are zeroed so the next append overwrites the torn bytes instead of stranding undecodable garbage inside the readable range.
+5. The last segment is left unsealed and becomes the active segment.
+
+An index entry pointing past the end of its `.log` file (a torn write mid-chain that cannot be reconciled) **refuses recovery** for that partition rather than serving corrupt data.
+
+## Read integrity
+
+Disk reads are verified before they reach a consumer:
+
+```toml
+[system.partition]
+validate_checksum = true
+```
+
+With `validate_checksum = true` (the default), every batch a disk poll reads is re-hashed and compared against its stored checksum. A mismatch **fails the poll closed**, so a segment damaged at rest is reported instead of served. Setting it to `false` skips the re-hash and serves whatever decodes, which can hand a consumer bytes provably not the ones written. Only disable it with a corruption guard elsewhere in the stack.
+
+Polls serve stored batch records as-is (a reply may be a server-sliced view of a larger stored batch), so there is no re-encoding on the read path.
+
+## Memory pool
+
+Iggy includes a custom memory pool to eliminate allocation overhead on the hot path. The pool has **28 buckets** with buffer sizes from 4 KiB up to 512 MiB (non-uniform spacing, denser around common message sizes, with sizes above 2 MiB rounded to hugepage-friendly steps). Components request a buffer from the appropriate bucket and return it when done.
+
+```toml
+[system.memory_pool]
+enabled = true
+size = "4 GiB"            # Total pool size (minimum 512 MiB, multiple of the 4096-byte page size)
+bucket_capacity = 8192    # Buffers per bucket (power of 2, minimum 128)
+```
+
+This avoids heap allocations during message processing and enables zero-copy message passing between internal components.
+
+## Retention and cleanup
+
+Two independent retention policies exist, both **per-topic creation options** (see [Topic options](/docs/server/topic-options)). The segment cleaner enforces them:
+
+```toml
+[data_maintenance.messages]
+cleaner_enabled = true    # default
+interval = "1 m"          # default
+```
+
+**Size-based retention** (`max_topic_size`): the cluster has no single owner of a topic-wide total, so each partition enforces an equal share: `max_topic_size / partition_count`, counted over **sealed** bytes. The share is floored at one sealed-segment ceiling (`segment_size` plus the maximum message-bus frame, since a sealed segment can overshoot by one batch). A cap that divides below that floor is raised to it, so the policy always means at least "keep the newest sealed segment". Once sealed bytes exceed the budget, the oldest sealed segments are trimmed. There is no percentage-based early trigger.
+
+**Time-based retention** (`message_expiry`): sealed segments whose newest message is older than the expiry are deleted.
+
+Both policies can be active at once. They only ever touch sealed segments. The active segment is **never deleted**, even if its messages have expired.
+
+## Metadata plane
+
+Metadata operations (create stream, delete topic, create user, and so on) do not use the partition storage above. They replicate through the metadata consensus group and persist in `local_data/metadata/`:
+
+- **`journal.wal`**: the prepare journal. Each entry is a 256-byte `PrepareHeader` (the consensus header carrying checksums, view, op and commit numbers, operation discriminant, and acting user) followed by the operation's wire-format body, exactly as replicated. This is the write-ahead log: an operation is journaled before it is applied.
+- **`snapshot.bin`**: a **MessagePack** (rmp-serde) snapshot of the whole metadata state machine, written at checkpoints so the journal can be truncated. Recovery loads the snapshot, then replays journal entries newer than it, rebuilding the client session table alongside.
+- **`superblock.a` / `superblock.b`**: a ping-pong pair of checkpoint records, where the newest valid slot wins by sequence number. The superblock records which checkpoint is current and the snapshot's checksum. Boot cross-checks the pairing: a superblock pointing at a checkpoint newer than the on-disk snapshot, or a snapshot whose checksum doesn't match the record, refuses to boot rather than silently rewinding committed state.
+
+Partition directories carry the same superblock mechanism for their own consensus state (replica identity, view), which is how a restarted replica proves it is itself rather than a blank impostor.
+
+## Encryption
+
+Iggy supports optional **AES-256-GCM** encryption for message payloads and state commands. When enabled, data is encrypted before being written to disk and decrypted when read. The key is a 32-byte, base64-encoded string.
+
+```toml
+[system.encryption]
+enabled = false
+key = ""  # 32-byte base64-encoded key
+```
+
+## Compression
+
+The `compression_algorithm` topic option accepts `none` (default) and `gzip`, but it is a **placeholder today**: the value is persisted and reported back, and no compression is applied anywhere - segments store payloads exactly as sent. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers) in the Iggy repo.
+
+## Removed and relocated settings
+
+Earlier releases documented several storage features and `[system.*]` keys that no longer exist:
+
+- **`cache_indexes`**: removed. Index caching is internal now (see [Indexes](#indexes)).
+- **`[system.message_deduplication]`**: the server-side deduplicator was removed entirely.
+- **Segment archiving / S3 backup**: removed. `[system.segment] archive_expired` must stay `false`. Setting it to `true` aborts boot.
+- **`[system.topic]` / `[system.partition]` / `[system.segment]` storage knobs** (`max_size`, `message_expiry`, `enforce_fsync`, `messages_required_to_save`, `size_of_messages_required_to_save`, `size`, `preallocate`): relocated to per-topic options.
+
+The config loader **refuses to boot** while any relocated or removed key is still set, in the file or the environment, so stale configs fail fast instead of silently ignoring a knob. The full mapping is in [Relocated configuration keys](/docs/server/configuration#relocated-configuration-keys).

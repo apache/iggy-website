@@ -1,0 +1,59 @@
+# Examples
+
+> Runnable Go examples from the core repository, and how to start a server they can connect to.
+
+Rendered page: https://iggy.apache.org/docs/sdk/go/examples/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/go/examples.mdx
+
+A runnable getting-started example lives in the [examples/go](https://github.com/apache/iggy/tree/master/examples/go) directory of the core repository. Its `go.mod` carries a `replace` directive pointing at the in-repo SDK, so the example always builds against the SDK source in the same checkout. The examples are exercised in CI via `scripts/run-examples-from-readme.sh --language go`.
+
+## Starting the server
+
+The Go SDK speaks the VSR (Viewstamped Replication) wire protocol, so the examples run against the VSR server. The examples log in as `iggy`/`iggy`, and root credentials are applied **only on the very first startup**, when no data directory exists yet. Start the server with the default root credentials:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+If an example fails to log in, the server data directory (`local_data` by default) was created with different credentials: delete it and start the server again with the defaults. This setup is intended only for development and testing.
+
+## Getting started
+
+The [producer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/producer/main.go) creates `sample-stream` and `sample-topic` (if missing) and sends 5 batches of 10 messages to partition `0`. The [consumer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/consumer/main.go) polls them from offset `0` and exits after 5 batches. Stream, topic, and partition IDs are **0-based**.
+
+Run both from the `examples/go` directory:
+
+```bash
+go run ./getting-started/producer/main.go
+go run ./getting-started/consumer/main.go
+```
+
+Run multiple producers and consumers at once to see how messages are distributed across clients.
+
+Both binaries accept the same flags:
+
+- `--tcp-server-address` - server address, default `127.0.0.1:8090`
+- `--tls` - enable TLS
+- `--tls-ca-file` - path to a CA certificate file
+- `--tls-domain` - TLS server domain name for SNI
+
+## TLS
+
+Start the server with TLS enabled, using the development certificates from the repository:
+
+```bash
+IGGY_TCP_TLS_ENABLED=true \
+IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
+IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
+cargo run --bin iggy-server
+```
+
+Then run the examples with the TLS flags (paths relative to `examples/go`):
+
+```bash
+go run ./getting-started/producer/main.go --tcp-server-address localhost:8090 --tls --tls-ca-file ../../core/certs/iggy_ca_cert.pem
+go run ./getting-started/consumer/main.go --tcp-server-address localhost:8090 --tls --tls-ca-file ../../core/certs/iggy_ca_cert.pem
+```
+
+For the code walkthrough, see the [quick start](/docs/sdk/go/intro#quick-start) on the intro page, which follows the same example.

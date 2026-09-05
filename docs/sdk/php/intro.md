@@ -1,0 +1,155 @@
+# PHP SDK
+
+> The experimental PHP SDK, a native extension wrapping the Rust SDK, and how to build it from source.
+
+Rendered page: https://iggy.apache.org/docs/sdk/php/intro/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/php/intro.mdx
+
+The Iggy PHP SDK is a native PHP extension built in Rust with [ext-php-rs](https://github.com/davidcole1340/ext-php-rs). It wraps the Rust SDK and exposes a synchronous `Iggy\Client`: each call drives the extension's internal Tokio runtime and blocks the calling PHP thread until the operation completes. The source code is available on [GitHub](https://github.com/apache/iggy/tree/master/foreign/php).
+
+The extension is experimental. It's defined as the `apache/iggy-php` composer package (`php-ext` type). To use it today, build it from the repository source.
+
+## Requirements
+
+- Rust and Cargo
+- PHP 8.3 or newer with `php-config` (non-thread-safe builds only, no ZTS)
+- [`cargo-php`](https://github.com/davidcole1340/ext-php-rs)
+
+## Build and install
+
+```bash
+cd foreign/php
+cargo build --release
+cargo php install --release --yes
+
+# Verify PHP can load it
+php -r 'var_dump(extension_loaded("iggy-php"));'
+```
+
+Alternatively, skip the install and point PHP at the built library per invocation:
+
+```bash
+php -d extension=target/release/libiggy_php.so my-script.php
+```
+
+On macOS the library is `libiggy_php.dylib`.
+
+## Quick start
+
+The sample below expects an Iggy server on `127.0.0.1:8090`:
+
+```bash
+# Latest release
+docker run --rm \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -p 8090:8090 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  apache/iggy:latest
+
+# Or from the repository source
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and set the `iggy`/`iggy` root credentials the sample's connection string uses.
+
+Credentials in the connection string take effect on `connect()`. Alternatively, construct the client with a plain address (`new \Iggy\Client('127.0.0.1:8090')`) and call `loginUser('iggy', 'iggy')` explicitly.
+
+```php
+<?php
+
+use Iggy\Client;
+use Iggy\PollingStrategy;
+use Iggy\SendMessage;
+
+$client = Client::fromConnectionString('iggy+tcp://iggy:iggy@127.0.0.1:8090');
+$client->connect();
+
+$stream = 'php-stream';
+$topic = 'php-topic';
+
+// Re-running this example is fine: only create what is missing.
+if ($client->getStream($stream) === null) {
+    $client->createStream($stream);
+}
+
+if ($client->getTopic($stream, $topic) === null) {
+    $client->createTopic($stream, $topic, 1);
+}
+
+$messages = [];
+foreach (range(1, 10) as $i) {
+    $messages[] = new SendMessage("message-{$i}");
+}
+$client->sendMessages($stream, $topic, 0, $messages);
+
+$polled = $client->pollMessages($stream, $topic, 0, PollingStrategy::first(), 10, true);
+foreach ($polled as $message) {
+    echo "Offset: {$message->offset()}, Payload: {$message->payload()}", PHP_EOL;
+}
+```
+
+## Consumer groups
+
+`consumerGroup()` returns an `Iggy\Consumer` that creates and joins the group by default. Consume with a bounded callback loop or a PHP iterator:
+
+```php
+<?php
+
+$consumer = $client->consumerGroup(
+    'php-consumer',
+    $stream,
+    $topic,
+    0,
+    \Iggy\PollingStrategy::next(),
+    10,
+    \Iggy\AutoCommit::disabled(),
+);
+
+// Callback style: the message limit is required and must be finite.
+$consumer->consumeMessages(
+    function (\Iggy\ReceiveMessage $message) use ($consumer): void {
+        process($message->payload());
+        $consumer->storeOffset($message->offset(), $message->partitionId());
+    },
+    100,
+);
+
+// Iterator style: break out when done.
+foreach ($consumer->iterMessages() as $message) {
+    process($message->payload());
+    $consumer->storeOffset($message->offset(), $message->partitionId());
+}
+```
+
+`AutoCommit::when()` may queue an offset commit before the callback runs. To gate commits on the callback succeeding, use `AutoCommit::disabled()` and call `storeOffset()` after the work succeeds, as above.
+
+## API notes
+
+- Methods are camelCase and classes live in the `Iggy` namespace, for example `Iggy\Client` and `Iggy\SendMessage`.
+- Partition ids are 0-based: for a topic with one partition, use `0`.
+- PHP strings are passed as named identifiers, including strings that contain only digits. PHP integers are passed as numeric identifiers.
+- `PollingStrategy::timestamp()` and `timestampMicros()` expect microseconds since the Unix epoch. Use `PollingStrategy::timestampSeconds()` for PHP `time()` values.
+- Large unsigned values that can overflow PHP integers, such as message checksums, are returned as decimal strings.
+- Errors are thrown as exceptions under `Iggy\Exception`: `AuthenticationException`, `ConnectionException`, `NotFoundException`, `TransientException`, and the `IggyException` base.
+- TLS uses the Rust SDK connection-string format, for example `iggy+tcp://user:pass@host:port?tls=true&tls_domain=localhost&tls_ca_file=/path/to/ca.pem`.
+- The extension owns a lazy global Tokio runtime. Don't call `pcntl_fork()` after the first Iggy call: the child inherits file descriptors but not the runtime's worker threads.
+
+## Current status
+
+`Iggy\Client` currently exposes stream and topic create/get/delete, message sending and polling, consumer groups with offset management, `ping()`, `loginUser()`, and raw binary requests (`sendBinaryRequest()`). Other administration surfaces (users, permissions, personal access tokens, partitions) aren't exposed yet.
+
+## Examples
+
+Working examples are available in the [examples/php](https://github.com/apache/iggy/tree/master/examples/php) directory. They read `IGGY_CONNECTION_STRING`, or build one from `IGGY_HOST`, `IGGY_PORT`, `IGGY_USERNAME`, and `IGGY_PASSWORD`:
+
+```bash
+cd examples/php
+(cd ../../foreign/php && cargo build)
+export PHP_IGGY_EXTENSION="$(pwd)/../../foreign/php/target/debug/libiggy_php.so"
+
+php -d extension="$PHP_IGGY_EXTENSION" getting-started/producer.php
+php -d extension="$PHP_IGGY_EXTENSION" getting-started/consumer.php
+```

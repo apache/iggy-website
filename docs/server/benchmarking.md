@@ -1,0 +1,115 @@
+# Benchmarking
+
+> How Iggy is benchmarked, the tooling that ships with it, and the public platform for comparing results.
+
+Rendered page: https://iggy.apache.org/docs/server/benchmarking/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/benchmarking.mdx
+
+**Benchmarks should be the first-class citizens**. We believe that performance is crucial for any system, and we strive to provide the best possible performance for our users. Please check, why we believe that the **[transparent benchmarking](https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks)** is so important.
+
+We've also built the **[benchmarking platform](https://benchmarks.iggy.apache.org)** where anyone can upload the benchmarks and compare the results with others. This is the another open-source project available [here](https://github.com/apache/iggy/tree/master/core/bench/dashboard).
+
+![Benchmarking Platform](/img/bench_platform.png)
+
+Iggy comes with a built-in benchmarking tool, `iggy-bench`. It's written in Rust and uses the `tokio` runtime for asynchronous I/O, mimicking the example client applications, so you can use it to estimate the performance of the server in your environment. It is part of the [core repository](https://github.com/apache/iggy/tree/master/core/bench) and lives in the `core/bench` directory.
+
+![Bench CLI](/img/bench_cli.png)
+
+## Running benchmarks
+
+First build the project in release mode:
+
+```bash
+cargo build --release
+```
+
+**`iggy-bench` doesn't start a server.** It only connects, and fails with a connection error when nothing is listening. Start `iggy-server` yourself first:
+
+```bash
+cargo run --bin iggy-server -r
+```
+
+or use the repo's driver script, which builds, starts the server, runs a send and a poll benchmark, and shuts the server down:
+
+```bash
+./scripts/run-benches.sh
+```
+
+With a server running, invoke the benchmark kind and transport of your choice. The tool creates the streams, topics, and partitions it needs, then sends or polls messages.
+
+## Benchmark kinds
+
+Eight kinds are available, each with a short alias:
+
+1. Pinned producer (`pp`): N producers, each sending to its own stream-topic with a single partition:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- pinned-producer tcp
+   ```
+
+2. Pinned consumer (`pc`): N consumers, each polling its own stream-topic with a single partition:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- pinned-consumer tcp
+   ```
+
+3. Pinned producer and consumer (`ppc`), in parallel:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- pinned-producer-and-consumer tcp
+   ```
+
+4. Balanced producer (`bp`): N producers sending to M partitions in K streams with balanced partitioning:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- balanced-producer tcp
+   ```
+
+5. Balanced consumer group (`bcg`): N consumers assigned to M consumer groups polling from K partitions:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- balanced-consumer-group tcp
+   ```
+
+6. Balanced producer and consumer group (`bpcg`), in parallel:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- balanced-producer-and-consumer-group tcp
+   ```
+
+7. End-to-end producing consumer (`e2e`): each task produces and then consumes its own messages, measuring the full round trip:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- end-to-end-producing-consumer tcp
+   ```
+
+8. End-to-end producing consumer group (`e2ecg`): N producing consumers assigned to M consumer groups:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- end-to-end-producing-consumer-group tcp
+   ```
+
+## Transports
+
+Every kind runs over one of four transports: `tcp`, `quic`, `http`, or `websocket` (alias `ws`). Each transport subcommand takes `--server-address` for a non-default server, for example:
+
+```bash
+cargo r --bin iggy-bench -r -- pinned-producer tcp --server-address 0.0.0.0:8090
+```
+
+Message count, batch size, message size, and the number of producers/consumers/streams are all flags on the kind subcommand. `iggy-bench --help` and `iggy-bench examples` show the full surface.
+
+## Storing and comparing results
+
+Each transport subcommand accepts a trailing `output` subcommand that persists the run (raw JSON data and charts):
+
+```bash
+cargo r --bin iggy-bench -r -- pinned-producer tcp output -o performance_results --identifier my-host
+```
+
+`-o/--output-dir` defaults to `performance_results`. Optional flags (`--remark`, `--gitref`, extra info) annotate the run. You can inspect persisted results with the in-repo report and runner crates (`core/bench/report`, `core/bench/runner`), and browse or compare them in the dashboard (`core/bench/dashboard`), which also powers the public [benchmarking platform](https://benchmarks.iggy.apache.org). A prebuilt dashboard image is available: `docker pull apache/iggy-bench-dashboard`.
+
+## Performance
+
+The server is thread-per-core and shared-nothing, built on `io_uring` (via `compio`), with shard and CPU pinning configurable under `[system.sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmarking platform](https://benchmarks.iggy.apache.org).
