@@ -76,8 +76,14 @@ export async function generateMetadata(props: {
   const page = source.getPage(params.slug);
   if (!page) notFound();
 
+  // Several chapters have pages with identical titles ("Introduction",
+  // "Examples"), which gives them identical document titles and pools them
+  // together in analytics and in search results. Prefix the chapter, as the
+  // prev/next footer already does. The on-page heading is left alone.
+  const chapter = chapterName(source.getPageTree(), page.url);
+
   return {
-    title: page.data.title,
+    title: chapter ? `${chapter}: ${page.data.title}` : page.data.title,
     description: page.data.description,
     alternates: {
       // Set both: defining alternates here replaces the root's, canonical included.
@@ -93,18 +99,26 @@ export async function generateMetadata(props: {
 // Prefix it with the chapter, i.e. the target's nearest parent folder.
 function withChapter(tree: PageTree.Root, item: PageTree.Item | undefined) {
   if (!item) return undefined;
-  const parent = PageTree.findParent(tree, item.url);
-  // The tree root is not a chapter; top-level pages keep a bare title.
-  if (!parent || parent.type !== "folder") return item;
+  const chapter = chapterName(tree, item.url);
+  if (!chapter) return item;
   return {
     ...item,
     name: (
       <>
         <span className="me-1 font-normal text-fd-muted-foreground">
-          {parent.name}:
+          {chapter}:
         </span>
         {item.name}
       </>
     ),
   };
+}
+
+// The title of the nearest parent folder, i.e. the chapter a page sits in.
+// Undefined for top-level pages, whose parent is the tree root and not a
+// chapter, and for the rare folder whose name is not a plain string.
+function chapterName(tree: PageTree.Root, url: string) {
+  const parent = PageTree.findParent(tree, url);
+  if (!parent || parent.type !== "folder") return undefined;
+  return typeof parent.name === "string" ? parent.name : undefined;
 }
