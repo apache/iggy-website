@@ -9,7 +9,7 @@ You can easily run the Iggy server with Docker - the official images can be foun
 
 Two properties of the published image matter for any deployment:
 
-- The working directory is `/app` and the `iggy-server` and `iggy` binaries are on `PATH` (`/usr/local/bin`). The default data directory `local_data` therefore resolves to `/app/local_data` - **mount your volume there**, or set `IGGY_SYSTEM_PATH` and mount that path instead.
+- The working directory is `/app` and the `iggy-server` and `iggy` binaries are on `PATH` (`/usr/local/bin`). The default data directory `local_data` therefore resolves to `/app/local_data` - **mount your volume there**, or set `IGGY_PATH` and mount that path instead.
 - The image bakes in no address overrides, so the server binds the loopback defaults (`127.0.0.1`) and is **unreachable from outside the container** even with published ports. Set `IGGY_TCP_ADDRESS=0.0.0.0:8090` (and the equivalent for every other transport you expose) alongside the `-p` flags.
 - The wildcard says nothing about where clients reach the container, so the server refuses to start until `IGGY_NODE_ADVERTISED_ADDRESS` supplies that address. Use `localhost` when the ports are published to the host, the compose service name when the clients are containers on the same network, and the external hostname or load balancer name when they are further away. The value reaches clients through cluster metadata, where it is the endpoint they reconnect through.
 

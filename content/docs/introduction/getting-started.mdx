@@ -201,7 +201,7 @@ async fn init_system(client: &IggyClient) {
 }
 ```
 
-Every field of `TopicCreateOptions` left as `None` resolves to the **server defaults**. It's also where the per-topic durability knobs live: `segment_size`, `enforce_fsync` and the flush thresholds (`messages_required_to_save`, `size_of_messages_required_to_save`) can all be set at topic creation.
+Optional fields of `TopicCreateOptions` left as `None` resolve to the **server defaults**. The `durability` and `consumer_offset_durability` fields use `Durability::Replicated` or `Durability::Persisted` and default independently to `Replicated`. They select the completion guarantee for messages and explicit offset changes. Segment size and the flush thresholds (`messages_required_to_save`, `size_of_messages_required_to_save`) are separate creation options. See [Durability](/docs/server/durability).
 
 Finally, let's send some messages into our stream. We will implement the basic loop with an interval between each iteration to simulate publishing the batch of messages. Since the streaming server works directly with the binary data, and couldn't care less about the (de)serialization format for the message payload, it's really up to you, how to efficiently stream the messages for your use case.
 
