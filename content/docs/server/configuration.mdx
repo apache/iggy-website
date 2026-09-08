@@ -297,7 +297,7 @@ Set `path` before any TOML table header. `[runtime] path = "runtime"` and `[logg
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `false` | Encrypt stored message payloads and state commands with AES-256-GCM. |
+| `enabled` | `false` | Encrypt stored message payloads and user headers with AES-256-GCM. Metadata journals, snapshots, and structural record headers remain unencrypted. |
 | `key` | `""` (empty) | 32-byte key, base64-encoded. Required when enabled. Secret-flagged: prefer `IGGY_ENCRYPTION_KEY`. |
 
 ### `[memory_pool]`
@@ -354,7 +354,7 @@ The Rust, Go, Python, Node, and async Java SDKs ping automatically every 5 s, we
 Valid `cpu_allocation` syntaxes:
 
 - `"all"`: one shard per available CPU core
-- a number, e.g. `4`: four shards pinned to cores 0 to 3
+- a number, e.g. `4`: four shards on the first four CPUs in the process's allowed set when `pin_cores` is enabled
 - a range, e.g. `"5..8"`: three shards on cores 5, 6, 7
 - `"numa:auto"`: all NUMA nodes and cores, NUMA-aware
 - `"numa:nodes=0,1;cores=4;no_ht=true"`: NUMA nodes 0 and 1, four cores each, no hyperthreads

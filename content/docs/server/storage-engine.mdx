@@ -174,7 +174,7 @@ Partition directories carry the same superblock mechanism for their own consensu
 
 ## Encryption
 
-Iggy supports optional **AES-256-GCM** encryption for message payloads and state commands. When enabled, data is encrypted before being written to disk and decrypted when read. The key is a 32-byte, base64-encoded string.
+Iggy supports optional **AES-256-GCM** encryption for message payloads and user headers. They are encrypted before storage and decrypted for polling. Metadata journals, metadata snapshots, and structural record headers remain unencrypted. The key must decode from base64 to 32 bytes. See [Security](/docs/server/security#data-encryption-at-rest).
 
 ```toml
 [encryption]
@@ -184,7 +184,7 @@ key = ""  # 32-byte base64-encoded key
 
 ## Compression
 
-The `compression_algorithm` topic option accepts `none` (default) and `gzip`, but it is a **placeholder today**: the value is persisted and reported back, and no compression is applied anywhere - segments store payloads exactly as sent. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers) in the Iggy repo.
+The `compression_algorithm` topic option accepts `none` (default) and `gzip`, but it is a **placeholder today**: the value is persisted and reported back, but no message compression is applied. Payload encryption still applies when enabled. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers) in the Iggy repo.
 
 ## Removed and relocated settings
 

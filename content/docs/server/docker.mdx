@@ -7,7 +7,7 @@ description: "Run the Iggy server from the official Docker images, and deploy it
 
 You can easily run the Iggy server with Docker - the official images can be found [here](https://hub.docker.com/r/apache/iggy), simply type `docker pull apache/iggy`.
 
-Two properties of the published image matter for any deployment:
+These properties of the published image matter for deployment:
 
 - The working directory is `/app` and the `iggy-server` and `iggy` binaries are on `PATH` (`/usr/local/bin`). The default data directory `local_data` therefore resolves to `/app/local_data` - **mount your volume there**, or set `IGGY_PATH` and mount that path instead.
 - The image bakes in no address overrides, so the server binds the loopback defaults (`127.0.0.1`) and is **unreachable from outside the container** even with published ports. Set `IGGY_TCP_ADDRESS=0.0.0.0:8090` (and the equivalent for every other transport you expose) alongside the `-p` flags.
@@ -15,7 +15,7 @@ Two properties of the published image matter for any deployment:
 
 Below is an example `docker-compose.yml` which overrides the default configuration (see [Configuration](/docs/server/configuration)) with environment variables. If you prefer using the configuration file, you can mount it as a volume and provide the path to it with the `IGGY_CONFIG_PATH` environment variable.
 
-When running the container, **make sure to include the additional capabilities** required by `io_uring` and CPU affinity:
+The examples use a permissive syscall profile and unlimited locked memory for development. Production deployments can use a custom seccomp profile and a finite locked-memory budget that permit the server's required operations. See [Linux tuning](/docs/server/linux-tuning#runtime-access-and-process-limits).
 
 ```yaml
 services:
@@ -64,9 +64,9 @@ docker run -d --name iggy \
 
 ### Why these capabilities?
 
-- **`SYS_NICE`** - required for setting CPU affinity (`sched_setaffinity`) in the thread-per-core architecture
-- **`seccomp:unconfined`** - required for `io_uring` syscalls which are blocked by Docker's default seccomp profile
-- **`memlock: -1`** - `io_uring` needs to lock memory pages shared between user space and kernel
+- **`SYS_NICE`** broadens scheduling and NUMA permissions. Pinning a thread owned by the process with `sched_setaffinity` does not by itself require this capability; container policies can impose additional restrictions. See [Linux affinity permissions](https://man7.org/linux/man-pages/man2/sched_setaffinity.2.html).
+- **`seccomp:unconfined`** permits `io_uring` calls blocked by Docker's default seccomp profile. A custom profile allowing the required syscalls is an alternative to disabling filtering. See [Docker seccomp profiles](https://docs.docker.com/engine/security/seccomp/).
+- **`memlock: -1`** removes the process's locked-memory limit. A finite limit is valid if it covers the runtime's requirements; neither setting overrides the container's memory limit.
 
 ### Available images
 

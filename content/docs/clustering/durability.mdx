@@ -39,7 +39,7 @@ Iggy's replication quorum is not a strict majority for every group size:
 Except for two replicas, the replication quorum is `min(ceil(n / 2), 3)`
 and the view-change quorum is `n - replication_quorum + 1`. Two replicas
 require both for either quorum. The quorums therefore intersect. These are
-the [implemented quorum rules](https://github.com/apache/iggy/blob/194d0fdc0385d6d7ba1004f6d0e429116996a5ee/core/consensus/src/impls.rs),
+the [implemented quorum rules](https://github.com/apache/iggy/blob/97f7b0c0335f81691bef34f923f21d783016a6a4/core/consensus/src/impls.rs),
 not a configurable acknowledgement count.
 
 ## Replicated completion
@@ -130,8 +130,8 @@ Neither policy turns HTTP `ack=none` or a poll's auto-commit into an awaited
 durable result. See [Which responses prove completion](/docs/server/durability#which-responses-prove-completion).
 
 The storage mechanisms are implemented in the
-[partition persistence worker](https://github.com/apache/iggy/blob/194d0fdc0385d6d7ba1004f6d0e429116996a5ee/core/partitions/src/persistence.rs)
-and [prepare journal](https://github.com/apache/iggy/blob/194d0fdc0385d6d7ba1004f6d0e429116996a5ee/core/journal/src/partition_journal.rs).
-The [crash-recovery tests](https://github.com/apache/iggy/blob/194d0fdc0385d6d7ba1004f6d0e429116996a5ee/core/integration/tests/cluster/crash_durability.rs)
+[partition persistence worker](https://github.com/apache/iggy/blob/97f7b0c0335f81691bef34f923f21d783016a6a4/core/partitions/src/persistence.rs)
+and [prepare journal](https://github.com/apache/iggy/blob/97f7b0c0335f81691bef34f923f21d783016a6a4/core/journal/src/partition_journal.rs).
+The [crash-recovery tests](https://github.com/apache/iggy/blob/97f7b0c0335f81691bef34f923f21d783016a6a4/core/integration/tests/cluster/crash_durability.rs)
 exercise acknowledged persisted messages and offsets below ordinary flush
 thresholds, on both a singleton and a three-replica cluster.
