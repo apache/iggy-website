@@ -20,12 +20,16 @@
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import { homeOptions } from "@/lib/layout.shared";
 import { ForceDarkTheme } from "@/components/force-dark-theme";
+import { AnnouncementBar } from "@/components/announcement-bar";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <HomeLayout {...homeOptions()} themeSwitch={{ enabled: false }}>
-      <ForceDarkTheme />
-      {children}
-    </HomeLayout>
+    <>
+      <AnnouncementBar />
+      <HomeLayout {...homeOptions()} themeSwitch={{ enabled: false }}>
+        <ForceDarkTheme />
+        {children}
+      </HomeLayout>
+    </>
   );
 }
