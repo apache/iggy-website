@@ -92,10 +92,10 @@ Eight kinds are available, each with a short alias:
 Every kind runs over one of four transports: `tcp`, `quic`, `http`, or `websocket` (alias `ws`). Each transport subcommand takes `--server-address` for a non-default server, for example:
 
 ```bash
-cargo r --bin iggy-bench -r -- pinned-producer tcp --server-address 0.0.0.0:8090
+cargo r --bin iggy-bench -r -- pinned-producer tcp --server-address 127.0.0.1:8090
 ```
 
-Message count, batch size, message size, and the number of producers/consumers/streams are all flags on the kind subcommand. `iggy-bench --help` and `iggy-bench examples` show the full surface.
+Message count, batch size, message size, and both durability flags precede the kind subcommand. Producer, consumer, stream, and partition counts belong to the selected kind. `iggy-bench --help` and `iggy-bench examples` show the full surface.
 
 ## Storing and comparing results
 
@@ -109,4 +109,18 @@ cargo r --bin iggy-bench -r -- pinned-producer tcp output -o performance_results
 
 ## Performance
 
-The server is thread-per-core and shared-nothing, built on `io_uring` (via `compio`), with shard and CPU pinning configurable under `[system.sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmarking platform](https://benchmarks.iggy.apache.org).
+The server is thread-per-core and shared-nothing, built on `io_uring` (via `compio`), with shard and CPU pinning configurable under `[sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmarking platform](https://benchmarks.iggy.apache.org).
+
+## Prepare the host and topic policies
+
+Use the [Linux tuning guide](/docs/server/linux-tuning) to check process limits, swap, huge pages, CPU/NUMA placement, writeback, and network capacity before measuring. Record the exact host settings and change one variable at a time. Use a separate load generator, or disjoint CPU sets when it shares a host with the server.
+
+`--durability` and `--consumer-offset-durability` independently default to `replicated`. Place them before the benchmark kind. For example, this keeps consumer offsets replicated while measuring persisted message acknowledgments:
+
+```bash
+cargo r --bin iggy-bench -r -- --durability persisted balanced-producer-and-consumer-group tcp
+```
+
+Add `--consumer-offset-durability persisted` to request that policy too. These are create-time options and have no effect on existing topics with `--reuse-streams`. Poll auto-commit remains asynchronous, so poll latency is not an acknowledged offset-store measurement. `iggy-bench examples` shows all benchmark kinds, transports, policy combinations, and available topic-option examples.
+
+Keep both policies, replication-group size, batch and message sizes, CPU allocation, and storage consistent between runs. Run long enough to include flushes and checkpoints, and report tail latency, errors, memory pressure, and client utilization alongside throughput.

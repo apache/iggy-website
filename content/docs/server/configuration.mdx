@@ -23,6 +23,8 @@ address = "0.0.0.0:3000"
 
 Both listeners here bind a wildcard, which tells the server nothing about where clients reach it, so [`[node]`](#node) has to name that address explicitly - without it this file is refused at boot.
 
+Host and kernel settings are configured separately from the server TOML. See [Linux tuning](/docs/server/linux-tuning) for service limits, memory policies, huge pages, CPU placement, and validation before deployment.
+
 ## How configuration loads
 
 Configuration is resolved in three layers. Later layers win:
