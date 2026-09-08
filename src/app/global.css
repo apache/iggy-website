@@ -32,8 +32,15 @@
 }
 
 :root {
-    --color-fd-primary: hsl(34 100% 51%);
-    --color-fd-primary-foreground: hsl(0 0% 0%);
+    --color-fd-foreground: #000000;
+    --color-fd-muted-foreground: #000000;
+    --color-fd-card-foreground: #000000;
+    --color-fd-popover-foreground: #000000;
+    --color-fd-secondary-foreground: #000000;
+    --color-fd-accent-foreground: #000000;
+    --color-fd-primary: #fb4800;
+    --color-fd-primary-foreground: #000000;
+    --color-fd-ring: #fb4800;
     --sh-class: #e879f9;
     --sh-identifier: #e2e8f0;
     --sh-sign: #b0bec5;
@@ -56,7 +63,7 @@
     --sh-string: #a5d6ff;
     --sh-keyword: #ff7b72;
     --sh-comment: #636b75;
-    --color-fd-primary: hsl(34 100% 51%);
+    --color-fd-primary: #fb4800;
     --color-fd-primary-foreground: hsl(0 0% 0%);
     --color-fd-background: hsl(222 55% 6%);
     --color-fd-foreground: hsl(42 100% 95%);
@@ -67,7 +74,7 @@
     --color-fd-border: hsl(216 14% 20%);
     --color-fd-accent: hsl(222 44% 16%);
     --color-fd-accent-foreground: hsl(42 100% 95%);
-    --color-fd-ring: hsl(34 100% 51%);
+    --color-fd-ring: #fb4800;
     --color-fd-popover: hsl(222 55% 10%);
     --color-fd-popover-foreground: hsl(42 100% 95%);
     --color-fd-secondary: hsl(222 30% 12%);
