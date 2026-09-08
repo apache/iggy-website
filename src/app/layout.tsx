@@ -24,7 +24,7 @@ import { Matomo } from "@/components/matomo";
 import { SITE_DESCRIPTION, SITE_URL } from "@/lib/site";
 import "./global.css";
 
-const OG_IMAGE = "/img/apache-iggy-color-darkbg0.5x.png";
+const OG_IMAGE = "/img/og-card.png";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -44,8 +44,8 @@ export const metadata: Metadata = {
     images: [
       {
         url: OG_IMAGE,
-        width: 1951,
-        height: 652,
+        width: 1200,
+        height: 630,
         alt: "Apache Iggy",
       },
     ],
