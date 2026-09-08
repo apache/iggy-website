@@ -35,6 +35,7 @@ export const STATIC_ROUTES = [
   "/",
   "/blogs",
   "/downloads",
+  "/powered-by",
   "/community",
   "/community/become-a-committer",
   "/community/brand-kit",
@@ -45,6 +46,21 @@ export const STATIC_ROUTES = [
 ] as const;
 
 /** `trailingSlash: true` in next.config.mjs, so every emitted URL ends in a slash. */
+/**
+ * JSON-LD has to be injected as raw text: React would HTML-escape it as a child
+ * and the quotes would end up as entities. Callers build the object from
+ * constants, so nothing is user input, but JSON.stringify does not escape "<"
+ * -- so escape it, and a stray "</script>" can never close the tag.
+ *
+ * `src/app/layout.tsx` still carries its own private copy of this. It was left
+ * alone deliberately: that file is under active change elsewhere, and folding
+ * the two together is not worth a merge conflict. Worth de-duplicating the
+ * next time layout.tsx is touched for another reason.
+ */
+export function serializeJsonLd(data: unknown): string {
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}
+
 export function absoluteUrl(path: string): string {
   const withLeading = path.startsWith("/") ? path : `/${path}`;
   const withTrailing = withLeading.endsWith("/") ? withLeading : `${withLeading}/`;
