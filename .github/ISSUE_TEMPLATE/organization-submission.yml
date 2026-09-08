@@ -1,0 +1,133 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: "Powered By Iggy submission"
+description: "Add your organization or project to iggy.apache.org/powered-by"
+title: "[Powered By] <organization or project name>"
+labels: ["powered-by"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for telling the community what you are building on Apache Iggy.
+
+        Only the first three fields are required. Everything else is optional,
+        and an entry that is just a name and a link is perfectly normal.
+
+        **This issue is public.** Only put things here you are happy to see on
+        a public website.
+
+  - type: input
+    id: name
+    attributes:
+      label: Organization or project name
+      description: Exactly as it should be printed.
+      placeholder: Acme Inc
+    validations:
+      required: true
+
+  - type: input
+    id: website
+    attributes:
+      label: Website
+      placeholder: https://example.com
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment_stage
+    attributes:
+      label: Deployment stage
+      description: >-
+        Recorded for the project's own understanding of adoption. The Powered
+        By page does not sort or label organizations by this.
+      options:
+        - Production
+        - Pilot / POC
+        - Evaluating
+        - Integration / community project
+    validations:
+      required: true
+
+  - type: input
+    id: use_case
+    attributes:
+      label: What are you using Apache Iggy for?
+      description: >-
+        A short phrase. Becomes the category shown above your description.
+      placeholder: Change data capture
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Short description
+      description: >-
+        One to three sentences, in the third person. This is published as
+        written, so phrase it the way you want to be quoted. Leave it blank and
+        your entry appears in the logo wall without a write-up.
+      placeholder: >-
+        Acme Inc uses Apache Iggy as the transport behind its real-time
+        pricing engine, fanning market data out to pricing workers across three
+        regions.
+
+  - type: input
+    id: technologies
+    attributes:
+      label: Relevant technologies and integrations
+      description: Optional. Comma separated; rendered as tags.
+      placeholder: Rust SDK, PostgreSQL CDC, Apache Iceberg
+
+  - type: textarea
+    id: logo
+    attributes:
+      label: Logo
+      description: >-
+        Optional. Attach or link an SVG (preferred) or a transparent PNG at
+        least 400px wide. The site has a light and a dark theme, so two
+        variants are ideal. Supply one and the other theme shows your name as
+        text, which looks fine. We highly encourage your to submit the logo.
+
+  - type: input
+    id: case_study
+    attributes:
+      label: Public case study or blog post
+      description: Optional. A link we can point readers at.
+      placeholder: https://example.com/blog/why-we-chose-iggy
+
+  - type: input
+    id: contact
+    attributes:
+      label: Contact for follow-up
+      description: >-
+        Optional, and never published on the website. Note that this issue
+        itself is public, so if you would rather not post an address, leave
+        this blank -- a committer will reply in the thread, or you can email
+        dev@iggy.apache.org.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: >-
+            The information above is accurate and cleared for publication on a
+            public website.
+          required: true
+        - label: >-
+            I am authorized to grant the Apache Software Foundation permission
+            to display the logo above, and I grant it. (Only needed if you want
+            a logo shown -- entries without it are published as text.)

@@ -1,0 +1,109 @@
+---
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+# =====================================================================
+# Powered By Iggy -- organization entry template
+#
+# 1. Copy to content/organizations/<your-slug>.mdx
+#    (lowercase, hyphenated: content/organizations/acme.mdx)
+# 2. Fill in what you have. Delete every field you do not use.
+# 3. Put any logo files in public/img/organizations/.
+# 4. Open a pull request against apache/iggy-website.
+#
+# A committer reviews the entry and sets `draft: false` to publish it.
+# Field reference: content/organizations/README.md
+# =====================================================================
+
+# REQUIRED. Printed exactly as written.
+name: Acme Inc
+
+# REQUIRED. Public URL. Leave it out rather than guessing -- the tile renders unlinked.
+website: https://example.com
+
+# Optional. A short phrase describing the workload. Shown above the
+# description in "How Iggy is being used".
+useCaseCategory: Change data capture
+
+# Optional, and the field that matters most. One to three sentences, third
+# person, published as written. Supplying it moves your entry from the logo
+# wall into the use-case section.
+#
+# Leave it out unless there is something real to say. An entry that is just a
+# name and a logo is a perfectly good entry; a padded one is worse than none.
+description: >-
+  Acme Streaming uses Apache Iggy as the transport behind its real-time pricing
+  engine, fanning market data out to pricing workers across three regions.
+
+# Optional. Rendered as tags. Keep them short.
+technologies:
+  - Rust SDK
+  - PostgreSQL CDC
+
+# Optional. A public write-up we can link to.
+caseStudyUrl: https://example.com/blog/why-we-chose-iggy
+
+# Optional. Attributed pull quote.
+quote: Iggy gave us the fan-out latency we needed without another JVM to run.
+quoteAuthor: Name, Role at Acme Streaming
+
+# ---------------------------------------------------------------------
+# Logos (all optional)
+#
+# The site has a light and a dark theme.
+#   logo      -- legible on a LIGHT background
+#   logoDark  -- legible on a DARK background
+# Supply what you have; the theme with no artwork shows your name as text.
+#
+# SVG preferred, transparent PNG at least 400px wide is fine. Commit files to
+# public/img/organizations/ and reference them from /img/organizations/.
+#
+# permissionConfirmed MUST be true for any logo to render. Setting it is your
+# statement that you are authorized to grant the ASF permission to display the
+# mark on iggy.apache.org. The build also checks the file is actually present,
+# so a missing file falls back to text rather than shipping a broken image.
+# ---------------------------------------------------------------------
+logo: /img/organizations/acme-streaming.svg
+logoDark: /img/organizations/acme-streaming-dark.svg
+permissionConfirmed: false
+
+# REQUIRED: production | pilot | evaluating | integration
+#
+# Recorded for the project's own understanding of adoption. It is NOT used to
+# group or label organizations on the page -- see the README for why.
+deploymentStatus: production
+
+# Reserved for entries with a quote or case study. Sorts them first.
+featured: false
+
+# Leave as true. A committer sets it to false once the submission is verified,
+# and that is what publishes the entry.
+draft: true
+
+# Optional. GitHub handle of whoever submitted this.
+submittedBy: "@your-github-handle"
+---
+
+## Maintainer notes
+
+Nothing below the frontmatter is rendered on the page. Use this space for
+anything a reviewer should know: who confirmed the logo permission, what is
+still outstanding, which URL was guessed.
+
+This is MDX, so a bare `<` starts a JSX tag and fails the build. Write links
+as `[text](url)`, not `<https://example.com>`, and wrap placeholders like
+`<name>` in backticks.

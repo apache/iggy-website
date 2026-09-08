@@ -17,7 +17,7 @@
  * under the License.
  */
 
-import { docs, blogPosts } from "fumadocs-mdx:collections/server";
+import { docs, blogPosts, organizations } from "fumadocs-mdx:collections/server";
 import { loader } from "fumadocs-core/source";
 
 export const source = loader({
@@ -27,3 +27,6 @@ export const source = loader({
 
 // Blog posts as raw collection for direct access to custom schema fields
 export { blogPosts };
+
+// Organization entries powering /powered-by
+export { organizations };

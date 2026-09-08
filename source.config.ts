@@ -44,6 +44,61 @@ export const blogPosts = defineCollections({
   }),
 });
 
+export const organizations = defineCollections({
+  type: "doc",
+  dir: "content/organizations",
+  // Submission instructions live beside the entries for contributors, but
+  // only completed organization MDX files belong to this collection.
+  files: ["**/*.mdx", "!TEMPLATE.mdx"],
+  schema: z.object({
+    // Organization or project name, exactly as it should be printed.
+    name: z.string(),
+    // Public URL. Omit when it is not known -- the entry renders unlinked
+    // rather than pointing somewhere unverified.
+    website: z.string().optional(),
+
+    // Logo variants. `logo` must be legible on a light background, `logoDark`
+    // on a dark one. Either may be omitted; the wall falls back to the name
+    // set as text for whichever theme has no artwork.
+    logo: z.string().optional(),
+    logoDark: z.string().optional(),
+    // Logos render only when the submitter has confirmed they are authorized
+    // to grant the ASF permission to display the mark, AND the file is
+    // actually committed. See content/organizations/README.md.
+    permissionConfirmed: z.boolean().optional().default(false),
+
+    // A short category for the workload, e.g. "AI infrastructure",
+    // "Change data capture", "Observability". Rendered as a label above the
+    // description in the "How Iggy is being used" section.
+    useCaseCategory: z.string().optional(),
+    // One to three sentences about what the organization uses Iggy for.
+    // Presence of this field is what promotes an entry out of the logo wall
+    // and into the use-case section -- so leave it empty unless there is
+    // something substantive to say. Never write filler.
+    description: z.string().optional(),
+    technologies: z.array(z.string()).optional().default([]),
+    since: z.string().optional(),
+    caseStudyUrl: z.string().optional(),
+    quote: z.string().optional(),
+    quoteAuthor: z.string().optional(),
+
+    // Collected at submission time and kept for the project's own records.
+    // Deliberately NOT used as the page's public taxonomy: with adoption
+    // still early, sorting a handful of names into production vs evaluating
+    // advertises how few there are. Revisit when the numbers justify a
+    // "Running Iggy in production" cut.
+    deploymentStatus: z
+      .enum(["production", "pilot", "evaluating", "integration"])
+      .optional(),
+
+    // Reserved for entries that earn a richer treatment (quote, case study).
+    featured: z.boolean().optional().default(false),
+    // Entries stay hidden until a committer has verified the submission.
+    draft: z.boolean().optional().default(true),
+    submittedBy: z.string().optional(),
+  }),
+});
+
 export default defineConfig({
   mdxOptions: {
     remarkPlugins: [remarkMdxMermaid],
