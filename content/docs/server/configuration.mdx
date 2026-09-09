@@ -8,7 +8,6 @@ The server reads a single TOML file. A copy of [`core/server/config.toml`](https
 A config file doesn't have to be complete. It is **merged over the embedded defaults**, so a minimal file overrides only what it names:
 
 ```toml
-[system]
 path = "/var/lib/iggy"
 
 [node]
@@ -23,6 +22,8 @@ address = "0.0.0.0:3000"
 
 Both listeners here bind a wildcard, which tells the server nothing about where clients reach it, so [`[node]`](#node) has to name that address explicitly - without it this file is refused at boot.
 
+Host and kernel settings are configured separately from the server TOML. See [Linux tuning](/docs/server/linux-tuning) for service limits, memory policies, huge pages, CPU placement, and validation before deployment.
+
 ## How configuration loads
 
 Configuration is resolved in three layers. Later layers win:
@@ -33,7 +34,7 @@ Configuration is resolved in three layers. Later layers win:
 
 Before the environment is read, the server loads a `.env` file from the working directory, or from the path named by `IGGY_ENV_PATH`.
 
-After boot the server writes the effective configuration, including the addresses it actually bound, to `{system.path}/runtime/current_config.toml`.
+After boot the server writes the effective configuration, including the addresses it actually bound, to `{path}/runtime/current_config.toml` with the default runtime subdirectory.
 
 ### Environment variables
 
@@ -43,23 +44,23 @@ Every configuration key can be overridden with an `IGGY_` variable. The name is 
 IGGY_TCP_ADDRESS=0.0.0.0:8090          # [tcp] address
 IGGY_NODE_ADVERTISED_ADDRESS=iggy-1    # [node] advertised_address
 IGGY_HTTP_ENABLED=true                 # [http] enabled
-IGGY_SYSTEM_PATH=/var/lib/iggy         # [system] path
-IGGY_SYSTEM_LOGGING_LEVEL=debug        # [system.logging] level
-IGGY_SYSTEM_SHARDING_CPU_ALLOCATION=4  # [system.sharding] cpu_allocation
+IGGY_PATH=/var/lib/iggy               # root path
+IGGY_LOGGING_LEVEL=debug              # [logging] level
+IGGY_SHARDING_CPU_ALLOCATION=4        # [sharding] cpu_allocation
 ```
 
 Two variables live outside the config schema: `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` set the root credentials, always as a pair. **Only the first creation** of the root user reads them. On an existing data directory the stored root user is recovered unchanged.
 
 ### Secrets
 
-Five values are secret-flagged: `http.jwt.encoding_secret`, `http.jwt.decoding_secret`, `system.encryption.key`, `cluster.auth.shared_secret`, and `cluster.auth.previous_shared_secret`. Prefer setting them through their environment variables (`IGGY_HTTP_JWT_ENCODING_SECRET`, `IGGY_SYSTEM_ENCRYPTION_KEY`, `IGGY_CLUSTER_AUTH_SHARED_SECRET`, and so on) instead of storing them in a file. Secret values are masked in logs and **never serialized** into `runtime/current_config.toml`.
+Five values are secret-flagged: `http.jwt.encoding_secret`, `http.jwt.decoding_secret`, `encryption.key`, `cluster.auth.shared_secret`, and `cluster.auth.previous_shared_secret`. Prefer setting them through their environment variables (`IGGY_HTTP_JWT_ENCODING_SECRET`, `IGGY_ENCRYPTION_KEY`, `IGGY_CLUSTER_AUTH_SHARED_SECRET`, and so on) instead of storing them in a file. Secret values are masked in logs and **never serialized** into `runtime/current_config.toml`.
 
 ### Validation at boot
 
-- Unknown keys are **silently ignored**. A typo in a key name leaves the default in force, so check spelling when a setting doesn't seem to take effect. The [relocated keys](#relocated-configuration-keys) below are the exception: they refuse boot.
-- `system.segment.archive_expired = true` and `system.recovery.recreate_missing_state = true` are unsupported placeholders. Setting either aborts boot.
+- Unknown top-level TOML fields and unknown server `IGGY_` environment names **reject startup**. Some nested tables can still ignore unknown fields, so compare the effective configuration with the intended settings.
+- The old `[system]` table and its environment mappings are rejected. Removed placeholders such as `archive_expired` and `recreate_missing_state` must be removed, not set to `false`.
 - Several sections validate relationships between keys (QUIC windows, sharding shutdown budgets, metadata journal sizing, partition transfer floors). A violation aborts boot with an error naming the keys. The constraints are listed with their sections below.
-- The `RUST_LOG` environment variable **always takes precedence** over `system.logging.level`.
+- The `RUST_LOG` environment variable **always takes precedence** over `logging.level`.
 
 ## Command-line flags
 
@@ -67,27 +68,36 @@ Five values are secret-flagged: `http.jwt.encoding_secret`, `http.jwt.decoding_s
 
 | Flag | Description |
 |------|-------------|
-| `--fresh`, `-f` | Delete the configured data directory (`local_data` by default, see `IGGY_SYSTEM_PATH`) before boot and start on empty state. In cluster mode this wipes **this replica only**; it rejoins and refills by state transfer from the others. Wiping a quorum at the same time destroys committed data. Do not put `--fresh` in a service unit: it would re-transfer the whole dataset on every restart. |
+| `--fresh`, `-f` | Delete the configured data directory (`local_data` by default, see `IGGY_PATH`) before boot and start on empty state. In cluster mode this wipes **this replica only**; it rejoins and refills by state transfer from the others. Wiping a quorum at the same time can destroy committed data. Do not put `--fresh` in a service unit: it would re-transfer the whole dataset on every restart. |
 | `--with-default-root-credentials` | Set `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` to `iggy` unless they are already present in the environment. Only the first creation of the root user reads these values. Development only. |
 | `--replica-id <N>` | Identify this node within `cluster.nodes`. Required when `cluster.enabled = true`; the value must match exactly one `replica_id` in the roster. |
 
 ## Relocated configuration keys
 
-Retention, durability, and segment layout are no longer server-wide settings. They became per-topic options set at topic creation. See [Topic options](/docs/server/topic-options). The server **refuses to boot** while any of the old keys is still present, in the config file or in the environment, and the error names the replacement. This is deliberate: the storage knobs are create-only options now, so a topic created while an old key was silently ignored could never be given the setting afterwards.
+The server configuration no longer has a `[system]` wrapper. Its runtime tables live at the root, and the data directory is the root `path` key. Old `IGGY_SYSTEM_*` overrides are rejected. Retention, durability, and segment layout are [topic creation options](/docs/server/topic-options), not server-wide defaults.
 
 | Old server key | Replacement |
 |----------------|-------------|
+| `system.path` / `IGGY_SYSTEM_PATH` | Root `path` / `IGGY_PATH` |
+| `system.runtime`, `system.logging`, `system.encryption`, `system.memory_pool`, `system.sharding` | Root tables `runtime`, `logging`, `encryption`, `memory_pool`, `sharding`; remove `SYSTEM_` from their environment names |
+| `system.partition.validate_checksum` | `partition.validate_checksum` |
+| `system.partition.path`, `partition.path` / `IGGY_PARTITION_PATH` | Removed. The `partitions` path component is fixed. |
 | `system.topic.max_size` | `max_topic_size` topic option |
 | `system.topic.message_expiry` | `message_expiry` topic option |
-| `system.partition.enforce_fsync` | `enforce_fsync` topic option |
+| `system.partition.enforce_fsync` | `durability` topic option: `replicated` or `persisted` |
+| `partition.consumer_offset_enforce_fsync` | `consumer_offset_durability` topic option: `replicated` or `persisted` |
 | `system.partition.messages_required_to_save` | `messages_required_to_save` topic option |
 | `system.partition.size_of_messages_required_to_save` | `size_of_messages_required_to_save` topic option |
 | `system.segment.size` | `segment_size` topic option |
 | `system.segment.preallocate` | `preallocate_segments` topic option |
-| `system.message_deduplication` (whole section) | Removed with the feature. No replacement. |
+| `system.stream.path`, `system.topic.path` | Removed. The `streams` and `topics` path components are fixed; root `[stream]` and `[topic]` tables are rejected. |
+| `system.segment.archive_expired`, `system.recovery.recreate_missing_state` | Removed. Delete the keys and their old tables. |
+| `system.message_deduplication` (whole section) | Removed. No equivalent configuration. |
 | `extra` (whole section) | Removed. Admission caps are compile-time constants. No replacement. |
 
-Other sections from older configs (`[message_saver]`, `[system.state]`, `[system.backup]`, `[system.compression]`, `[tcp.socket]`, segment `cache_indexes`, and similar) were removed without a boot check. Like any unknown key they're silently ignored. Remove them from your file.
+Remove the old tables and environment variables after migrating their values. Topic policies cannot be configured through TOML or `IGGY_` overrides, and the former `enforce_fsync` topic option is also rejected. Both new durability policies independently default to `replicated`; explicitly select `persisted` at topic creation where required. Neither can be changed with `UpdateTopic`.
+
+Other removed sections, such as `[message_saver]`, `[system.state]`, `[system.backup]`, `[system.compression]`, and `[tcp.socket]`, must also be removed. Consult the embedded configuration for the deployed binary rather than relying on ignored legacy fields.
 
 ## Reference
 
@@ -263,19 +273,19 @@ The `self_signed` flag doesn't mean the same thing everywhere:
 
 Ephemeral certificates **change on every start** and are meant for loopback development, not production.
 
-### `[system]`
+### Root data path and runtime
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `path` | `"local_data"` | Base directory for all server data. Everything below is relative to it. |
 
-Storage sub-paths chain relative to each other: `[system.runtime] path = "runtime"` (runtime data, including `current_config.toml`), `[system.logging] path = "logs"`, `[system.stream] path = "streams"`, `[system.topic] path = "topics"` (relative to the stream path), `[system.partition] path = "partitions"` (relative to the topic path).
+Set `path` before any TOML table header. `[runtime] path = "runtime"` and `[logging] path = "logs"` are relative to it. Data uses the fixed layout `{path}/streams/{stream_id}/topics/{topic_id}/partitions/{partition_id}`. Stream, topic, and partition path overrides are rejected.
 
-### `[system.logging]`
+### `[logging]`
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `path` | `"logs"` | Log directory, relative to `system.path`. |
+| `path` | `"logs"` | Log directory, relative to the root `path`. |
 | `level` | `"info"` | Filter directive in `RUST_LOG` syntax: simple levels or directives like `"warn,server=debug,iggy=trace"`. The `RUST_LOG` environment variable always takes precedence. |
 | `file_enabled` | `true` | Write logs to file as well as stdout. |
 | `max_file_size` | `"500 MB"` | Size at which a log file rotates. `0` means one unbounded file, which disables size-based rotation. |
@@ -283,32 +293,14 @@ Storage sub-paths chain relative to each other: `[system.runtime] path = "runtim
 | `rotation_check_interval` | `"1 h"` | How often rotation status is checked. Avoid values below 1 s. |
 | `retention` | `"7 days"` | How long log files are kept. Avoid values below 1 s. |
 
-### `[system.encryption]`
+### `[encryption]`
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `false` | Encrypt stored message payloads and state commands with AES-256-GCM. |
-| `key` | `""` (empty) | 32-byte key, base64-encoded. Required when enabled. Secret-flagged: prefer `IGGY_SYSTEM_ENCRYPTION_KEY`. |
+| `enabled` | `false` | Encrypt stored message payloads and user headers with AES-256-GCM. Metadata journals, snapshots, and structural record headers remain unencrypted. |
+| `key` | `""` (empty) | 32-byte key, base64-encoded. Required when enabled. Secret-flagged: prefer `IGGY_ENCRYPTION_KEY`. |
 
-### `[system.partition]`
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `path` | `"partitions"` | Partition data directory, relative to the topic path. |
-| `validate_checksum` | `true` | Re-hash every batch a disk poll reads and fail the poll closed on a mismatch, so a segment damaged at rest is reported instead of served. `false` serves whatever decodes, which can hand a consumer bytes provably not the ones written. Only turn it off with a corruption guard elsewhere in the stack. |
-
-Durability and flush cadence (`enforce_fsync`, `messages_required_to_save`, `size_of_messages_required_to_save`) are per-topic creation options. See [Topic options](/docs/server/topic-options).
-
-### `[system.segment]` and `[system.recovery]`
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `system.segment.archive_expired` | `false` | Unsupported placeholder. Setting `true` aborts boot. |
-| `system.recovery.recreate_missing_state` | `false` | Unsupported placeholder. Setting `true` aborts boot. |
-
-Segment size and preallocation are per-topic creation options (`segment_size`, `preallocate_segments`).
-
-### `[system.memory_pool]`
+### `[memory_pool]`
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -347,7 +339,7 @@ The Rust, Go, Python, Node, and async Java SDKs ping automatically every 5 s, we
 | `telemetry.traces.transport` | `"grpc"` | Trace export transport: `"grpc"` or `"http"`. |
 | `telemetry.traces.endpoint` | `"http://localhost:7281/v1/traces"` | Trace export endpoint. |
 
-### `[system.sharding]`
+### `[sharding]`
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -362,7 +354,7 @@ The Rust, Go, Python, Node, and async Java SDKs ping automatically every 5 s, we
 Valid `cpu_allocation` syntaxes:
 
 - `"all"`: one shard per available CPU core
-- a number, e.g. `4`: four shards pinned to cores 0 to 3
+- a number, e.g. `4`: four shards on the first four CPUs in the process's allowed set when `pin_cores` is enabled
 - a range, e.g. `"5..8"`: three shards on cores 5, 6, 7
 - `"numa:auto"`: all NUMA nodes and cores, NUMA-aware
 - `"numa:nodes=0,1;cores=4;no_ht=true"`: NUMA nodes 0 and 1, four cores each, no hyperthreads
@@ -379,11 +371,15 @@ Tunables for the metadata consensus plane (shard 0's VSR replica: users, streams
 
 ### `[partition]`
 
-Per-partition consensus plane tunables. Unlike `[metadata]` (one plane on shard 0), a pipeline exists per partition, so raising these **multiplies pinned memory by the partition count**.
+Partition storage and consensus tunables share this table. Unlike `[metadata]` (one plane on shard 0), a pipeline exists per partition, so raising per-partition budgets **multiplies resource use by the partition count**.
+
+`durability`, `consumer_offset_durability`, segment size, preallocation, and the message/byte flush thresholds are [topic creation options](/docs/server/topic-options). `wal_bytes_max` sizes the persistence machinery without selecting the topic's completion policy.
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `prepare_queue_depth` | `32` | Uncommitted produce and consumer-offset ops in flight per partition. Submits past it spill into a request queue of twice this depth; once both are full the server drops the request without a reply and the client retries on its own timeout. Must be between 1 and 127. |
+| `validate_checksum` | `true` | Re-hash batches read from segment storage and report a mismatch instead of serving them. |
+| `wal_bytes_max` | `"256 MiB"` | Active WAL plus queued/in-flight prepare budget per multi-replica partition when either topic policy is `persisted`. A 4 KiB multiple, from 128 MiB + 8 KiB through 4 GiB. Checkpointing reclaims history only after materialized state is synchronized. Temporary rewrites require extra disk space. Environment override: `IGGY_PARTITION_WAL_BYTES_MAX`. |
 | `evicted_ring_capacity` | `4096` | Entries retained per multi-replica partition for journal repair after a peer rejoins. Must be between 1 and 65536. Single-replica partitions retain nothing. |
 | `evicted_ring_bytes_max` | `"16 MiB"` | Byte ceiling for the evicted ring; whichever ring cap trips first evicts. At most `"256 MiB"`. |
 | `transfer_served_cache_bytes_max` | `"2176 MiB"` | Byte budget, **per shard**, for segment payloads kept resident to serve state-transfer chunk requests. The default fits two sealed segments at the 1 GiB ceiling, each with one max-message overshoot. Serving concurrency is `floor(this / max(transfer_artifact_bytes_max, 1 GiB + 64 MiB))`, minimum one; boot warns when it drops below two. At most `"64 GiB"`. |

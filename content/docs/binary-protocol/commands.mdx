@@ -80,7 +80,7 @@ LEAVE_CONSUMER_GROUP = 605                # operation 149
 SYNC_CONSUMER_GROUP = 606                 # non-replicated
 ```
 
-`FLUSH_UNSAVED_BUFFER` still decodes on the wire, but the server has no on-demand flush primitive and answers every call with `FeatureUnavailable`. Per-topic durability is configured with the `enforce_fsync` [topic option](/docs/server/topic-options) instead.
+`FLUSH_UNSAVED_BUFFER` still decodes on the wire, but the server has no on-demand flush primitive and answers every call with `FeatureUnavailable`. Per-topic message completion is configured with the `durability` [topic option](/docs/server/topic-options).
 
 ## Payloads
 
@@ -178,7 +178,7 @@ Patch semantics: absent option keys are left unchanged.
 [stream_id: Identifier][partitions_count: u32][name_len: u8][name: N][options block to end]
 ```
 
-The fixed fields are the shape of the operation: which stream, how many partitions, what name. Every topic setting (`compression_algorithm`, `message_expiry`, `max_topic_size`, `segment_size`, `enforce_fsync`, `messages_required_to_save`, `size_of_messages_required_to_save`, `preallocate_segments`) rides the options block. See [Topic options](/docs/server/topic-options). `partitions_count` is an argument, not a setting: it is consumed at admission and never persisted as an option.
+The fixed fields are the shape of the operation: which stream, how many partitions, what name. Every topic setting (`compression_algorithm`, `message_expiry`, `max_topic_size`, `segment_size`, `durability`, `consumer_offset_durability`, `messages_required_to_save`, `size_of_messages_required_to_save`, `preallocate_segments`) rides the options block. See [Topic options](/docs/server/topic-options). `partitions_count` is an argument, not a setting: it is consumed at admission and never persisted as an option.
 
 **Delete topic. Code: 303.**
 
@@ -262,7 +262,7 @@ The 16-byte prefix is followed by a stream of [batch records](/docs/binary-proto
 [stream_id: Identifier][topic_id: Identifier][partition_id: u32][fsync: u8]
 ```
 
-Parses, but the server always answers `FeatureUnavailable`: there is no on-demand flush primitive. Use the per-topic `enforce_fsync` option for durability guarantees.
+Parses, but the server always answers `FeatureUnavailable`: there is no on-demand flush primitive. Select `durability=persisted` at topic creation to require recoverable stable-storage copies before successful message completion.
 
 ### Consumer offsets
 
