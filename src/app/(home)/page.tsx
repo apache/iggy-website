@@ -180,7 +180,7 @@ export default function HomePage() {
           </div>
 
           {/* CTA Buttons */}
-          <div className="mx-auto mt-14 flex max-w-lg flex-col items-center justify-center gap-5 sm:flex-row">
+          <div className="mx-auto mt-14 flex max-w-3xl flex-col flex-wrap items-center justify-center gap-5 sm:flex-row">
             <Link
               href="/docs/introduction/getting-started"
               className="inline-flex items-center rounded-lg bg-[#ff9103] px-8 py-3.5 text-lg font-semibold text-[#0e0f11] transition-colors hover:bg-[#ffa703]"
@@ -200,6 +200,13 @@ export default function HomePage() {
                 unoptimized
               />
               View on GitHub
+            </Link>
+            <Link
+              href="https://discord.gg/apache-iggy"
+              target="_blank"
+              className="inline-flex items-center rounded-lg border border-[#ff9103] px-8 py-3.5 text-lg font-light text-[#ff9103] transition-all hover:shadow-[0_0_20px_-3px_#ffa7038a]"
+            >
+              Join Discord
             </Link>
           </div>
         </div>
