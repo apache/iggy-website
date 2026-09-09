@@ -84,7 +84,7 @@ export function homeOptions(): BaseLayoutProps {
           alt="Apache Iggy"
           width={240}
           height={80}
-          className="h-10 w-auto md:h-12"
+          className="h-10 w-auto shrink-0 md:h-12"
           unoptimized
         />
       ),
@@ -98,7 +98,7 @@ export function homeOptions(): BaseLayoutProps {
 export function siteOptions(): BaseLayoutProps {
   return {
     nav: {
-      title: <Logo className="h-10 w-auto md:h-12" />,
+      title: <Logo className="h-10 w-auto shrink-0 md:h-12" />,
       transparentMode: "top",
     },
     searchToggle: { enabled: false },
@@ -109,7 +109,7 @@ export function siteOptions(): BaseLayoutProps {
 export function docsOptions(): BaseLayoutProps {
   return {
     nav: {
-      title: <Logo className="h-9 w-auto md:h-11" />,
+      title: <Logo className="h-9 w-auto shrink-0 md:h-11" />,
     },
     links: [
       { text: "Home", url: "/" },

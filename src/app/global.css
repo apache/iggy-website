@@ -94,6 +94,17 @@ header#nd-nav button {
     font-size: 0.9375rem;
 }
 
+/* The logo sits in an anchor fumadocs renders, and that anchor is a flex item
+   with the default shrink of 1. Once the nav links and the right-hand group
+   fill the row the anchor is squeezed and the image is squashed with it: at a
+   1100px viewport it rendered 57x62 where the file's ratio wants 184x62. Pin
+   the anchor and the image so the row overflows instead of deforming the mark. */
+header#nd-nav nav > a:first-child,
+header#nd-nav nav > a:first-child img {
+    flex-shrink: 0;
+    max-width: none;
+}
+
 /* The default fumadocs mobile navbar background is only 80% opaque, which
    lets page content ghost through while scrolling underneath. Force it opaque. */
 header#nd-subnav {
