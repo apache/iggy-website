@@ -54,7 +54,7 @@ export function publishedOrganizations(): Organization[] {
 }
 
 export function hasUseCase(entry: Organization): boolean {
-  return Boolean(entry.description?.trim());
+  return Boolean(entry.description?.trim()) && entry.showText !== false;
 }
 
 /**
