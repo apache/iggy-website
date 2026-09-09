@@ -114,7 +114,7 @@ Semantics:
 - **Update** requests are patches: keys absent from the block are left alone, never reset. A client built before a key existed cannot erase it.
 - Unknown keys are rejected at the wire edge, never silently skipped.
 
-The catalog is discoverable at runtime with `DESCRIBE_OPTIONS` (code 13), payload `[scope: u8]` with scope `1` = topic, `2` = stream, `3` = user (HTTP: `GET /options/topic`). Today only topics have keys. The stream and user catalogs are empty, and any key sent for them is rejected. The topic catalog (`segment_size`, `enforce_fsync`, `message_expiry`, `max_topic_size`, and the rest) with defaults and constraints is documented on the [Topic options](/docs/server/topic-options) page. `UpdateTopic` accepts only `compression_algorithm`, `message_expiry`, and `max_topic_size`. The storage-layout knobs are create-only.
+The catalog is discoverable at runtime with `DESCRIBE_OPTIONS` (code 13), payload `[scope: u8]` with scope `1` = topic, `2` = stream, `3` = user (HTTP: `GET /options/topic`). Today only topics have keys. The stream and user catalogs are empty, and any key sent for them is rejected. The topic catalog (`segment_size`, `durability`, `consumer_offset_durability`, `message_expiry`, `max_topic_size`, and the rest) with defaults and constraints is documented on the [Topic options](/docs/server/topic-options) page. `UpdateTopic` accepts only `compression_algorithm`, `message_expiry`, and `max_topic_size`. Both durability policies and the storage-layout knobs are create-only.
 
 ## Compression
 

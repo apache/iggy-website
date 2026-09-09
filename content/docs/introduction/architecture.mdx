@@ -118,8 +118,10 @@ Iggy uses a custom memory pool with 28 buckets holding buffer sizes from 4 KiB t
 
 Messages flow through a multi-stage write pipeline:
 
-1. Messages arrive on the owning shard and are buffered in the partition journal
-2. A flush is triggered when either the message count threshold or the size threshold is reached - both are **per-topic options** set at topic creation (defaults: 1024 messages, 1 MiB)
-3. The `MessagesWriter` uses **vectored I/O** with up to 1024 buffers per syscall
-4. `fsync` per write is a per-topic option (`enforce_fsync`) for durability guarantees
-5. When a segment reaches the topic's segment size (default 1 GiB), it is **sealed** and a new segment is created
+1. Messages arrive on the owning shard and are buffered in the partition journal.
+2. Partition VSR replicates prepares. With `durability=persisted`, a multi-replica group requires recoverable prepare-WAL copies at the replication quorum before commit.
+3. Committed operations are applied before success is returned. A singleton with `durability=persisted` synchronizes local segment state before replying.
+4. Ordinary segment writes use per-topic count and byte thresholds (defaults: 1024 messages, 1 MiB); required persistence, capacity pressure, and lifecycle work can flush earlier. The `MessagesWriter` uses **vectored I/O** with up to 1024 buffers per syscall.
+5. When a segment reaches the topic's segment size (default 1 GiB), it is **sealed** and a new segment is created.
+
+Message `durability` and `consumer_offset_durability` default independently to `replicated`. Both policies write data to disk; `persisted` adds a stable-storage requirement at completion. See [Durability](/docs/server/durability).

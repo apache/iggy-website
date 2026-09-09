@@ -107,10 +107,10 @@ For production deployments, provide proper certificates via `cert_file` and `key
 
 ## Data encryption at rest
 
-Iggy supports optional **AES-256-GCM** encryption for message payloads and state commands. When enabled, all data is encrypted before being written to disk and decrypted when read. The encryption key must be a 32-byte base64-encoded string.
+Iggy supports optional **AES-256-GCM** encryption for message payloads and user headers. They are encrypted before storage and decrypted for polling. Metadata journals, metadata snapshots, and structural record headers remain unencrypted. This option does not provide whole-directory encryption. The encryption key must decode from base64 to 32 bytes.
 
 ```toml
-[system.encryption]
+[encryption]
 enabled = false
 key = ""  # 32-byte base64-encoded key
 ```

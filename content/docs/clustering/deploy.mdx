@@ -85,13 +85,13 @@ Start each replica in a separate terminal. Use a different data path for every p
 
 ```bash
 # Replica 0
-IGGY_SYSTEM_PATH=local_data/node-0 ./target/debug/iggy-server --replica-id 0
+IGGY_PATH=local_data/node-0 ./target/debug/iggy-server --replica-id 0
 
 # Replica 1
-IGGY_SYSTEM_PATH=local_data/node-1 ./target/debug/iggy-server --replica-id 1
+IGGY_PATH=local_data/node-1 ./target/debug/iggy-server --replica-id 1
 
 # Replica 2
-IGGY_SYSTEM_PATH=local_data/node-2 ./target/debug/iggy-server --replica-id 2
+IGGY_PATH=local_data/node-2 ./target/debug/iggy-server --replica-id 2
 ```
 
 The exported settings must be present in all three terminals.
@@ -103,7 +103,7 @@ In cluster mode:
 - `ports` is the single source of listener ports: every enabled transport needs an explicit per-node port, otherwise the server **refuses to start**
 - `tcp_replica` carries replica-to-replica consensus traffic and is **always required**
 - `ip` must be a **literal IP address**. Use `advertised_address` when clients can't reach it (see [Configuration](/docs/clustering/configuration))
-- use a different `system.path` for each process on the same host
+- use a different root `path` for each process on the same host
 
 ## Spanning multiple hosts
 

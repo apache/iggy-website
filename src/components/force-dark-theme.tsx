@@ -32,6 +32,7 @@ export function ForceDarkTheme() {
 
     return () => {
       if (prev) root.setAttribute("data-theme", prev);
+      else root.removeAttribute("data-theme");
       root.style.colorScheme = prevScheme || "";
     };
   }, []);
