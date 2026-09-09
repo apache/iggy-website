@@ -29,6 +29,7 @@ const footerSections = [
     links: [
       { text: "Team", url: "/community/team" },
       { text: "Contribute", url: "/community/how-to-contribute" },
+      { text: "Mailing Lists", url: "/community/mailing-lists" },
       { text: "Discord", url: "https://discord.gg/apache-iggy" },
       { text: "LinkedIn", url: "https://www.linkedin.com/company/apache-iggy/" },
     ],

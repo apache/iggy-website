@@ -50,6 +50,11 @@ export const communityPages = [
     href: "/community/brand-kit",
     description: "Use Apache Iggy names and marks correctly.",
   },
+  {
+    title: "Mailing Lists",
+    href: "/community/mailing-lists",
+    description: "Subscribe to dev@ and read the public archives.",
+  },
 ];
 
 export function CommunityLayout({
