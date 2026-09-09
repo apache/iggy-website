@@ -33,7 +33,7 @@ docker run --rm \
   apache/iggy:latest
 ```
 
-`SYS_NICE`, the seccomp setting and the memlock limit are all required by `io_uring` and the thread-per-core architecture; see [Docker & Helm](/docs/server/docker) for the details. `IGGY_TCP_ADDRESS` is needed because the server binds to `127.0.0.1` inside the container by default, which a published port cannot reach. `IGGY_NODE_ADVERTISED_ADDRESS` is needed because that wildcard leaves the server with no address to give clients, and it refuses to start rather than publish one nobody can dial. Here the port is published to the host, so `localhost` is that address. Setting the root credentials explicitly means the username and password used later in this guide will work.
+The capabilities, seccomp setting, and memlock limit form a permissive development setup. Production deployments can use narrower syscall permissions and a finite memory budget; see [Docker & Helm](/docs/server/docker#why-these-capabilities) for the details. `IGGY_TCP_ADDRESS` is needed because the server binds to `127.0.0.1` inside the container by default, which a published port cannot reach. `IGGY_NODE_ADVERTISED_ADDRESS` is needed because that wildcard leaves the server with no address to give clients, and it refuses to start rather than publish one nobody can dial. Here the port is published to the host, so `localhost` is that address. Setting the root credentials explicitly means the username and password used later in this guide will work.
 
 Alternatively, build from source by cloning the [repository](https://github.com/apache/iggy) and running:
 
@@ -201,7 +201,7 @@ async fn init_system(client: &IggyClient) {
 }
 ```
 
-Every field of `TopicCreateOptions` left as `None` resolves to the **server defaults**. It's also where the per-topic durability knobs live: `segment_size`, `enforce_fsync` and the flush thresholds (`messages_required_to_save`, `size_of_messages_required_to_save`) can all be set at topic creation.
+Optional fields of `TopicCreateOptions` left as `None` resolve to the **server defaults**. The `durability` and `consumer_offset_durability` fields use `Durability::Replicated` or `Durability::Persisted` and default independently to `Replicated`. They select the completion guarantee for messages and explicit offset changes. Segment size and the flush thresholds (`messages_required_to_save`, `size_of_messages_required_to_save`) are separate creation options. See [Durability](/docs/server/durability).
 
 Finally, let's send some messages into our stream. We will implement the basic loop with an interval between each iteration to simulate publishing the batch of messages. Since the streaming server works directly with the binary data, and couldn't care less about the (de)serialization format for the message payload, it's really up to you, how to efficiently stream the messages for your use case.
 
