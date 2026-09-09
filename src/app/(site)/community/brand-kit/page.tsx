@@ -68,7 +68,7 @@ export default function BrandKitPage() {
                 src={asset.src}
                 alt={asset.title}
                 width={220}
-                height={72}
+                height={73}
                 className="max-h-20 w-auto object-contain"
                 unoptimized
               />

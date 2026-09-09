@@ -83,7 +83,7 @@ export function homeOptions(): BaseLayoutProps {
           src="/img/apache-iggy-color-darkbg0.5x.png"
           alt="Apache Iggy"
           width={240}
-          height={48}
+          height={80}
           className="h-10 w-auto md:h-12"
           unoptimized
         />
