@@ -5,13 +5,17 @@ description: "How Iggy is benchmarked, the tooling that ships with it, and the p
 
 **Benchmarks should be the first-class citizens**. We believe that performance is crucial for any system, and we strive to provide the best possible performance for our users. Please check, why we believe that the **[transparent benchmarking](https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks)** is so important.
 
-We've also built the **[benchmarking platform](https://benchmarks.iggy.apache.org)** where anyone can upload the benchmarks and compare the results with others. This is the another open-source project available [here](https://github.com/apache/iggy/tree/master/core/bench/dashboard).
+We've also built the **[benchmarking platform](https://benchmarks.iggy.apache.org)** where you can browse published benchmarks and compare results. This is the another open-source project available [here](https://github.com/apache/iggy/tree/master/core/bench/dashboard).
 
 ![Benchmarking Platform](/img/bench_platform.png)
+
+*Historical dashboard screenshot showing a 0.5.0 run, not 0.9.0 measurements.*
 
 Iggy comes with a built-in benchmarking tool, `iggy-bench`. It's written in Rust and uses the `tokio` runtime for asynchronous I/O, mimicking the example client applications, so you can use it to estimate the performance of the server in your environment. It is part of the [core repository](https://github.com/apache/iggy/tree/master/core/bench) and lives in the `core/bench` directory.
 
 ![Bench CLI](/img/bench_cli.png)
+
+*Historical CLI screenshot. Server-start and cleanup flags shown there have been removed; use the commands below and the current `iggy-bench --help`.*
 
 ## Running benchmarks
 
@@ -79,7 +83,7 @@ Producer and consumer counts default to six. Pinned workloads also default to si
    cargo r --bin iggy-bench -r -- balanced-producer-and-consumer-group tcp
    ```
 
-7. End-to-end producing consumer (`e2e`): each task produces and then consumes its own messages, measuring the full round trip:
+7. End-to-end producing consumer (`e2e`): each task alternates producing and consuming, measuring latency from the messages' producer timestamps:
 
    ```bash
    cargo r --bin iggy-bench -r -- end-to-end-producing-consumer tcp
@@ -109,11 +113,13 @@ Each transport subcommand accepts a trailing `output` subcommand that persists t
 cargo r --bin iggy-bench -r -- pinned-producer tcp output -o performance_results --identifier my-host
 ```
 
-`-o/--output-dir` defaults to `performance_results`. Optional flags (`--remark`, `--gitref`, extra info) annotate the run. You can inspect persisted results with the in-repo report and runner crates (`core/bench/report`, `core/bench/runner`), and browse or compare them in the dashboard (`core/bench/dashboard`), which also powers the public [benchmarking platform](https://benchmarks.iggy.apache.org). A prebuilt dashboard image is available: `docker pull apache/iggy-bench-dashboard`.
+When the server address uses `localhost` or `127.0.0.1`, the saved command includes non-secret environment settings from the server configuration catalog. Credentials and unknown `IGGY_` variables are omitted.
+
+`-o/--output-dir` defaults to `performance_results`. Optional flags (`--remark`, `--gitref`, extra info) annotate the run. Generated charts use the in-repo report library (`core/bench/report`). The runner (`core/bench/runner`) executes benchmarks across Git revisions. You can browse or compare results in the dashboard (`core/bench/dashboard`), which also powers the public [benchmarking platform](https://benchmarks.iggy.apache.org). A prebuilt dashboard image is available: `docker pull apache/iggy-bench-dashboard:edge`.
 
 ## Performance
 
-The server is thread-per-core and shared-nothing, built on `io_uring` (via `compio`), with shard and CPU pinning configurable under `[sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmarking platform](https://benchmarks.iggy.apache.org).
+The server is thread-per-core and shared-nothing, built on `io_uring` on Linux (via `compio`), with shard and CPU pinning configurable under `[sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmarking platform](https://benchmarks.iggy.apache.org).
 
 ## Prepare the host and topic policies
 

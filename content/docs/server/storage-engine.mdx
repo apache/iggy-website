@@ -3,7 +3,7 @@ title: Storage Engine
 description: "The segmented append-only log, and how streams, topics, partitions and segments map onto files on disk."
 ---
 
-Iggy's storage engine is built around the concept of a **segmented append-only log**. Every piece of data flows through a well-defined hierarchy: System -> Streams -> Topics -> Partitions -> Segments. This page covers how data is stored, indexed, flushed, recovered, and cleaned up on disk.
+Iggy's storage engine is built around the concept of a **segmented append-only log**. Message data follows a hierarchy: System -> Streams -> Topics -> Partitions -> Segments. This page covers how data is stored, indexed, flushed, recovered, and cleaned up on disk.
 
 <StreamHierarchy />
 
@@ -42,7 +42,7 @@ local_data/
                         └── 00000000000016000000.index
 ```
 
-Stream, topic, and partition ids are numeric and **0-based**. Each partition directory holds pairs of `.log` and `.index` files. The filename is the start offset of the segment's first message, zero-padded to 20 digits. Next to the segments, every partition keeps its own superblock pair (replica identity and consensus state for that partition) and an `offsets/` tree for consumer offset storage. Multi-replica partitions also keep a prepare WAL when either topic durability policy is `persisted`.
+Stream, topic, and partition ids are numeric and **0-based**. Each partition directory holds pairs of `.log` and `.index` files. The filename is the segment's start offset, zero-padded to 20 digits. Recovery can create an empty active segment at a reserved offset beyond the last stored message. Next to the segments, every partition keeps its own superblock pair (replica identity and consensus state for that partition) and an `offsets/` tree for consumer offset storage. Multi-replica partitions also keep a prepare WAL when either topic durability policy is `persisted`.
 
 ## Segmented log
 
@@ -129,13 +129,13 @@ Disk reads are verified before they reach a consumer:
 validate_checksum = true
 ```
 
-With `validate_checksum = true` (the default), every batch a disk poll reads is re-hashed and compared against its stored checksum. A mismatch **fails the poll closed**, so a segment damaged at rest is reported instead of served. Setting it to `false` skips the re-hash and serves whatever decodes, which can hand a consumer bytes provably not the ones written. Only disable it with a corruption guard elsewhere in the stack.
+With `validate_checksum = true` (the default), every batch a disk poll reads is re-hashed and compared against its stored checksum. A mismatch stops the disk walk and logs an error on the server. The consumer receives any valid prefix already read, or an ordinary empty poll if none was read; the protocol does not report the checksum failure to the consumer. Repeated polls can therefore wait indefinitely at damaged data. Setting it to `false` skips the re-hash and serves whatever decodes, which can hand a consumer bytes provably not the ones written. Only disable it with a corruption guard elsewhere in the stack.
 
-Polls serve stored batch records as-is (a reply may be a server-sliced view of a larger stored batch), so there is no re-encoding on the read path.
+Binary polls reuse the stored batch layout. A reply may slice a larger stored batch and rewrite its header, and at-rest encryption requires decryption before the reply. HTTP additionally serializes the result as JSON.
 
 ## Memory pool
 
-Iggy includes a custom memory pool to eliminate allocation overhead on the hot path. The pool has **28 buckets** with buffer sizes from 4 KiB up to 512 MiB (non-uniform spacing, denser around common message sizes, with sizes above 2 MiB rounded to hugepage-friendly steps). Components request a buffer from the appropriate bucket and return it when done.
+Iggy includes a custom memory pool to reuse buffers on the hot path. The pool has **28 buckets** with buffer sizes from 4 KiB up to 512 MiB (non-uniform spacing, denser around common message sizes, with sizes above 2 MiB rounded to hugepage-friendly steps). Components request a buffer from the appropriate bucket and return it when done.
 
 ```toml
 [memory_pool]
@@ -144,11 +144,11 @@ size = "4 GiB"            # Total pool size (minimum 512 MiB, multiple of the 40
 bucket_capacity = 8192    # Buffers per bucket (power of 2, minimum 128)
 ```
 
-This avoids heap allocations during message processing and enables zero-copy message passing between internal components.
+Buffers are allocated lazily. A pool miss can allocate outside the pool, so message processing is not allocation-free. Internal components can pass ownership of existing buffers without copying their contents.
 
 ## Retention and cleanup
 
-Two independent retention policies exist, both **per-topic creation options** (see [Topic options](/docs/server/topic-options)). The segment cleaner enforces them:
+Two independent retention policies exist, both **per-topic options configurable at creation or update** (see [Topic options](/docs/server/topic-options)). The segment cleaner enforces them:
 
 ```toml
 [data_maintenance.messages]
@@ -160,7 +160,7 @@ interval = "1 m"          # default
 
 **Time-based retention** (`message_expiry`): sealed segments whose newest message is older than the expiry are deleted.
 
-Both policies can be active at once. They only ever touch sealed segments. The active segment is **never deleted**, even if its messages have expired.
+Both policies can be active at once. They only ever touch sealed segments. Deletion also stops at the minimum committed consumer or consumer-group offset, and pending persistence checkpoints can defer it. The active segment is **never deleted by retention**, even if its messages have expired.
 
 ## Metadata plane
 

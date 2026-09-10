@@ -280,7 +280,7 @@ export function SegmentVisualization() {
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Partition Storage Layout</h3>
       <p className="text-xs text-fd-muted-foreground m-0 mb-5">
-        Each partition contains a segmented log. Segments are sealed at 1 GiB and new ones created automatically. Click a segment to inspect its files.
+        Example partition at the default 1 GiB segment size. Rotation can exceed that size by one batch; message counts depend on payload and batch sizes. Click a segment to inspect its files.
       </p>
 
       <div className="space-y-3">
@@ -343,7 +343,7 @@ export function SegmentVisualization() {
                       <span className="text-[11px] font-mono font-bold text-fd-foreground">.log</span>
                     </div>
                     <span className="text-[10px] text-fd-muted-foreground block">Message data (headers + payloads)</span>
-                    <span className="text-[10px] text-fd-muted-foreground block">batch records, 48-byte frame per message</span>
+                    <span className="text-[10px] text-fd-muted-foreground block">batch records, 48-byte header per message</span>
                   </div>
                   <div className="rounded-lg bg-fd-accent/30 p-3">
                     <div className="flex items-center gap-2 mb-1">
@@ -356,8 +356,8 @@ export function SegmentVisualization() {
                 </div>
                 <div className="flex gap-4 text-[10px] text-fd-muted-foreground">
                   <span>Offsets: <code className="text-fd-foreground">{seg.startOffset.toLocaleString()}</code> .. <code className="text-fd-foreground">{seg.endOffset.toLocaleString()}</code></span>
-                  {seg.status === "sealed" && <span>Read-only, safe to archive</span>}
-                  {seg.status === "active" && <span>Accepting writes via vectored I/O</span>}
+                  {seg.status === "sealed" && <span>Read-only segment</span>}
+                  {seg.status === "active" && <span>Active; flushed with vectored I/O</span>}
                 </div>
               </div>
             )}
@@ -850,7 +850,7 @@ export function ServerEcosystem() {
         <div className="relative rounded-2xl border-2 border-fd-primary/40 bg-gradient-to-br from-fd-primary/10 to-fd-primary/5 px-8 py-5 text-center shadow-lg shadow-fd-primary/10">
           <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-fd-primary shard-pulse" />
           <span className="text-lg font-bold text-fd-primary block">Iggy Server</span>
-          <span className="text-xs text-fd-muted-foreground block mt-1">Thread-per-core + io_uring</span>
+          <span className="text-xs text-fd-muted-foreground block mt-1">Thread-per-core + io_uring (Linux)</span>
           <div className="flex justify-center gap-1.5 mt-2">
             {["TCP :8090", "QUIC :8080", "HTTP :3000", "WS :8092"].map((p) => (
               <span key={p} className="px-1.5 py-0.5 rounded text-[8px] font-mono font-medium bg-fd-primary/15 text-fd-primary">{p}</span>
@@ -1213,7 +1213,7 @@ export function DocsHero() {
 
             <a href="/docs/introduction/architecture" className="flex-1 rounded-lg border-2 border-fd-primary/30 bg-fd-primary/5 p-3 text-center no-underline group hover:border-fd-primary/50 transition-colors">
               <span className="text-sm font-bold text-fd-primary block">Iggy Server</span>
-              <span className="text-[10px] text-fd-muted-foreground block mt-1">Thread-per-core + io_uring</span>
+              <span className="text-[10px] text-fd-muted-foreground block mt-1">Thread-per-core + io_uring (Linux)</span>
               <div className="flex justify-center gap-1 mt-2">
                 {["TCP", "QUIC", "WS", "HTTP"].map((p) => (
                   <span key={p} className="px-1.5 py-0.5 rounded text-[8px] font-mono font-bold bg-fd-primary/15 text-fd-primary">{p}</span>

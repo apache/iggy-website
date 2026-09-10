@@ -22,7 +22,7 @@ Every request and reply on the stateful transports starts with a fixed 256-byte 
 
 ## Connection handling across shards
 
-The server runs one shard per core (thread-per-core, shared-nothing). All listeners (every client transport) bind on shard 0 only. Shard 0's coordinator hands accepted plaintext TCP and WebSocket connections to peer shards round-robin by transferring the file descriptor at accept time. From then on the connection lives entirely on its shard. QUIC, TCP with TLS, and HTTP terminate on shard 0, because their per-connection state cannot move between threads. Sockets **never migrate** after accept: an operation that touches a partition owned by another shard rides the internal message bus instead.
+The server runs one thread and runtime per selected shard (thread-per-core, shared-nothing), with CPU selection and optional pinning controlled by `[sharding]`. All listeners (every client transport) bind on shard 0 only. Shard 0's coordinator hands accepted plaintext TCP and WebSocket connections to peer shards round-robin by transferring the file descriptor at accept time. From then on the connection lives entirely on its shard. QUIC, TCP with TLS, WebSocket with TLS, and HTTP terminate on shard 0, because their per-connection state cannot move between threads. Sockets **never migrate** after accept: an operation that touches a partition owned by another shard rides the internal message bus instead.
 
 ## TCP
 
@@ -64,7 +64,7 @@ key_file = ""
 
 A few of these are deliberate rather than arbitrary:
 
-- `max_concurrent_bidi_streams = 1`: the SDK opens a fresh stream per command and the server accepts one at a time, so a connection carries one in-flight command. Raising the cap does **not** make handlers concurrent.
+- `max_concurrent_bidi_streams = 1`: the Rust SDK opens a fresh stream per command and the server accepts one at a time, so a connection carries one in-flight command. Raising the cap does **not** make handlers concurrent.
 - `initial_mtu = "1200 B"` is the QUIC minimum. MTU discovery probes upward automatically, and boot rejects values below 1200.
 - `stream_receive_window` is the per-stream slice of `receive_window`, equal to it because there is a single stream. Lower it if you ever raise the stream cap.
 - `keep_alive_interval` is one third of `max_idle_timeout`, so two consecutive lost keep-alives fit before the idle timer closes the connection.
@@ -73,20 +73,20 @@ A few of these are deliberate rather than arbitrary:
 
 The HTTP API is built on [axum](https://github.com/tokio-rs/axum) and provides a standard REST interface. It includes JWT authentication, CORS configuration, and optional TLS.
 
-HTTP is the most accessible protocol but has the highest overhead due to JSON serialization and the stateless nature of HTTP (no persistent connections for consumer groups). You can find all the available endpoints in the [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http) file.
+HTTP is the most accessible protocol but has the highest overhead due to JSON serialization and the stateless nature of HTTP (no persistent connections for consumer groups). You can find request examples in the [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http) file.
 
 The HTTP server also hosts:
 
-- **Prometheus metrics** at `/metrics` (endpoint configurable via `[http.metrics]`). The route authenticates like every other read: scrapers must present a bearer credential (JWT or personal access token). `/ping` is the *only* route that requires no credential at all.
-- **Embedded Web UI** at `/ui`, which requires `web_ui = true` in `[http]` (**off by default**) on a server built with the `iggy-web` feature (part of the default build).
+- **Prometheus metrics** at `/metrics` (endpoint configurable via `[http.metrics]`). The route authenticates like every other read: scrapers must present a bearer credential (JWT or personal access token). The `/ping` API route, CORS preflight responses, and enabled `/ui` static assets are public. Login and refresh routes prove credentials in the request body.
+- **Embedded Web UI** at `/ui`, which requires `web_ui = true` in `[http]` (**off by default**) on a server built with the `iggy-web` feature (part of the default build) and the Web UI static assets. Build the assets before compiling the server; see [Configuration](/docs/server/configuration).
 
 ## WebSocket
 
-WebSocket provides bidirectional streaming over HTTP upgrade. Iggy uses its own `compio-ws` implementation that bridges tungstenite's poll-based model with compio's completion-based I/O, reading frames through a buffered stream with a 128 KiB base buffer that can grow to a 64 MiB cap.
+WebSocket provides bidirectional streaming over HTTP upgrade. Iggy uses the `compio-ws` crate to connect tungstenite framing to compio's completion-based I/O. The default WebSocket read buffer is 128 KiB and the default maximum message size is 64 MiB; these are separate settings.
 
 The `[websocket]` section exposes the frame-tuning knobs (`read_buffer_size`, `write_buffer_size`, `max_write_buffer_size`, `max_message_size`, `max_frame_size`, `accept_unmasked_frames`). See [Configuration](/docs/server/configuration). TLS for WebSocket has its own `[websocket.tls]` section.
 
-**Benchmark comparison** (AWS i3en.3xlarge, fsync per message, 4 producers, 40M messages):
+**Historical benchmark comparison** from the [WebSocket implementation article](/blogs/2025/11/17/websocket-io-uring) (AWS i3en.3xlarge, 4 producers or consumers, 40M messages, 1,000 messages per batch, fsync enabled). These measurements predate 0.9.0:
 
 - Producer avg latency: TCP 2.61ms vs WebSocket 3.43ms (+31%)
 - Consumer avg latency: TCP 0.70ms vs WebSocket 1.44ms (+106%)
@@ -100,9 +100,9 @@ Each transport configures TLS in its own section, and the `self_signed` semantic
 | TCP | `[tcp.tls]` | `self_signed = true` generates an ephemeral certificate only while `cert_file` does not exist; an existing PEM pair is loaded instead. |
 | WebSocket | `[websocket.tls]` | Same load-or-generate rule as TCP. |
 | QUIC | `[quic.certificate]` | TLS is mandatory (part of the QUIC spec). `self_signed = true` **always** generates an ephemeral certificate and ignores `cert_file`/`key_file`, logging a warning if the files exist. |
-| HTTP | `[http.tls]` | No `self_signed` option: HTTPS requires real `cert_file`/`key_file`. |
+| HTTP | `[http.tls]` | No `self_signed` option: HTTPS requires certificate and key files in `cert_file`/`key_file`. |
 
-With `self_signed = false`, `cert_file` and `key_file` must both exist. For production, provide proper certificate files everywhere. Ephemeral certificates **change on every start** and cannot be verified by clients.
+With `self_signed = false`, `cert_file` and `key_file` must both exist. For production, provide proper certificate files everywhere. Ephemeral certificates **change on every start**, so a trust configuration pinned to one generated certificate does not survive a restart.
 
 ## Heartbeat
 
@@ -112,9 +112,9 @@ enabled = true
 interval = "30 s"
 ```
 
-A connection that sends nothing (no request, no ping) for 1.2x the interval has its session released so its consumer groups rebalance off it. Only connections holding a consumer-group membership are evicted. Others are left alone until their socket closes.
+The verifier checks once per interval and releases a session whose last heartbeat is more than 1.2x the interval old, so its consumer groups rebalance off it. Requests and pings refresh the heartbeat. Only connections holding a consumer-group membership are evicted. Others are left alone until their socket closes.
 
-Most SDKs (Rust, Go, Python, Node, async Java) ping automatically every 5 seconds from a connected high-level client, well inside the resulting 36-second window. The blocking Java and C# SDKs have **no automatic heartbeat**, so an idle consumer-group member there must ping manually or reconnect after eviction.
+The Rust, Go, Python, Node, async Java and C# TCP clients have automatic heartbeats, normally every 5 seconds once connected. This is below the default 36-second inactivity threshold; the periodic verifier means eviction does not occur at an exact 36-second deadline. The blocking Java client has no automatic heartbeat, so an idle consumer-group member must ping manually or reconnect after eviction.
 
 ## Cluster networking
 

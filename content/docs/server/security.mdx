@@ -11,34 +11,34 @@ Iggy supports two authentication mechanisms:
 
 ### Username and password
 
-Users authenticate with a username and password via `login_user()`. Passwords are hashed using **Argon2id** (a memory-hard hashing algorithm). On first startup, the server generates a random password for the `root` user and logs it to the console. You can override this by setting environment variables:
+Users authenticate with a username and password, for example via the Rust SDK's `login_user()`. Passwords are hashed using **Argon2id** (a memory-hard hashing algorithm). On first single-node startup, the server generates a random password for the initial root account (username `iggy` by default) and writes it to the logs. A first cluster boot requires explicit root credentials. You can override this by setting environment variables:
 
 ```bash
-IGGY_ROOT_USERNAME=iggy
-IGGY_ROOT_PASSWORD=my-secret-password
+export IGGY_ROOT_USERNAME=iggy
+export IGGY_ROOT_PASSWORD=my-secret-password
 ```
 
 Or use the `--with-default-root-credentials` flag for development (sets root credentials to `iggy`/`iggy`).
 
-**Important**: once the data directory exists, environment variable credentials are **ignored**. To reset credentials, you must use the `--fresh` flag (which deletes all data).
+These variables initialize the root account only when it is first created. Supplied values are still validated on later starts, but they do not replace the stored credentials. Use the password-change API or `iggy user password` with the current password to change an existing account. The `--fresh` flag deletes all data; it is not needed for a password change.
 
 The root user **cannot be deleted**, and its permissions are fixed: it always holds every permission.
 
 ### Personal Access Tokens (PAT)
 
-PATs provide programmatic access with optional expiry. Each user can have up to `max_tokens_per_user` (default 100) active tokens. Tokens are **hashed before storage** and can be revoked at any time.
+PATs provide programmatic access with optional expiry. Each user can have up to `max_tokens_per_user` (default 100) stored tokens, including expired tokens until the cleaner removes them. Tokens are **hashed before storage** and can be revoked at any time.
 
 ```bash
 # Create a PAT via CLI
-iggy -u iggy -p secret pat create my-token 7d
+IGGY_TOKEN=$(iggy --quiet -u iggy -p my-secret-password pat create my-token 7d)
 
 # Use the PAT for authentication
-iggy -t my-token-value stream list
+iggy -t "$IGGY_TOKEN" stream list
 ```
 
 An automatic cleaner removes expired tokens at a configurable interval.
 
-Only the ping liveness probe and the login endpoints themselves are served without authentication. **Everything else** - including the Prometheus `/metrics` scrape - requires an authenticated session or bearer credential.
+Broker API commands require an authenticated session or bearer credential, except for ping and the login/refresh flows that establish or prove a credential. The Prometheus `/metrics` scrape requires a JWT or personal access token. HTTP CORS preflight responses and embedded `/ui` static assets are public; the UI's broker API calls still require authentication.
 
 ## Authorization
 
@@ -70,7 +70,7 @@ The global permissions and the operations they unlock:
 
 Two kinds of implication apply on top of the table:
 
-- **Supersets**: every `manage_*` permission includes its `read_*` counterpart. In addition `manage_streams` includes `manage_topics`, `read_streams` includes `read_topics`, and `read_topics` includes `poll_messages`.
+- **Supersets**: every `manage_*` permission includes its `read_*` counterpart. In addition `manage_streams` includes `manage_topics`, `read_streams` includes `read_topics`, and `read_topics` includes `poll_messages`. `manage_topics` also includes `send_messages`, so `manage_streams` permits sending too.
 - **Self-service**: an authenticated user can always read their own account, change their own password, and manage their own personal access tokens, without any of the user permissions above.
 
 ### Scoped permissions
@@ -90,7 +90,7 @@ Permissions are checked from top to bottom: global, then stream, then topic. A p
 
 If a stream has no entry in the user's stream permissions, only global permissions apply to it. The same holds for topics within a stream.
 
-For example, a user that may only consume from stream 42 needs no global permissions at all: grant stream-scoped `read_stream` and `poll_messages` on stream 42, and the user can read that stream, list its topics, and poll messages from any topic in it. Nothing else.
+For example, a user that may only consume from stream 42 needs no global permissions at all: grant stream-scoped `read_stream` and `poll_messages` on stream 42, and the user can read that stream, list its topics, and poll messages from any topic in it. The read grant also permits consumer-group operations in that stream. For polling without those read and group permissions, grant only `poll_messages`.
 
 ## Transport encryption (TLS)
 
@@ -101,9 +101,9 @@ Each transport configures TLS in its own section, and the `self_signed` semantic
 | TCP | `[tcp.tls]` | `self_signed = true` generates an ephemeral certificate only while `cert_file` does not exist; an existing PEM pair is loaded instead. |
 | WebSocket | `[websocket.tls]` | Same load-or-generate rule as TCP. |
 | QUIC | `[quic.certificate]` | TLS is mandatory (part of the QUIC spec). `self_signed = true` **always** generates an ephemeral certificate and ignores `cert_file`/`key_file`, logging a warning if the files exist. |
-| HTTP | `[http.tls]` | No `self_signed` option: HTTPS requires real `cert_file`/`key_file`. |
+| HTTP | `[http.tls]` | No `self_signed` option: HTTPS requires certificate and key files in `cert_file`/`key_file`. |
 
-For production deployments, provide proper certificates via `cert_file` and `key_file`. Ephemeral certificates change on every start and cannot be verified by clients. See [Networking](/docs/server/networking) for the surrounding transport configuration.
+For production deployments, provide proper certificates via `cert_file` and `key_file`. Ephemeral certificates change on every start, so a trust configuration pinned to one generated certificate does not survive a restart. See [Networking](/docs/server/networking) for the surrounding transport configuration.
 
 ## Data encryption at rest
 
@@ -130,7 +130,7 @@ clock_skew = "5 s"
 
 Further keys (`valid_issuers`, `valid_audiences`, `not_before`, `use_base64_secret`, the signing secrets) are covered in [Configuration](/docs/server/configuration).
 
-**Signing secrets**: `encoding_secret` and `decoding_secret` default to empty, which makes the server generate a secure random secret on every start. That's a safe single-node default with two consequences: issued tokens **die on restart**, and in a cluster each node signs with its own key, so bearers are node-local and follower-to-primary request forwarding stays disabled. For clusters, configure an identical secret on every node (prefer the `IGGY_HTTP_JWT_ENCODING_SECRET`/`IGGY_HTTP_JWT_DECODING_SECRET` environment variables over on-disk config), or enable `cluster.auth` so the JWT key derives from the cluster's shared PSK.
+**Signing secrets**: `encoding_secret` and `decoding_secret` default to empty. Without `cluster.auth`, the server generates a secure random secret on every start. That's a safe single-node default with two consequences: issued tokens **die on restart**, and in a cluster each node signs with its own key, so bearers are node-local and follower-to-primary request forwarding stays disabled. For clusters, configure an identical secret on every node (prefer the `IGGY_HTTP_JWT_ENCODING_SECRET`/`IGGY_HTTP_JWT_DECODING_SECRET` environment variables over on-disk config), or enable `cluster.auth` so the JWT key derives from the cluster's shared PSK.
 
 **Refresh tokens**: `POST /users/refresh-token` re-issues an access token from a still-valid one presented in the request body, answering the same identity shape as login, so HTTP clients can extend a session without re-sending credentials.
 
