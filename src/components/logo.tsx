@@ -41,7 +41,7 @@ export function Logo({ className }: { className?: string }) {
       src={src}
       alt="Apache Iggy"
       width={220}
-      height={44}
+      height={73}
       className={className}
       unoptimized
     />
