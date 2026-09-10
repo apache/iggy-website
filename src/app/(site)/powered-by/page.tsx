@@ -112,9 +112,9 @@ export default function PoweredByPage() {
             <h2 className="text-2xl font-bold tracking-tight text-fd-foreground">
               Organizations building &amp; integrating with Iggy
             </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fd-muted-foreground">
+            <p className="mt-2 max-w-4xl text-pretty text-sm leading-relaxed text-fd-muted-foreground">
               Companies, projects and teams that have told the community they
-              are using or building with Apache Iggy.
+              are using or building with Apache&nbsp;Iggy.
             </p>
             <div className="mt-6">
               <OrganizationWall entries={allOrganizations} />

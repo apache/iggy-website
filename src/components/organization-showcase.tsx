@@ -30,7 +30,7 @@ import {
  * dependency that browsers resolve to zero, and a fixed height is what makes
  * logos of different aspect ratios read as one row.
  */
-const WALL_LOGO_CLASS = "h-7 w-auto max-w-full shrink-0 object-contain";
+const WALL_LOGO_CLASS = "max-h-10 max-w-28 shrink-0 object-contain";
 const USE_CASE_LOGO_CLASS = "h-9 w-auto max-w-36 shrink-0 object-contain";
 
 /**
@@ -57,7 +57,7 @@ function Mark({ entry }: { entry: Organization }) {
 
   const withLogo = (src: string) => (
     <>
-      <span className="flex h-7 w-full items-center justify-center">
+      <span className="flex h-10 w-full items-center justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
@@ -86,7 +86,7 @@ function Mark({ entry }: { entry: Organization }) {
 }
 
 const TILE_CLASS =
-  "flex h-16 flex-col items-center justify-center rounded-lg px-3 text-center";
+  "flex h-16 flex-col items-center justify-center rounded-lg px-4 text-center";
 
 /**
  * A tile links to the organization's use-case section when it has one, and
@@ -130,7 +130,7 @@ function Tile({ entry }: { entry: Organization }) {
 
 export function OrganizationWall({ entries }: { entries: Organization[] }) {
   return (
-    <ul className="grid list-none grid-cols-3 gap-2 p-0 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+    <ul className="grid list-none grid-cols-3 gap-4 p-0 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
       {entries.map((entry) => (
         <li key={organizationSlug(entry)}>
           <Tile entry={entry} />

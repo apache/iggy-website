@@ -66,6 +66,12 @@ export const organizations = defineCollections({
     // to grant the ASF permission to display the mark, AND the file is
     // actually committed. See content/organizations/README.md.
     permissionConfirmed: z.boolean().optional().default(false),
+    // Whether the description is published as a use-case card. On by default,
+    // so an entry with a description reads as before. Set it false to keep a
+    // description in the file without putting it on the page -- an entry
+    // written from public sources that the organization has not confirmed
+    // still belongs on the logo wall, but its wording is not theirs to speak.
+    showText: z.boolean().optional().default(true),
 
     // A short category for the workload, e.g. "AI infrastructure",
     // "Change data capture", "Observability". Rendered as a label above the
