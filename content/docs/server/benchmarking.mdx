@@ -21,23 +21,27 @@ First build the project in release mode:
 cargo build --release
 ```
 
-**`iggy-bench` doesn't start a server.** It only connects, and fails with a connection error when nothing is listening. Start `iggy-server` yourself first:
+**`iggy-bench` doesn't start a server.** It only connects, and fails with a connection error when nothing is listening. For a disposable development server with an empty data directory, use the credentials expected by the benchmark defaults:
 
 ```bash
-cargo run --bin iggy-server -r
+cargo run --bin iggy-server -r -- --with-default-root-credentials
 ```
 
-or use the repo's driver script, which builds, starts the server, runs a send and a poll benchmark, and shuts the server down:
+This flag affects only the first creation of the root user; existing credentials remain unchanged, and environment variables take precedence. For another server, pass its credentials with `iggy-bench -u USER -p PASSWORD` before the benchmark kind.
+
+The repo's driver script builds, starts the server, runs a send and a poll benchmark, and shuts the server down. **Use it only in a disposable checkout on an isolated host: it deletes `local_data` and signals matching `iggy-server` and `iggy-bench` processes by name.**
 
 ```bash
 ./scripts/run-benches.sh
 ```
 
-With a server running, invoke the benchmark kind and transport of your choice. The tool creates the streams, topics, and partitions it needs, then sends or polls messages.
+With a server running, invoke the benchmark kind and transport of your choice. Workloads that produce create their benchmark streams and topics, deleting pre-existing `bench-stream-{n}` streams unless `--reuse-streams` is set. Consumer-only workloads (`pc` and `bcg`) require those streams and enough messages to exist already. Run the corresponding producer workload first, with matching stream, partition, and message counts.
 
 ## Benchmark kinds
 
 Eight kinds are available, each with a short alias:
+
+Producer and consumer counts default to six. Pinned workloads also default to six streams. Set explicit counts to match the workload and available CPUs.
 
 1. Pinned producer (`pp`): N producers, each sending to its own stream-topic with a single partition:
 
@@ -89,13 +93,13 @@ Eight kinds are available, each with a short alias:
 
 ## Transports
 
-Every kind runs over one of four transports: `tcp`, `quic`, `http`, or `websocket` (alias `ws`). Each transport subcommand takes `--server-address` for a non-default server, for example:
+The transport subcommands are `tcp`, `quic`, `http`, and `websocket` (alias `ws`). Consumer-group workloads (`bcg`, `bpcg`, and `e2ecg`) require a binary transport: HTTP consumer-group joining returns `FeatureUnavailable`, even though the benchmark CLI accepts that combination. Each transport subcommand takes `--server-address` for a non-default server, for example:
 
 ```bash
-cargo r --bin iggy-bench -r -- pinned-producer tcp --server-address 0.0.0.0:8090
+cargo r --bin iggy-bench -r -- pinned-producer tcp --server-address 127.0.0.1:8090
 ```
 
-Message count, batch size, message size, and the number of producers/consumers/streams are all flags on the kind subcommand. `iggy-bench --help` and `iggy-bench examples` show the full surface.
+Message count, batch size, message size, and both durability flags precede the kind subcommand. Producer, consumer, stream, and partition counts belong to the selected kind. `iggy-bench --help` and `iggy-bench examples` show the full surface.
 
 ## Storing and comparing results
 
@@ -109,4 +113,18 @@ cargo r --bin iggy-bench -r -- pinned-producer tcp output -o performance_results
 
 ## Performance
 
-The server is thread-per-core and shared-nothing, built on `io_uring` (via `compio`), with shard and CPU pinning configurable under `[system.sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmarking platform](https://benchmarks.iggy.apache.org).
+The server is thread-per-core and shared-nothing, built on `io_uring` (via `compio`), with shard and CPU pinning configurable under `[sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmarking platform](https://benchmarks.iggy.apache.org).
+
+## Prepare the host and topic policies
+
+Use the [Linux tuning guide](/docs/server/linux-tuning) to check process limits, swap, huge pages, CPU/NUMA placement, writeback, and network capacity before measuring. Record the exact host settings and change one variable at a time. Use a separate load generator, or disjoint CPU sets when it shares a host with the server.
+
+`--durability` and `--consumer-offset-durability` independently default to `replicated`. Place them before the benchmark kind. For example, this keeps consumer offsets replicated while measuring persisted message acknowledgments:
+
+```bash
+cargo r --bin iggy-bench -r -- --durability persisted balanced-producer-and-consumer-group tcp
+```
+
+Add `--consumer-offset-durability persisted` to request that policy too. These are create-time options and have no effect on existing topics with `--reuse-streams`. Poll auto-commit remains asynchronous, so poll latency is not an acknowledged offset-store measurement. `iggy-bench examples` shows all benchmark kinds, transports, policy combinations, and available topic-option examples.
+
+Keep both policies, replication-group size, batch and message sizes, CPU allocation, and storage consistent between runs. Run long enough to include flushes and checkpoints, and report tail latency, errors, memory pressure, and client utilization alongside throughput.
