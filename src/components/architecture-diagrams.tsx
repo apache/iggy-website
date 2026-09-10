@@ -37,11 +37,11 @@ export function MessageFlowDiagram() {
 
   const steps = [
     { label: "Client", desc: "Client sends messages via TCP/QUIC/WS/HTTP", icon: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z" },
-    { label: "Listener", desc: "Transport listener receives the request on a shard thread", icon: "M21 3L3 10.53v.98l6.84 2.65L12.48 21h.98L21 3z" },
+    { label: "Listener", desc: "Shard 0 accepts connections; the connection owner decodes requests", icon: "M21 3L3 10.53v.98l6.84 2.65L12.48 21h.98L21 3z" },
+    { label: "Stream", desc: "Resolve the stream ID or name from local metadata", icon: "M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" },
+    { label: "Topic", desc: "Resolve the topic and target partition; compression is not applied", icon: "M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" },
     { label: "Router", desc: "Request routed to owning shard via IggyNamespace hash", icon: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" },
-    { label: "Stream", desc: "Stream lookup by ID (metadata read from left-right)", icon: "M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" },
-    { label: "Topic", desc: "Topic lookup within stream, compression applied", icon: "M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" },
-    { label: "Partition", desc: "Messages buffered in the partition journal (PartitionJournal)", icon: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z" },
+    { label: "Partition", desc: "The partition primary admits and replicates the write through VSR", icon: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z" },
     { label: "Segment", desc: "Flushed to .log file via vectored I/O (io_uring)", icon: "M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" },
   ];
 
@@ -126,7 +126,7 @@ export function ShardDiagram() {
       id: 0,
       label: "Shard 0 (Coordinator)",
       color: "var(--color-fd-primary)",
-      features: ["Binds all listeners: TCP, QUIC, HTTP, WS", "Replica plane listener", "Metadata plane (left-right write handle)", "QUIC + TCP-TLS terminate here", "Hands plaintext TCP/WS to peers (fd transfer)"],
+      features: ["Binds all listeners: TCP, QUIC, HTTP, WS", "Replica plane listener", "Metadata plane (left-right write handle)", "QUIC + TCP-TLS + WSS + HTTP terminate here", "Hands plaintext TCP/WS to peers (fd transfer)"],
       partitions: ["P0", "P3", "P6"],
     },
     {
@@ -174,7 +174,7 @@ export function ShardDiagram() {
               <span className="text-[10px] font-mono text-fd-muted-foreground block mb-1">compio runtime</span>
               <div className="flex items-center gap-1">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ring-glow" />
-                <span className="text-[10px] text-fd-foreground">io_uring (4096 ops)</span>
+                <span className="text-[10px] text-fd-foreground">io_uring (default capacity: 4096)</span>
               </div>
             </div>
 
@@ -213,8 +213,8 @@ export function ShardDiagram() {
           <span className="text-xs font-medium text-fd-muted-foreground">Inter-shard communication</span>
         </div>
         <p className="text-xs text-fd-muted-foreground m-0">
-          Shards communicate via <code className="text-[11px]">crossfire</code> bounded mpsc channels. Metadata mutations route to Shard 0, the only shard that commits; peers hold left-right read handles.
-          Partition ops route to the owning shard via the lock-free <code className="text-[11px]">papaya::HashMap&lt;IggyNamespace, PartitionLocation&gt;</code>.
+          Shards communicate via <code className="text-[11px]">crossfire</code> bounded mpsc channels. Metadata mutations route to Shard 0, the only shard that commits metadata; peers hold left-right read handles.
+          CPU labels and partition assignments above are illustrative. Partition ops route to the owning shard via the lock-free <code className="text-[11px]">papaya::HashMap&lt;IggyNamespace, PartitionLocation&gt;</code>.
         </p>
       </div>
     </div>
@@ -239,7 +239,7 @@ export function IoUringComparison() {
             </div>
           ))}
           <div className="rounded-md bg-red-500/10 border border-red-500/20 p-2 mt-2">
-            <span className="text-[11px] text-red-400 block">Files are &quot;always ready&quot; for epoll. Tokio uses a blocking thread pool (up to 512 threads) for file I/O.</span>
+            <span className="text-[11px] text-red-400 block">Regular files cannot be registered with epoll. Tokio uses a blocking pool for file I/O (512 threads by default, configurable).</span>
           </div>
         </div>
       </div>
@@ -259,7 +259,7 @@ export function IoUringComparison() {
             </div>
           ))}
           <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-2 mt-2">
-            <span className="text-[11px] text-emerald-400 block">Both SQ and CQ are lock-free ring buffers shared between user space and kernel. No syscall per I/O in the hot path.</span>
+            <span className="text-[11px] text-emerald-400 block">SQ and CQ are shared ring buffers. Batching amortizes submission and completion syscalls across operations.</span>
           </div>
         </div>
       </div>
@@ -373,8 +373,8 @@ export function MessageHeaderDiagram() {
 
   const fields = [
     { name: "checksum", bytes: "0-8", size: 8, type: "u64", desc: "xxHash3 integrity checksum", color: "#ef4444" },
-    { name: "id", bytes: "8-24", size: 16, type: "u128", desc: "Unique message ID (UUIDv4)", color: "#f59e0b" },
-    { name: "offset", bytes: "24-32", size: 8, type: "u64", desc: "Sequential offset in partition", color: "#10b981" },
+    { name: "id", bytes: "8-24", size: 16, type: "u128", desc: "Client-supplied 128-bit ID; Rust SDK generates UUIDv4 when omitted", color: "#f59e0b" },
+    { name: "offset", bytes: "24-32", size: 8, type: "u64", desc: "Increasing offset within the partition", color: "#10b981" },
     { name: "timestamp", bytes: "32-40", size: 8, type: "u64", desc: "Server-assigned timestamp", color: "#3b82f6" },
     { name: "origin_ts", bytes: "40-48", size: 8, type: "u64", desc: "Client-provided timestamp", color: "#6366f1" },
     { name: "hdrs_len", bytes: "48-52", size: 4, type: "u32", desc: "User headers length", color: "#8b5cf6" },
@@ -386,9 +386,9 @@ export function MessageHeaderDiagram() {
 
   return (
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
-      <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Message Header (64 bytes, little-endian)</h3>
+      <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Rust SDK Header (64 bytes, little-endian)</h3>
       <p className="text-xs text-fd-muted-foreground m-0 mb-5">
-        Every message starts with this fixed-size header for efficient aligned reads.
+        This is the SDK byte representation. Wire and disk batches use a 48-byte per-message frame header.
       </p>
 
       <div className="flex rounded-lg overflow-hidden mb-4 h-10">
@@ -454,7 +454,7 @@ export function BenchmarkChart() {
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Latency Improvements: Tokio vs Thread-per-Core</h3>
       <p className="text-xs text-fd-muted-foreground m-0 mb-5">
-        Relative latency comparison (lower is better). Thread-per-core with io_uring vs Tokio work-stealing.
+        Selected historical results (lower is better): v0.5.0 vs v0.7.0 at approximately 1,000 MB/s per node. See the linked migration benchmark for workloads.
       </p>
 
       <div className="space-y-4">
@@ -483,7 +483,7 @@ export function BenchmarkChart() {
 
 export function NamespacePacking() {
   const bitGroups = [
-    { label: "unused (12 bits)", bits: 12, color: undefined, range: "63..52" },
+    { label: "zero for partitions (12 bits)", bits: 12, color: undefined, range: "63..52" },
     { label: "stream", bits: 20, color: "#f59e0b88", range: "51..32", sub: "20 bits" },
     { label: "topic", bits: 12, color: "#3b82f688", range: "31..20", sub: "12 bits" },
     { label: "partition", bits: 20, color: "#10b98188", range: "19..0", sub: "20 bits" },
@@ -499,7 +499,7 @@ export function NamespacePacking() {
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">IggyNamespace Bit Packing (u64)</h3>
       <p className="text-xs text-fd-muted-foreground m-0 mb-5">
-        Stream, topic, and partition IDs are packed into a single u64 for efficient hashing and shard routing.
+        Stream, topic, and partition IDs are packed into a single u64 for efficient hashing and shard routing. Bit 63 is reserved for the separate metadata consensus group.
       </p>
 
       <div className="flex rounded-lg overflow-hidden h-12 mb-3">
@@ -761,7 +761,7 @@ export function ConsumerGroupViz() {
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Consumer Group</h3>
       <p className="text-xs text-fd-muted-foreground m-0 mb-6">
-        Each partition is assigned to exactly one consumer. When a consumer joins or leaves, partitions are rebalanced.
+        Within this group, each partition has at most one member permitted to poll it. Joins and leaves trigger rebalancing; pending handoffs can temporarily pause polling.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-6 items-center">
