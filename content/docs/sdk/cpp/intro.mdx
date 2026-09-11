@@ -9,7 +9,7 @@ This SDK isn't published to any package registry. Consume it from the monorepo a
 
 ## Building from source
 
-The project builds with Bazel (`BUILD.bazel` / `MODULE.bazel`). The build drives the system-provided cargo toolchain to compile the Rust bridge, so concurrent runs can race. Run builds serially.
+The project builds with the Bazel version pinned in `.bazelversion` (`BUILD.bazel` / `MODULE.bazel`). Its Rust bridge uses the Cargo and Rust toolchain provisioned by `rules_rust`, with a separate target directory in the Bazel output tree. Use a compatible Java runtime for Bazel; the pinned Bazel 9.2.0 requires Java 21 or newer.
 
 ```bash
 cd foreign/cpp
@@ -26,7 +26,7 @@ bazel test //:e2e
 
 ## Quick start
 
-The snippet below mirrors the SDK's own end-to-end tests in `foreign/cpp/tests/e2e`:
+The snippet below mirrors the SDK's own end-to-end tests in `foreign/cpp/tests/e2e`. Start a [local server](/docs/introduction/getting-started) on `127.0.0.1:8090` with the `iggy`/`iggy` credentials first. The stream name must not already exist.
 
 ```cpp
 #include "lib.rs.h"
@@ -34,6 +34,7 @@ The snippet below mirrors the SDK's own end-to-end tests in `foreign/cpp/tests/e
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <utility>
 
 iggy::ffi::Identifier id(const std::string &name) {
     iggy::ffi::Identifier identifier;
@@ -56,9 +57,7 @@ rust::Vec<std::uint8_t> payload(const std::string &text) {
 }
 
 int main() {
-    // Empty string = TCP to the default local address. Connection strings
-    // (iggy://..., iggy+quic://..., ...) are also accepted.
-    iggy::ffi::Client *client = iggy::ffi::new_connection("");
+    iggy::ffi::Client *client = iggy::ffi::new_connection({});
     client->connect();
     client->login_user("iggy", "iggy");
 
@@ -105,7 +104,7 @@ iggy+http://user:pass@host:port      (HTTP)
 iggy+ws://user:pass@host:port        (WebSocket)
 ```
 
-When an empty string or plain address is passed to `new_connection()`, it defaults to TCP.
+`iggy::ffi::from_connection_string()` accepts these strings. `new_connection()` instead takes an `IggyClientConfig`: `{}` selects TCP at `127.0.0.1:8090` without automatic login, and its `server_address` field overrides that address. Binary clients authenticate from their connection string during `connect()`; HTTP requires an explicit `login_user()` call. See [connection strings](/docs/sdk/connection-strings) for the supported options and credential syntax.
 
 ## Helper types
 
@@ -113,6 +112,6 @@ Beyond the generated `lib.rs.h` FFI surface, `foreign/cpp/include/iggy.hpp` ship
 
 ## Current status
 
-The FFI bridge exposes the full command-level client: streams, topics, partitions, and segments; message sending and polling with user headers; consumer groups and consumer offsets; stats, client info, and cluster metadata; snapshots; permission updates and password changes; topic option discovery (`describe_options`); and raw binary requests (`send_binary_request`).
+The FFI bridge exposes command-level operations for streams, topics, partitions, and segments; message sending and polling with user headers; consumer groups and consumer offsets; stats, client info, and cluster metadata; snapshots; user create/get/update/delete, permission updates and password changes; topic option discovery (`describe_options`); and raw binary requests (`send_binary_request`).
 
-Not yet exposed: the high-level `Producer`/`Consumer` wrappers and user management (create/get/update/delete users, personal access tokens). Contributions are welcome.
+Not yet exposed: the high-level `Producer`/`Consumer` wrappers and personal access token management. Contributions are welcome.

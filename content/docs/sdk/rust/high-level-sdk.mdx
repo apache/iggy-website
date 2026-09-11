@@ -6,41 +6,50 @@ description: "IggyProducer and IggyConsumer: batching, consumer groups and offse
 If you've read through the [getting started](/docs/introduction/getting-started) guide, you might have noticed that it's quite verbose and requires a lot of boilerplate code to get started. This is where the High-level SDK comes in, as it does provide a more user-friendly interface to interact with the Iggy API for both, producer and consumer. Let's consider the following features:
 
 - **Automatically creating & joining** the consumer groups
-- **Committing the offset** depending on the particular mode (e.g. in the background based on some interval, after polling N messages etc.)
+- **Committing the offset** depending on the particular mode (e.g. in the background based on some interval, when an offset matches the configured trigger etc.)
 - **Batching the messages**, whether it's about producing or consuming
 - **Processing the messages** as if the stream was an async iterator
 - **Reusing the same client** for both, producing and consuming on the same topic without repeating the configuration
 - And more...
 
+The Rust snippets assume an async function returning `Result<(), Box<dyn std::error::Error>>`, with `iggy`, Tokio and `futures-util` dependencies. Use the [Rust SDK setup](/docs/sdk/rust/intro) and a server with the sample credentials.
+
 ## Connection string
 
 Instead of providing the configuration for the client, you can use the connection string. It's a string that contains all the necessary information to connect to the Iggy API, and it works with all four transports:
 
-```bash
-iggy://iggy:iggy@localhost:8090             (TCP, default)
-iggy+tcp://iggy:iggy@localhost:8090         (TCP, explicit)
-iggy+quic://iggy:iggy@localhost:8080        (QUIC)
-iggy+http://iggy:iggy@localhost:3000        (HTTP)
-iggy+ws://iggy:iggy@localhost:8092          (WebSocket)
+```
+iggy://iggy:iggy@127.0.0.1:8090             (TCP, default)
+iggy+tcp://iggy:iggy@127.0.0.1:8090         (TCP, explicit)
+iggy+quic://iggy:iggy@127.0.0.1:8080        (QUIC)
+iggy+http://iggy:iggy@127.0.0.1:3000        (HTTP)
+iggy+ws://iggy:iggy@127.0.0.1:8092          (WebSocket)
 ```
 
 Which can be used to create the client like this:
 
 ```rust
-let client = IggyClient::from_connection_string("iggy://iggy:iggy@localhost:8090")?;
+use futures_util::StreamExt;
+use iggy::prelude::*;
+use std::str::FromStr;
+
+let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")?;
+client.connect().await?;
 ```
+
+HTTP requires an explicit login after construction. Consumer groups require a binary transport; use an ordinary consumer with an explicit partition over HTTP.
 
 Options are appended as query parameters. For TCP:
 
-```bash
-iggy://iggy:iggy@localhost:8090?tls=true&tls_domain=test.com&reconnection_retries=5&reconnection_interval=5s&reestablish_after=10s&heartbeat_interval=3s&nodelay=true
+```
+iggy://iggy:iggy@127.0.0.1:8090?reconnection_retries=5&reconnection_interval=5s&reestablish_after=10s&heartbeat_interval=3s&nodelay=true
 ```
 
 The option keys differ per transport (for example QUIC uses `reconnection_max_retries` and `reconnection_reestablish_after` where TCP uses `reconnection_retries` and `reestablish_after`). Unknown keys are rejected as hard errors. See [Connection Strings](/docs/sdk/connection-strings) for the full per-transport option tables and defaults.
 
-Unless you need to provide a specific implementation of the client-side `Encryptor`, `Partitioner` or adjust some other settings, you should be good to go with the connection string. On the other hand, you can always make use of `IggyClientBuilder::from_connection_string()` to extend the options on top of the provided connection string.
+Unless you need client-side encryption, a custom `Partitioner`, or other settings outside the connection-string options, you should be good to go with the connection string. On the other hand, you can always make use of `IggyClientBuilder::from_connection_string()` to extend the options on top of the provided connection string.
 
-The `IggyClient` internally wraps its transport in an `IggyRwLock`, so a single instance is **cheap to clone** and can be shared across multiple tasks. Typically, it's a good idea to create a separate connection for producing and consuming, but it's not a requirement.
+The `IggyClient` internally wraps its transport in an `IggyRwLock`, but the client itself does not implement `Clone`. Share an `Arc<IggyClient>` across tasks; cloning the `Arc` keeps the same client and connection. Typically, it's a good idea to create a separate connection for producing and consuming, but it's not a requirement.
 
 ## Producer
 
@@ -60,7 +69,7 @@ let producer = client
 producer.init().await?;
 ```
 
-The code above will result in creating the producer that will try to send the messages in batches of 1000 every 5 milliseconds. You can choose between the `direct` (an instant producer) or the `background` (which will send the messages in the background by buffering them). The partitioning is set to `balanced` which means that the producer will try to distribute the messages evenly across all the partitions. The `init()` method is used to ensure that the producer is ready to send the messages by validating the existence of the stream, topic etc.
+The direct producer splits each `send()` call into requests of at most 1000 messages. For sequential calls, the 5 ms linger setting delays a call until at least 5 ms after the previous successful send; it does not buffer messages between calls or delay individual chunks within a call. Choose `background` to buffer sends on worker tasks. `balanced` routes requests round-robin across partitions. By default, `init()` creates a missing stream and topic, requiring the corresponding permissions.
 
 Finally, you can use the `send()` method to send the messages to the topic. The producer **never needs to be a mutable binding**: both `init()` and `send()` take `&self`, so a plain `let producer` is enough for its whole life. Here's how you can send the messages:
 
@@ -80,22 +89,22 @@ The `background` mode buffers messages and sends them from shard workers, tradin
 | Field | Default | Description |
 |-------|---------|-------------|
 | `num_shards` | `1` | Number of shard workers running in parallel |
-| `sharding` | `OrderedSharding` | Maps a message to a shard. `OrderedSharding` routes the same stream/topic to the same shard, preserving order. `BalancedSharding` round-robins across shards for maximum throughput, order not preserved |
+| `sharding` | `OrderedSharding` | Routes each send to a worker. `OrderedSharding` keeps a stream/topic pair on one sequential worker; `BalancedSharding` round-robins across workers for maximum throughput and can reorder sends |
 | `linger_time` | `1ms` | How long a shard may wait before flushing an incomplete batch |
-| `batch_size` | 1 MiB | Maximum total **size in bytes** of a batch; `0` disables size-based batching |
-| `batch_length` | `1000` | Maximum **number of messages** per batch; `0` disables length-based batching |
-| `failure_mode` | `Block` | `BackpressureMode` applied when limits are reached: `Block`, `BlockWithTimeout(duration)`, or `FailImmediately` |
-| `max_buffer_size` | 32 MiB | Upper bound for bytes held in memory across all shards; `0` means unlimited |
-| `max_in_flight` | `1` | Maximum batches being sent concurrently. More than 1 can reorder messages when retries occur; `0` means unlimited |
+| `batch_size` | 1 MiB | Per-worker flush threshold in bytes; `0` disables this trigger |
+| `batch_length` | `1000` | Per-worker flush threshold in **queued sends**, not individual messages; `0` disables this trigger |
+| `failure_mode` | `Block` | Behavior when the byte budget is exhausted: `Block`, `BlockWithTimeout(duration)`, or `FailImmediately` |
+| `max_buffer_size` | 32 MiB | Budget for message bytes buffered or in flight across all workers; `0` disables this budget |
+| `max_in_flight` | `1` | Maximum concurrent writes across workers; each worker remains sequential. `0` uses the semaphore's maximum capacity |
 | `error_callback` | `LogErrorCallback` | Async callback invoked on errors the producer cannot recover from |
 
-`batch_size` limits bytes while `batch_length` limits the message count. Whichever limit fires first (including `linger_time`) triggers the flush.
+`batch_size` and `batch_length` are flush triggers checked after adding a send. The final send can take the buffer past the byte threshold. The linger deadline starts when an empty buffer receives a send; the first trigger reached causes a flush. Each worker also has a bounded queue, which can make dispatch wait independently of `failure_mode`. A send larger than the entire byte budget fails under every backpressure mode. Nonzero `max_buffer_size` and `max_in_flight` values must not exceed `tokio::sync::Semaphore::MAX_PERMITS`; constructing the dispatcher with a larger value panics.
 
-Call `producer.shutdown().await` to flush the background buffer before exiting. Dropping the producer without it **silently discards unflushed messages**.
+Stop all senders, then call `producer.shutdown().await` to drain background queues and wait for writes and error callbacks. Dropping the producer without shutdown can lose buffered messages. Shutdown does not turn failed writes into successful ones; the default error callback logs and drops failed sends.
 
 ### Send confirmations
 
-Every send method returns a `SendMessagesResponse` carrying the commit confirmations of the chunks the send was split into. The list is **empty** whenever the server sends no confirmation payload, and always for a `background` producer, which hands the messages to a dispatcher and returns before the send happens. Branch on `confirmations.is_empty()` instead of indexing. Delivery is *at-least-once*: a retried chunk may already have been committed by an earlier attempt, so an offset in a confirmation never implies uniqueness.
+Every send method returns a `SendMessagesResponse` carrying the commit confirmations of the chunks the send was split into. The list is **empty** whenever the server sends no confirmation payload, and always for a `background` producer, which hands the messages to a dispatcher and returns before the send happens. Branch on `confirmations.is_empty()` instead of indexing. A retried chunk may already have been committed by an earlier attempt, so a confirmation offset does not imply uniqueness. Direct-send completion follows the topic's [durability policy](/docs/server/durability).
 
 ## Consumer
 
@@ -105,7 +114,7 @@ The consumer is a high-level abstraction that allows you to receive the messages
 let mut consumer = client
     .consumer_group("my-consumer-group", "my-stream", "my-topic")?
     .auto_commit(AutoCommit::IntervalOrWhen(
-        IggyDuration::from_str("1s")?,
+        NonZeroIggyDuration::ONE_SECOND,
         AutoCommitWhen::ConsumingAllMessages,
     ))
     .create_consumer_group_if_not_exists()
@@ -116,7 +125,7 @@ let mut consumer = client
     .build();
 ```
 
-The code above will result in creating the consumer that will try to consume the messages in batches of 1000 every 1 millisecond. The auto-commit is set to commit the offset every second or when all the messages are consumed (fetched). The polling strategy is set to `next` which means that the consumer will try to consume the next available message from the partition currently assigned to the consumer group (you can also invoke a regular `consumer()` builder if you do not plan to use the consumer groups). The `build()` method is used to create the consumer.
+The consumer polls at most 1000 messages per request with a minimum 1 ms gap between polls. It requests offset commits every second or when the current message buffer becomes empty; these triggers do not observe application processing. The polling strategy is set to `next` which means that the consumer will try to consume the next available message from the partition currently assigned to the consumer group (you can also invoke a regular `consumer()` builder if you do not plan to use the consumer groups). The `build()` method is used to create the consumer.
 
 Finally, you can use the `next()` method to receive the messages from the topic. Unlike the producer, the consumer **must stay a mutable binding** for its whole life: `init()` takes `&mut self`, and `next()` comes from the futures `Stream` implementation which also requires mutable access. The `init()` is used to ensure that the consumer is ready to receive the messages by validating the existence of the stream, topic, consumer group etc. Here's how you can consume the messages:
 
@@ -127,7 +136,7 @@ consumer.init().await?;
 while let Some(message) = consumer.next().await {
     match message {
         Ok(received) => {
-            // received.message is the IggyMessage
+            println!("{}", String::from_utf8_lossy(&received.message.payload));
         }
         Err(error) => eprintln!("Error while receiving message: {error}"),
     }
@@ -152,14 +161,15 @@ Defaults and lesser-known knobs on `IggyConsumerBuilder`:
 | `init_retries(retries, interval)` | disabled | Retry `init()` when the stream or topic does not exist yet (e.g. created dynamically by a producer) |
 | `allow_replay()` | disabled | Allow re-consuming messages at or below the stored offset |
 | `offset_drain_timeout(d)` | `5s` | How long `shutdown()` waits for background auto-commit tasks to drain before leaving the group |
-| `commit_failed_messages()` | not set | Sets `AutoCommit::Disabled`, so offsets of failed messages are never skipped; store offsets manually after successful processing |
-| `encryptor(...)` | none | Client-side payload decryption |
+| `encryptor(...)` | inherited from the client; none by default | Client-side payload and user-header decryption |
+
+With an encryptor, `init()` rejects the `PollingMessages` auto-commit trigger because a batch might fail decryption after its offset was committed. Use a compatible mode, such as `AutoCommit::Disabled`, and store offsets explicitly after successful processing.
 
 ### Auto-commit matrix
 
-`AutoCommit` decides when the consumer offset is stored on the server:
+`AutoCommit` decides when the consumer requests offset storage:
 
-| Variant | Offset is stored |
+| Variant | Commit trigger |
 |---------|------------------|
 | `Disabled` | Never automatically; store it manually |
 | `Interval(d)` | Every `d` in the background |
@@ -168,13 +178,15 @@ Defaults and lesser-known knobs on `IggyConsumerBuilder`:
 | `When(when)` | At the `when` trigger |
 | `After(after)` | At the `after` trigger |
 
-`AutoCommitWhen` triggers fire while receiving: `PollingMessages`, `ConsumingAllMessages`, `ConsumingEachMessage`, `ConsumingEveryNthMessage(n)`. `AutoCommitAfter` triggers fire after processing: `ConsumingAllMessages`, `ConsumingEachMessage`, `ConsumingEveryNthMessage(n)`.
+`AutoCommitWhen` triggers fire while receiving: `PollingMessages` accompanies the poll request, `ConsumingEachMessage` runs before yielding a message, and `ConsumingAllMessages` runs when the current buffer is empty. `ConsumingEveryNthMessage(n)` checks whether the message offset is divisible by `n`, rather than counting processed messages; `n = 0` disables that trigger.
 
-The `After` and `IntervalOrAfter` variants *only* work with `consume_messages()` from the `IggyConsumerMessageExt` trait (see [Stream Builder](/docs/sdk/rust/stream-builder)). The plain `next()` loop cannot observe when your processing finished.
+`AutoCommitAfter` triggers run after the handler returns, including when it returns an error. `ConsumingEachMessage` and `ConsumingEveryNthMessage(n)` use the handled message's offset. `ConsumingAllMessages` fires when that offset reaches the partition head reported by the poll, so a lagging consumer may process several batches before it fires. For commits only after successful processing, disable auto-commit and store offsets explicitly.
+
+The `After` triggers require `consume_messages()` from the `IggyConsumerMessageExt` trait (see [Stream Builder](/docs/sdk/rust/stream-builder)). The plain `next()` loop cannot observe when processing finished, though `IntervalOrAfter` still commits on its interval. Background commits can fail; use an explicit offset-store result when completion must be confirmed.
 
 ## Raw requests
 
 For custom commands the `IggyClient` exposes two escape hatches below the typed API:
 
-- `send_binary_request(code, payload)` sends a raw binary command and returns the raw response. Binary transports only. On HTTP it returns `FeatureUnavailable`. Login and logout codes are rejected with `InvalidCommand`, use `login_user`/`logout_user` so the SDK session state stays correct. Custom codes are forwarded to the server, which decides whether it implements them.
+- `send_binary_request(code, payload)` sends a raw binary command and returns the raw response. Binary transports only. On HTTP it returns `FeatureUnavailable`. Login, registration and logout codes are rejected with `InvalidCommand`, use `login_user`/`logout_user` so the SDK session state stays correct. Custom codes are forwarded to the server, which decides whether it implements them.
 - `send_http_request(method, path, body)` invokes an arbitrary HTTP endpoint and returns the raw response body. HTTP transport only. Binary transports return `FeatureUnavailable`.

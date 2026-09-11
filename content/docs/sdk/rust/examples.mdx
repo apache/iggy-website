@@ -5,13 +5,15 @@ description: "The Rust SDK examples in the core repository, and how to start a s
 
 In the core repository, you can find the following [examples](https://github.com/apache/iggy/tree/master/examples/rust/src) using the Rust SDK.
 
-Before running any of them, start the server with the default root credentials. Without the flag (or `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD`) root gets a **generated password** and every example fails with `InvalidCredentials`:
+Build the SDK and server from the same checkout for unreleased changes. Start the server from the repository root in a separate terminal. The examples use `iggy`/`iggy`; for a new local instance with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides:
 
 ```bash
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-The examples are cargo example targets of the `iggy_examples` crate. Run them from the `examples/rust` directory with `cargo run --example <name>`. Partition IDs are **0-based**: the examples send to and poll from partition `0`.
+Environment credentials take precedence over the flag, and bootstrap settings do not replace recovered credentials. `--fresh` deletes this replica's local data; use disposable development data. A new standalone server without explicit credentials generates a root password; a new cluster requires explicit credentials.
+
+The examples are cargo example targets of the `iggy_examples` crate. Run them from the **repository root** with `cargo run --example <name>` so relative certificate paths resolve. Run each producer before its consumer. Some examples create fixed names and require fresh data when repeated; the getting-started consumer also expects stream and topic IDs `0`, so run that pair first on a fresh server. Partition IDs are **0-based**, but balanced producers and consumer groups can use multiple partitions.
 
 - **[Getting started](https://github.com/apache/iggy/tree/master/examples/rust/src/getting-started)** - the basic example which is discussed in the [getting started](/docs/introduction/getting-started) guide.
 
@@ -69,7 +71,16 @@ The examples are cargo example targets of the `iggy_examples` crate. Run them fr
   cargo run --example multi-tenant-consumer
   ```
 
-- **[TCP TLS](https://github.com/apache/iggy/tree/master/examples/rust/src/tcp-tls)** - TLS-encrypted TCP connections with custom CA certificates.
+- **[TCP TLS](https://github.com/apache/iggy/tree/master/examples/rust/src/tcp-tls)** - TLS-encrypted TCP connections with custom CA certificates. Stop the plain server and start a TLS-enabled server from the repository root:
+
+  ```bash
+  IGGY_TCP_TLS_ENABLED=true \
+  IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
+  IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
+  cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+  ```
+
+  These certificates are for local testing. Then run:
 
   ```bash
   cargo run --example tcp-tls-producer

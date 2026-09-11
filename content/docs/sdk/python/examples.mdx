@@ -3,7 +3,7 @@ title: Examples
 description: "Working Python examples from the core repository, covering connection strings, message headers and TLS."
 ---
 
-Working examples are available in the [examples/python](https://github.com/apache/iggy/tree/master/examples/python) directory. CI exercises them, so they always match the current SDK:
+Working examples are available in the [examples/python](https://github.com/apache/iggy/tree/master/examples/python) directory. CI runs the source examples against a source-built server, including a separate TLS pass:
 
 - **getting-started** - producer and consumer with optional TLS via `TcpConfig`
 - **basic** - producer and consumer using connection strings
@@ -11,25 +11,25 @@ Working examples are available in the [examples/python](https://github.com/apach
 
 ## Running the examples
 
-Start an Iggy server first:
+These examples target Iggy 0.9.0. For unreleased changes, use the server and Python SDK from the same source checkout:
 
 ```bash
-# Latest release
+# Server 0.9.0
 docker run --rm \
   --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
   -p 8090:8090 \
   -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
   -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
-  apache/iggy:latest
+  apache/iggy:0.9.0
 
-# Or from the repository source
+# Or from the repository root
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and set the `iggy`/`iggy` root credentials the examples default to.
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and bootstrap the `iggy`/`iggy` root credentials for new data. Stored credentials are not replaced, and environment credentials override the source command's default-credentials flag. Use `--fresh` only with disposable local replica data.
 
-Then, from `examples/python`, install the dependencies and run a producer/consumer pair:
+With Python 3.10 or newer and Rust/Cargo available, run from `examples/python`. `uv` uses the local SDK path in `pyproject.toml`; the pip command below names that path explicitly:
 
 ```bash
 # Using uv
@@ -40,7 +40,7 @@ uv run getting-started/consumer.py
 # Without uv
 python -m venv .venv
 source .venv/bin/activate
-pip install .
+pip install ../../foreign/python .
 python getting-started/producer.py
 python getting-started/consumer.py
 ```
