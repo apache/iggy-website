@@ -74,6 +74,8 @@ transport = "grpc" # grpc or http
 endpoint = "http://localhost:4317"
 ```
 
+Set `telemetry.enabled = true` to export to a running collector. For HTTP export, set `transport = "http"` and use complete signal URLs: `http://localhost:4318/v1/logs` for logs and `http://localhost:4318/v1/traces` for traces. The MCP server does not append those paths.
+
 The configuration file must be in the `toml` format. By default, the server looks for `core/ai/mcp/config.toml` relative to its working directory. Set `IGGY_MCP_CONFIG_PATH` to use another path. Embedded defaults are loaded first, then the file if it exists, then environment overrides.
 
 Each setting can also be overridden using `IGGY_MCP_<SECTION>_<KEY>`, for example `IGGY_MCP_IGGY_USERNAME` or `IGGY_MCP_HTTP_ADDRESS`. Nested settings use the same underscore convention, such as `IGGY_MCP_IGGY_TLS_ENABLED`. Set `IGGY_MCP_ENV_PATH` to load a particular dotenv file; otherwise `.env` is searched for in the current directory and its parents. Existing environment variables take precedence over dotenv values.

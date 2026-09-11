@@ -331,6 +331,8 @@ The Rust, Go, Python, Node, async Java, and C# TCP clients ping automatically ev
 
 ### `[telemetry]`
 
+Server OTLP export is unavailable in this revision: `grpc` prevents startup, and `http` does not deliver logs or traces. Leave `enabled = false`.
+
 | Key | Default | Description |
 |-----|---------|-------------|
 | `enabled` | `false` | Enable OpenTelemetry export. |

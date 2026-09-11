@@ -50,7 +50,7 @@ Historical startup screenshot from server 0.5.0. See [configuration](/docs/serve
 - **[Model Context Protocol](/docs/ai/mcp)** - provide context to LLM with **MCP server** exposing 40+ tools for streaming management
 - Optional server-side as well as client-side **data encryption** using AES-256-GCM
 - Optional metadata support in the form of **message headers**
-- Support for **OpenTelemetry** logs & traces + Prometheus metrics
+- Prometheus metrics and **OpenTelemetry** logs & traces in the [connector runtime](/docs/connectors/observability). Server export has [known limitations](/docs/server/configuration#telemetry).
 - Built-in **[CLI](/docs/cli/start)** to manage the streaming server installable via `cargo install iggy-cli --version 0.14.0-edge.7 --locked`
 - Built-in **[Web UI](/docs/web_ui/start)** dashboard (Svelte) that can be embedded directly in the server binary or run as a standalone container
 - Built-in **benchmarking app** to test the performance
