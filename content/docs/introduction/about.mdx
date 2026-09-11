@@ -81,10 +81,10 @@ Iggy CLI can be installed with `cargo install iggy-cli --version 0.14.0-edge.7 -
 
 The Web UI provides a comprehensive dashboard for the Iggy server, built with SvelteKit and TypeScript. It can run in two modes:
 
-- **Embedded** - compiled into the server binary (with `iggy-web` feature flag), served at the `/ui` endpoint when `http.web_ui = true`
+- **Embedded** - compiled into the server binary (with the `iggy-web` feature and [built static assets](/docs/web_ui/start)), served at the `/ui` endpoint when `http.web_ui = true`
 - **Standalone** - as a separate container via `docker pull apache/iggy-web-ui:edge`
 
-Features include stream/topic/partition management, a message browser with JSON/string/XML decoders, and user management. The logs and terminal pages are placeholders, and the server settings page has a disabled Save action rather than an operational configuration editor.
+Features include stream/topic/partition management, a message browser with JSON/string/XML decoders, and user listing and creation with initial permissions. Editing or deleting existing users and changing their permissions are placeholders. The logs and terminal pages are also placeholders, and the server settings page has a disabled Save action rather than an operational configuration editor.
 
 ## Connectors
 

@@ -115,7 +115,7 @@ The tables below list every section with its shipped defaults. In cluster mode, 
 
 HTTP sessions hold live server-side session state (they count against `metadata.clients_table_max`). Consumer group management (create, get, delete) is available over HTTP. Group membership (join, leave) is not and needs a stateful transport.
 
-In cluster mode, followers forward control-plane requests (streams, topics, users, and so on) to the current primary when a cluster-wide JWT key exists (see `[http.jwt]` below). Forwarding does not cover the partition plane: message produce and consumer-offset writes must reach the partition's primary node directly, while message polls read locally on any node.
+In cluster mode, followers forward control-plane requests (streams, topics, users, and so on) to the current primary when a cluster-wide JWT key exists (see `[http.jwt]` below). Message produce and consumer-offset writes use a separate fallback: after a `TransientNotAccepted` response, the server tries each other roster node at most once. Message polls read locally on the receiving node.
 
 ### `[http.cors]`
 
