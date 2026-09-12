@@ -1014,13 +1014,13 @@ export function WhyIggy() {
     {
       label: "I/O model",
       traditional: "epoll + blocking thread pool for disk",
-      iggy: "io_uring completion-based, kernel does the I/O",
+      iggy: "io_uring completion-based I/O on Linux",
       iggyColor: "#f59e0b",
     },
     {
       label: "Threading",
       traditional: "Work-stealing across shared threads",
-      iggy: "Thread-per-core, CPU-pinned, NUMA-aware",
+      iggy: "Thread-per-core, configurable CPU/NUMA affinity",
       iggyColor: "#3b82f6",
     },
     {
@@ -1032,13 +1032,13 @@ export function WhyIggy() {
     {
       label: "Memory",
       traditional: "Heap allocations on hot path",
-      iggy: "Pre-allocated 4 GiB pool, 28 bucket sizes (4 KiB to 512 MiB)",
+      iggy: "4 GiB pool budget, on-demand buffers, 28 sizes (4 KiB to 512 MiB)",
       iggyColor: "#ec4899",
     },
     {
       label: "Binary",
       traditional: "JVM + Zookeeper / KRaft + dependencies",
-      iggy: "Single ~20 MB binary, no dependencies",
+      iggy: "Single ~20 MB binary with native OS libraries",
       iggyColor: "#14b8a6",
     },
   ];
@@ -1110,7 +1110,7 @@ export function DocsHero() {
   const stats = [
     { stat: "Sub-ms latency", accent: "Tail latency under 1ms at P99" },
     { stat: "Millions msgs/sec", accent: "Multi GB/s throughput on a single node" },
-    { stat: "Zero-copy I/O", accent: "io_uring + vectored writes to disk" },
+    { stat: "Batched disk I/O", accent: "io_uring + vectored writes on Linux" },
   ];
 
   const sources = [
@@ -1129,7 +1129,7 @@ export function DocsHero() {
 
   const links = [
     { title: "Getting Started", href: "/docs/introduction/getting-started", desc: "Install, configure, send your first messages", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-    { title: "Architecture", href: "/docs/introduction/architecture", desc: "Thread-per-core, io_uring, shared-nothing design", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1v-2z" },
+    { title: "Architecture", href: "/docs/introduction/architecture", desc: "Thread-per-core, io_uring, partition ownership", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1v-2z" },
     { title: "Connectors", href: "/docs/connectors/introduction", desc: "Source & sink plugins for data integration", icon: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" },
     { title: "SDKs", href: "/docs/sdk/introduction", desc: "Rust, Python, Java, Go, Node.js, C#, C++, PHP", icon: "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" },
     { title: "Server Config", href: "/docs/server/configuration", desc: "Tune performance, storage, and security", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" },
@@ -1250,7 +1250,7 @@ export function DocsHero() {
               { label: "MCP Server", href: "/docs/ai/mcp", sub: "40+ LLM tools" },
               { label: "Web UI", href: "/docs/web_ui/start", sub: "Dashboard" },
               { label: "CLI", href: "/docs/cli/start", sub: "Terminal" },
-              { label: "8 SDKs", href: "/docs/sdk/introduction", sub: "All languages" },
+              { label: "8 SDKs", href: "/docs/sdk/introduction", sub: "Client libraries" },
             ].map((t) => (
               <a key={t.label} href={t.href} className="text-center no-underline group">
                 <span className="text-[10px] font-semibold text-fd-foreground group-hover:text-fd-primary transition-colors block">{t.label}</span>
