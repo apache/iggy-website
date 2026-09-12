@@ -1,0 +1,88 @@
+# Examples
+
+> Runnable Java examples from the core repository, built with Gradle, and how to start a server for them.
+
+Rendered page: https://iggy.apache.org/docs/sdk/java/examples/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/java/examples.mdx
+
+Runnable examples live in the [examples/java](https://github.com/apache/iggy/tree/master/examples/java) directory of the core repository as a standalone Gradle project. The project builds against the in-repo SDK (via an `includeBuild` substitution), so the examples always match the SDK source in the same checkout. Java 17 is recommended. The included `gradlew` wrapper downloads the pinned Gradle version on first run.
+
+## Starting the server
+
+The Java SDK speaks the VSR (Viewstamped Replication) wire protocol, so the examples run against the VSR server. The examples log in as `iggy`/`iggy`, and root credentials are applied **only on the very first startup**, when no data directory exists yet. Start the server with the default root credentials:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+Alternatively, set `IGGY_ROOT_USERNAME=iggy` and `IGGY_ROOT_PASSWORD=iggy` before the first start. If an example fails with `InvalidCredentials`, the server data directory (`local_data` by default) was created with different credentials: delete it and start the server again with the defaults. This setup is intended only for development and testing.
+
+## Running the examples
+
+Run each example from the `examples/java` directory with its Gradle task:
+
+- **[gettingstarted](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/gettingstarted)** - basic blocking producer and consumer, the best starting point.
+
+  ```bash
+  ./gradlew runGettingStartedProducer
+  ./gradlew runGettingStartedConsumer
+  ```
+
+- **[messageheaders](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/messageheaders)** - message metadata via custom header keys and values, with header-based routing instead of payload-based typing.
+
+  ```bash
+  ./gradlew runMessageHeadersProducer
+  ./gradlew runMessageHeadersConsumer
+  ```
+
+- **[messageenvelope](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/messageenvelope)** - JSON envelope pattern for polymorphic message handling (order events wrapped in envelopes for type identification).
+
+  ```bash
+  ./gradlew runMessageEnvelopeProducer
+  ./gradlew runMessageEnvelopeConsumer
+  ```
+
+- **[multitenant](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/multitenant)** - multi-tenant isolation: per-tenant streams, users with stream-specific permissions, and concurrent producers and consumers across tenants.
+
+  ```bash
+  ./gradlew runMultiTenantProducer
+  ./gradlew runMultiTenantConsumer
+  ```
+
+- **[sinkdataproducer](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/sinkdataproducer)** - high-volume data generation (1000+ messages per batch) with realistic records, for testing and benchmarking.
+
+  ```bash
+  ./gradlew runSinkDataProducer
+  ```
+
+- **[streambuilder](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/streambuilder)** - a combined producer and consumer in a single class.
+
+  ```bash
+  ./gradlew runStreamBasic
+  ```
+
+- **[async](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/async)** - the async client: `CompletableFuture` chaining, submitting multiple sends without blocking, backpressure, error recovery with exponential backoff, and thread pool separation.
+
+  ```bash
+  ./gradlew runAsyncProducer
+  ./gradlew runAsyncConsumer
+  ```
+
+- **[tcptls](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/tcptls)** - TLS-encrypted TCP connections with CA certificate verification. Requires a TLS-enabled server:
+
+  ```bash
+  IGGY_TCP_TLS_ENABLED=true \
+  IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
+  IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
+  cargo run --bin iggy-server
+  ```
+
+  ```bash
+  ./gradlew runTcpTlsProducer
+  ./gradlew runTcpTlsConsumer
+  ```
+
+## Blocking vs. async
+
+Use the blocking client for scripts, CLI tools, integration tests, and anywhere sequential code is easier to reason about. Use the async client for high throughput, reactive applications, and composing non-blocking requests with `CompletableFuture`. The async client runs I/O on Netty event loop threads: never block them with `.join()`, `.get()`, `Thread.sleep()`, or blocking I/O inside `thenApply`/`thenAccept`. Offload blocking work with `thenApplyAsync(fn, executor)`. The [examples/java README](https://github.com/apache/iggy/blob/master/examples/java/README.md) covers these async patterns in detail.

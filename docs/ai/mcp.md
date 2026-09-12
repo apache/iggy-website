@@ -1,0 +1,219 @@
+# MCP Server
+
+> Run and configure the Apache Iggy MCP server, including transport, Iggy credentials and TLS.
+
+Rendered page: https://iggy.apache.org/docs/ai/mcp/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/ai/mcp.mdx
+
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open protocol that standardizes how applications provide context to LLMs. The Apache Iggy MCP Server is an implementation of the MCP protocol for the message streaming infrastructure. It is built using the `rmcp` crate and supports both **stdio** and **HTTP** transports.
+
+## Getting started
+
+To start the MCP server, simply run `cargo run --bin iggy-mcp`.
+
+The [docker image](https://hub.docker.com/r/apache/iggy-mcp) is available, and can be fetched via `docker pull apache/iggy-mcp`.
+
+## Configuration
+
+The minimal viable configuration requires at least the Iggy credentials, used to create the TCP connection to the running Iggy server that the MCP server talks to. You can choose between HTTP (the default) and STDIO transports (e.g. for the local usage with tools such as [Claude Desktop](https://claude.ai/download) choose `stdio`).
+
+```toml
+transport = "http" # http (default) or stdio are supported
+
+[iggy]
+address = "localhost:8090" # TCP address of the Iggy server
+username = "iggy"
+password = "iggy"
+# token = "secret" # Personal Access Token (PAT) can be used instead of username and password
+# token = "file:/run/secrets/iggy_pat" # PAT can also be read from a file
+# consumer = "iggy-mcp" # Optional consumer name
+
+[iggy.tls] # Optional TLS configuration for the Iggy TCP connection
+enabled = false
+ca_file = "path/to/ca.pem"
+domain = "" # Optional domain for TLS connection
+
+[http] # Optional HTTP API configuration
+address = "127.0.0.1:8082"
+path = "/mcp"
+
+[http.cors] # Optional CORS configuration for HTTP API
+enabled = false
+allowed_methods = ["GET", "POST", "PUT", "DELETE"]
+allowed_origins = ["*"]
+allowed_headers = ["content-type"]
+exposed_headers = [""]
+allow_credentials = false
+allow_private_network = false
+
+[http.tls] # Optional TLS configuration for HTTP API
+enabled = false
+cert_file = "core/certs/iggy_cert.pem"
+key_file = "core/certs/iggy_key.pem"
+
+[permissions]
+create = true
+read = true
+update = true
+delete = true
+
+[telemetry] # Optional OpenTelemetry integration
+enabled = false
+service_name = "iggy-mcp"
+
+[telemetry.logs]
+transport = "grpc" # grpc or http
+endpoint = "http://localhost:4317"
+
+[telemetry.traces]
+transport = "grpc" # grpc or http
+endpoint = "http://localhost:4317"
+```
+
+The configuration file must be in the `toml` format. The path to the configuration can be overridden by `IGGY_MCP_CONFIG_PATH` environment variable. Each setting can also be overridden by using the following convention `IGGY_MCP_<SECTION>_<KEY>` e.g. `IGGY_MCP_IGGY_USERNAME`, `IGGY_MCP_HTTP_ADDRESS` and so on. Environment variables can also be loaded from a dotenv file: point `IGGY_MCP_ENV_PATH` at the file, otherwise a `.env` file in the current working directory is loaded automatically.
+
+The `token` value can be either a literal PAT or a `file:` reference such as `token = "file:/run/secrets/iggy_pat"`, in which case the token is read from the given file (`~` is expanded to the home directory).
+
+## Available tools
+
+The MCP server exposes 40+ tools covering the full Iggy API:
+
+### Server
+
+| Tool | Description |
+|------|-------------|
+| `ping` | Health check |
+| `get_stats` | Server statistics (streams, topics, partitions, OS info) |
+| `get_me` | Current client info |
+| `get_client` | Get specific client details |
+| `get_clients` | List all connected clients |
+| `get_cluster_metadata` | Cluster information |
+| `snapshot` | Collect troubleshooting data |
+
+### Streams
+
+| Tool | Description |
+|------|-------------|
+| `get_streams` | List all streams |
+| `get_stream` | Get stream details |
+| `create_stream` | Create a new stream |
+| `update_stream` | Update stream name |
+| `delete_stream` | Delete a stream |
+| `purge_stream` | Purge all messages from a stream |
+
+### Topics
+
+| Tool | Description |
+|------|-------------|
+| `get_topics` | List topics in a stream |
+| `get_topic` | Get topic details |
+| `create_topic` | Create a new topic |
+| `update_topic` | Update topic settings |
+| `delete_topic` | Delete a topic |
+| `purge_topic` | Purge all messages from a topic |
+
+### Partitions & Segments
+
+| Tool | Description |
+|------|-------------|
+| `create_partitions` | Add partitions to a topic |
+| `delete_partitions` | Remove partitions from a topic |
+| `delete_segments` | Delete segments from a partition |
+
+### Messages
+
+| Tool | Description |
+|------|-------------|
+| `send_messages` | Send messages (partitioning: balanced, key, partition) |
+| `poll_messages` | Poll messages (strategies: offset, first, last, next, timestamp) |
+
+### Consumer Groups
+
+| Tool | Description |
+|------|-------------|
+| `get_consumer_groups` | List consumer groups |
+| `get_consumer_group` | Get consumer group details |
+| `create_consumer_group` | Create a consumer group |
+| `delete_consumer_group` | Delete a consumer group |
+
+### Consumer Offsets
+
+| Tool | Description |
+|------|-------------|
+| `get_consumer_offset` | Get stored consumer offset |
+| `store_consumer_offset` | Store consumer offset |
+| `delete_consumer_offset` | Delete consumer offset |
+
+### Users & Access Tokens
+
+| Tool | Description |
+|------|-------------|
+| `get_users` | List users |
+| `get_user` | Get user details |
+| `create_user` | Create a user |
+| `update_user` | Update user details |
+| `delete_user` | Delete a user |
+| `update_permissions` | Update user permissions |
+| `change_password` | Change user password |
+| `get_personal_access_tokens` | List PATs |
+| `create_personal_access_token` | Create a PAT |
+| `delete_personal_access_token` | Delete a PAT |
+
+## Permissions
+
+The `[permissions]` section provides a first layer of access control, checked before any request is forwarded to the Iggy server. This lets you restrict the MCP server to read-only operations, for example:
+
+```toml
+[permissions]
+create = false
+read = true
+update = false
+delete = false
+```
+
+On top of this, the Iggy user account used by the MCP server has its own granular permissions. For production use, create a dedicated user with the minimum required permissions.
+
+## Claude Desktop integration
+
+Here's the example configuration to be used with Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "iggy": {
+      "command": "/path/to/iggy-mcp",
+      "args": [],
+      "env": {
+        "IGGY_MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}
+```
+
+## Docker
+
+Run the MCP server as a container:
+
+```bash
+docker run -e IGGY_MCP_TRANSPORT=http \
+  -e IGGY_MCP_HTTP_ADDRESS=0.0.0.0:8082 \
+  -e IGGY_MCP_IGGY_ADDRESS=iggy-server:8090 \
+  -e IGGY_MCP_IGGY_USERNAME=iggy \
+  -e IGGY_MCP_IGGY_PASSWORD=iggy \
+  -p 8082:8082 \
+  apache/iggy-mcp
+```
+
+The default HTTP address is `127.0.0.1:8082`, which inside a container is unreachable from the outside, so `IGGY_MCP_HTTP_ADDRESS=0.0.0.0:8082` is required for the published port to work.
+
+## Systemd integration
+
+Build with the `systemd` cargo feature to enable systemd readiness and watchdog notifications:
+
+```bash
+cargo build --bin iggy-mcp --release --features iggy-mcp/systemd
+```
+
+The MCP server then behaves the same way the Iggy server does under systemd.

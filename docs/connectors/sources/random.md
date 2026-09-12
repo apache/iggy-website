@@ -1,0 +1,47 @@
+# Random Source
+
+> Generate random messages into Iggy streams for testing, benchmarking and verifying a connector pipeline.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sources/random/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sources/random.mdx
+
+The random source connector generates random messages and sends them to Iggy streams. This is useful for testing, benchmarking, and verifying that your connector pipeline is working correctly without needing an external data source.
+
+## Configuration
+
+```toml
+type = "source"
+key = "random-source"
+enabled = true
+version = 1
+name = "Random Source"
+path = "/path/to/libiggy_connector_random_source.so"
+verbose = false
+
+[[streams]]
+stream = "my-stream"
+topic = "my-topic"
+schema = "json"
+batch_length = 100
+linger_time = "100ms"
+
+[plugin_config]
+interval = "100ms"
+max_count = 1_000_000
+messages_range = [1, 10]
+payload_size = 256
+```
+
+## Plugin config options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `interval` | string | `"1s"` | Delay before each message generation cycle |
+| `max_count` | usize | unlimited | Stop producing after this many messages in total; omit for unlimited |
+| `messages_range` | [u32, u32] | `[10, 50]` | Min (inclusive) / max (exclusive) messages per batch (random within range) |
+| `payload_size` | u32 | `100` | Number of random characters in the `text` field of each message |
+
+Setting `max_count = 0` stops production immediately (the connector produces zero messages). To generate messages without a limit, leave the key out.
+
+The connector persists the total number of produced messages as its state, so `max_count` is enforced across runtime restarts.

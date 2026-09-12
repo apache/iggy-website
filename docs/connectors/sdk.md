@@ -1,0 +1,268 @@
+# SDK
+
+> The Sink and Source traits, the connector macros, and the decoders and encoders used to read and write Iggy streams.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sdk/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sdk.mdx
+
+SDK provides the commonly used structs and traits such as `Sink` and `Source`, along with the `sink_connector` and `source_connector` macros to be used when developing connectors.
+
+Moreover, it contains both, the `decoders` and `encoders` modules, implementing either `StreamDecoder` or `StreamEncoder` traits, which are used when consuming or producing data from/to Iggy streams. All the supported schemas - **JSON**, **Raw bytes**, **Text**, **Protocol Buffers**, **FlatBuffers**, and **Avro** - have both a decoder and an encoder.
+
+## Traits
+
+A source produces messages to the configured stream and topic. A sink consumes messages from the configured stream(s) and topic(s):
+
+```rust
+#[async_trait]
+pub trait Source: Send + Sync {
+    async fn open(&mut self) -> Result<(), Error>;
+    async fn poll(&self) -> Result<ProducedMessages, Error>;
+    async fn close(&mut self) -> Result<(), Error>;
+}
+
+#[async_trait]
+pub trait Sink: Send + Sync {
+    async fn open(&mut self) -> Result<(), Error>;
+    async fn consume(
+        &self,
+        topic_metadata: &TopicMetadata,
+        messages_metadata: MessagesMetadata,
+        messages: Vec<ConsumedMessage>,
+    ) -> Result<(), Error>;
+    async fn close(&mut self) -> Result<(), Error>;
+}
+```
+
+Expose the implementation to the runtime with the matching macro, and provide the expected `new()` constructor:
+
+```rust
+sink_connector!(MySink);
+
+impl MySink {
+    pub fn new(id: u32, config: MySinkConfig) -> Self { /* ... */ }
+}
+```
+
+```rust
+source_connector!(MySource);
+
+impl MySource {
+    pub fn new(id: u32, config: MySourceConfig, state: Option<ConnectorState>) -> Self { /* ... */ }
+}
+```
+
+The macros generate the C FFI symbols loaded by the runtime: `iggy_sink_open`, `iggy_sink_consume`, `iggy_sink_close`, and `iggy_sink_version` for sinks, and `iggy_source_open`, `iggy_source_handle`, `iggy_source_close`, and `iggy_source_version` for sources. Data crossing the FFI boundary is serialized using postcard, and each plugin receives its own Tokio runtime inside the SDK.
+
+## State
+
+Source connectors can persist their position between restarts. Each batch of `ProducedMessages` may carry an optional `ConnectorState` - the runtime saves it to a file after the batch is sent to Iggy, and passes the last saved state to `new()` on the next startup. `ConnectorState` wraps raw bytes and provides `serialize`/`deserialize` helpers backed by MessagePack. Sinks don't manage state. Their offsets are tracked by Iggy consumer groups. See the **[Observability page](/docs/connectors/observability)** for where and how state files are stored.
+
+## Retry utilities
+
+The `retry` module ships helpers for connectors talking to flaky external systems: a `CircuitBreaker`, an `HttpRetryMiddleware` for `reqwest`-based clients, and a `build_retry_client` factory that wraps a reqwest client with the retry middleware (the circuit breaker is wired separately).
+
+## Transforms
+
+Last but not least, the different `transforms` are available, to transform (add, update, delete etc.) the particular fields of the data being processed via external configuration. It's as simple as adding a new transform to the `transforms` section of the particular connector configuration file:
+
+```toml
+[transforms.add_fields]
+enabled = true
+
+[[transforms.add_fields.fields]]
+key = "message"
+value.static = "hello"
+```
+
+All the available transforms and their configuration options are documented on the **[Transforms page](/docs/connectors/transforms)**.
+
+## Protocol Buffers Support
+
+The SDK includes support for Protocol Buffers (protobuf) format with both encoding and decoding capabilities. Protocol Buffers provide efficient serialization and are particularly useful for high-performance data streaming scenarios.
+
+### Configuration Example
+
+Here's a complete example configuration for using Protocol Buffers with Iggy connectors. No protobuf-specific plugin ships with the runtime, so the example assumes a custom source and sink you implement yourself. The `schema = "proto"` stream setting and the `proto_convert` transform work with any connector.
+
+**Main runtime config (config.toml):**
+
+```toml
+[iggy]
+address = "localhost:8090"
+username = "iggy"
+password = "iggy"
+
+[connectors]
+config_type = "local"
+config_dir = "path/to/connectors"
+```
+
+**Source connector config (connectors/protobuf_source.toml):**
+
+```toml
+type = "source"
+key = "protobuf"
+enabled = true
+version = 0
+name = "Protobuf Source"
+path = "target/release/libiggy_connector_protobuf_source"
+
+[[streams]]
+stream = "protobuf_stream"
+topic = "protobuf_topic"
+schema = "proto"
+batch_length = 1000
+linger_time = "5ms"
+
+[plugin_config]
+schema_path = "schemas/message.proto"
+message_type = "com.example.Message"
+use_any_wrapper = true
+```
+
+**Sink connector config (connectors/protobuf_sink.toml):**
+
+```toml
+type = "sink"
+key = "protobuf"
+enabled = true
+version = 0
+name = "Protobuf Sink"
+path = "target/release/libiggy_connector_protobuf_sink"
+
+[[streams]]
+stream = "protobuf_stream"
+topics = ["protobuf_topic"]
+schema = "proto"
+
+[transforms.proto_convert]
+enabled = true
+source_format = "proto"
+target_format = "json"
+include_paths = ["."]
+preserve_unknown_fields = false
+field_mappings = { "old_field" = "new_field", "legacy_id" = "id" }
+
+[transforms.proto_convert.conversion_options]
+validate_messages = true
+pretty_json = false
+include_metadata = false
+type_url_prefix = "type.googleapis.com"
+strict_mode = false
+```
+
+The format-conversion transforms define no per-key defaults. Every non-optional key shown above must be present, or the configuration fails to deserialize (`schema_path`, `message_type`, `field_mappings`, and `descriptor_set` are the optional ones).
+
+The two `[[streams]]` shapes differ: a source produces to a single `topic` and can tune batching via `batch_length` and `linger_time`, while a sink consumes from a list of `topics` and can additionally set `batch_length`, `poll_interval`, and `consumer_group`.
+
+### Key Configuration Options
+
+#### Source Configuration
+
+- **`schema_path`**: Path to the `.proto` file containing message definitions
+- **`message_type`**: Fully qualified name of the protobuf message type to use
+- **`use_any_wrapper`**: Whether to wrap messages in `google.protobuf.Any` for type safety
+
+#### Transform Options
+
+- **`proto_convert`**: Transform for converting between protobuf and other formats
+- **`source_format`** / **`target_format`**: Formats to convert between - any schema value (`json`, `raw`, `text`, `proto`, `flat_buffer`, `avro`)
+- **`preserve_unknown_fields`**: Whether to keep fields that are not present in the schema during conversion
+- **`include_paths`**: Additional directories searched for imported `.proto` files
+- **`field_mappings`**: Mapping of field names for transformation (e.g., `"old_field" = "new_field"`)
+- **`conversion_options`**: Fine-tuning knobs: `validate_messages`, `pretty_json`, `include_metadata`, `type_url_prefix`, `strict_mode`
+
+The `schema_registry_url` field is reserved and currently not implemented. The SDK never contacts a schema registry, and schemas are loaded only from `schema_path` or `descriptor_set`.
+
+### Supported Features
+
+- **Encoding**: Convert JSON, Text, and Raw data to protobuf format
+- **Decoding**: Parse protobuf messages into JSON format with type information
+- **Transforms**: Convert between protobuf and other formats
+- **Field Mapping**: Transform field names during format conversion
+- **Any Wrapper**: Support for `google.protobuf.Any` message wrapper
+
+### Programmatic Usage
+
+#### Dynamic Schema Loading
+
+You can load or reload schemas programmatically:
+
+```rust
+use iggy_connector_sdk::decoders::proto::{ProtoStreamDecoder, ProtoConfig};
+use std::path::PathBuf;
+
+let mut decoder = ProtoStreamDecoder::new(ProtoConfig {
+    schema_path: None,
+    use_any_wrapper: true,
+    ..Default::default()
+});
+
+let config_with_schema = ProtoConfig {
+    schema_path: Some(PathBuf::from("schemas/user.proto")),
+    message_type: Some("com.example.User".to_string()),
+    ..Default::default()
+};
+
+match decoder.update_config(config_with_schema, true) {
+    Ok(()) => println!("Schema loaded successfully"),
+    Err(e) => eprintln!("Failed to load schema: {}", e),
+}
+```
+
+The encoder follows the same pattern:
+
+```rust
+use iggy_connector_sdk::encoders::proto::{ProtoStreamEncoder, ProtoEncoderConfig};
+use std::path::PathBuf;
+
+let mut encoder = ProtoStreamEncoder::new_with_config(ProtoEncoderConfig {
+    schema_path: Some(PathBuf::from("schemas/event.proto")),
+    message_type: Some("com.example.Event".to_string()),
+    use_any_wrapper: false,
+    ..Default::default()
+});
+
+if let Err(e) = encoder.load_schema() {
+    eprintln!("Schema reload failed: {}", e);
+}
+```
+
+#### Creating Converters with Schema
+
+```rust
+use iggy_connector_sdk::transforms::proto_convert::{ProtoConvert, ProtoConvertConfig};
+use iggy_connector_sdk::Schema;
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+let converter = ProtoConvert::new(ProtoConvertConfig {
+    source_format: Schema::Proto,
+    target_format: Schema::Json,
+    schema_path: Some(PathBuf::from("schemas/user.proto")),
+    message_type: Some("com.example.User".to_string()),
+    field_mappings: Some(HashMap::from([
+        ("user_id".to_string(), "id".to_string()),
+        ("full_name".to_string(), "name".to_string()),
+    ])),
+    ..ProtoConvertConfig::default()
+});
+
+let mut converter_with_manual_loading = ProtoConvert::new(ProtoConvertConfig::default());
+if let Err(e) = converter_with_manual_loading.load_schema() {
+    eprintln!("Manual schema loading failed: {}", e);
+}
+```
+
+### Usage Notes
+
+- **Automatic Loading**: Schemas are loaded automatically when `schema_path` or `descriptor_set` is provided in config
+- **Manual Loading**: Use `load_schema()` method for dynamic schema loading or reloading
+- **Error Handling**: Schema loading errors are handled gracefully with fallback to Any wrapper mode
+- **Immutable Design**: Converters are created with fixed configuration - create new instances for different schemas
+- When `use_any_wrapper` is enabled, messages are wrapped in `google.protobuf.Any` for better type safety
+- The `proto_convert` transform can be used to convert protobuf messages to JSON for easier processing
+- Field mappings allow you to rename fields during format conversion
+- Protocol Buffers provide efficient binary serialization compared to JSON

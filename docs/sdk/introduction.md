@@ -1,0 +1,122 @@
+# Introduction
+
+> The official Iggy client SDKs, their packages and registries, and the transports each one supports.
+
+Rendered page: https://iggy.apache.org/docs/sdk/introduction/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/introduction.mdx
+
+Iggy provides official client SDKs in multiple languages. The **Rust SDK** is the most feature-complete, offering both a high-level API (with auto-batching, consumer groups, offset management, retry logic) and a low-level API for direct protocol operations.
+
+| Language | Package | Registry | Transport | Connection string |
+|----------|---------|----------|-----------|-------------------|
+| Rust | [iggy](https://crates.io/crates/iggy) | crates.io | TCP, QUIC, HTTP, WebSocket | Yes |
+| Python | [apache-iggy](https://pypi.org/project/apache-iggy/) | PyPI | TCP, QUIC, HTTP, WebSocket | Yes (PyO3 wrapper) |
+| Java | [iggy](https://mvnrepository.com/artifact/org.apache.iggy/iggy) | Maven Central | TCP, HTTP | No |
+| Node.js | [apache-iggy](https://www.npmjs.com/package/apache-iggy) | npm | TCP | No |
+| Go | [iggy-go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) | pkg.go.dev | TCP | No |
+| C# | [Apache.Iggy](https://www.nuget.org/packages/Apache.Iggy/) | NuGet | TCP, HTTP | No |
+| C++ | [iggy-cpp](https://github.com/apache/iggy/tree/master/foreign/cpp) | GitHub (WIP) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
+| PHP | [apache/iggy-php](https://github.com/apache/iggy/tree/master/foreign/php) | Composer (experimental) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
+
+Python, C++, and PHP wrap the Rust SDK, so they inherit all transport protocols when using connection strings. Java and C# implement TCP and HTTP natively. Go and Node.js currently support TCP *only*.
+
+The Rust SDK is always the first to receive new features.
+
+## Prerequisites
+
+The samples across the SDK docs log in with the `iggy`/`iggy` root credentials. These **only exist** when the server is started with the default-credentials flag (or `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` set) on its first boot. Otherwise root gets a generated password and the samples fail with `InvalidCredentials`:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+`--fresh` **wipes the local data directory**, so an existing server with different stored credentials is re-initialized. This setup is for *development only*.
+
+## Connection string
+
+Connection strings are supported by the Rust, Python, C++, and PHP SDKs. They provide a compact way to configure the client, including the transport protocol, credentials, server address, and options.
+
+**Format:**
+
+```
+iggy://username:password@host:port[?options]
+```
+
+**Transport selection** via scheme:
+
+| Scheme | Transport |
+|--------|-----------|
+| `iggy://` | TCP (default) |
+| `iggy+tcp://` | TCP |
+| `iggy+quic://` | QUIC |
+| `iggy+http://` | HTTP |
+| `iggy+ws://` | WebSocket |
+
+**Personal Access Token** authentication: any credential without a colon is treated as a PAT. Server-minted tokens carry no prefix, so paste the token exactly as returned:
+
+```
+iggy://<personal-access-token>@host:port
+```
+
+**Examples:**
+
+```rust
+// Rust - TCP with default options
+let client = IggyClient::from_connection_string("iggy://iggy:iggy@localhost:8090")?;
+
+// Rust - QUIC
+let client = IggyClient::from_connection_string("iggy+quic://iggy:iggy@localhost:8080")?;
+
+// Rust - TCP with options
+let client = IggyClient::from_connection_string(
+    "iggy://iggy:iggy@localhost:8090?tls=true&reconnection_retries=unlimited&heartbeat_interval=5s"
+)?;
+```
+
+```python
+# Python
+client = IggyClient.from_connection_string("iggy://iggy:iggy@localhost:8090")
+```
+
+The option keys differ per transport and unknown keys are rejected as **hard errors**. See [Connection Strings](/docs/sdk/connection-strings) for the full per-transport option tables, defaults, and default ports.
+
+## Common operations
+
+All SDKs provide the same core operations through the unified client interface:
+
+- **SystemClient** - ping, stats, snapshot
+- **StreamClient** - create, get, list, update, delete, purge streams
+- **TopicClient** - create, get, list, update, delete, purge topics
+- **PartitionClient** - create, delete partitions
+- **SegmentClient** - delete segments
+- **MessageClient** - send, poll messages
+- **ConsumerOffsetClient** - get, store, delete consumer offsets
+- **ConsumerGroupClient** - create, get, list, delete consumer groups
+- **UserClient** - create, get, list, update, delete users, change password, update permissions
+- **PersonalAccessTokenClient** - create, list, delete PATs
+- **ClusterClient** - cluster metadata
+
+## Polling strategies
+
+When polling messages, you can choose from several strategies:
+
+| Strategy | Description |
+|----------|-------------|
+| `offset(n)` | Start from a specific offset |
+| `timestamp(t)` | Start after a specific timestamp |
+| `first()` | Start from the earliest available message |
+| `last()` | Start from the latest message |
+| `next()` | Continue from the last committed offset |
+
+## Partitioning strategies
+
+When sending messages, you can control partition routing:
+
+| Strategy | Description |
+|----------|-------------|
+| `partition_id(n)` | Send to a specific partition |
+| `balanced()` | Round-robin across partitions |
+| `messages_key(key)` | Hash-based routing by key |
+
+Strategies resolve in the client on binary transports, and on the server for the HTTP API and the Node SDK.

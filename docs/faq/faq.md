@@ -1,0 +1,51 @@
+# FAQ
+
+> Common questions about Apache Iggy, including how it compares to Kafka and other message brokers.
+
+Rendered page: https://iggy.apache.org/docs/faq/faq/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/faq/faq.mdx
+
+## Q: What is the difference between Iggy and traditional message brokers like Kafka?
+
+Iggy is a persistent message streaming platform that stores messages in an append-only log format, similar to Kafka. However, Iggy is designed for high performance and low latency using `io_uring` and a thread-per-core architecture. Iggy doesn't use kafka protocol, instead it has its own binary protocol optimized for speed and efficiency, which means that clients need to use our native client libraries.
+
+## Q: Are there plans to support Kafka protocol in Iggy?
+
+Currently, Iggy does not support the Kafka protocol. Our focus is on providing a high-performance native protocol that leverages the strengths of Iggy's architecture. However, we are open to community contributions (in fact there is an [discussion](https://github.com/apache/iggy/discussions/6) about it).
+
+## Q: What transport protocol should I use?
+
+For maximum throughput and lowest latency, use **TCP**. If you need built-in encryption without configuring TLS separately, **QUIC** is a good choice. **WebSocket** works well for browser-based clients. **HTTP** is the most accessible but has the highest overhead due to JSON serialization and stateless connections (consumer groups can be created, inspected, and deleted, but there is no join/leave membership over HTTP).
+
+## Q: What are the system requirements?
+
+Iggy is a single binary with no external dependencies. On Linux, it uses `io_uring` for maximum performance, which requires kernel 5.19+. The server starts with around 20 MB of RAM (plus the configured memory pool, default 4 GiB). For Docker, you need to set `SYS_NICE` capability, disable seccomp, and set unlimited memlock.
+
+## Q: How does consumer group rebalancing work?
+
+When consumers join or leave a consumer group, the server triggers cooperative partition rebalancing. Partitions are redistributed among active members. During rebalancing, there is a pending revocation phase (configurable timeout, default 30s) to ensure in-progress message processing can complete before partitions move to new owners.
+
+## Q: Does Iggy support exactly-once delivery?
+
+Iggy supports **at-most-once** (with auto-commit) and **at-least-once** (without auto-commit, manual offset management). **Exactly-once** semantics can be achieved at the application level, e.g. by attaching unique IDs to messages and deduplicating on the consumer side.
+
+## Q: How do I secure my Iggy deployment?
+
+Iggy supports TLS on all transport protocols, Argon2id password hashing, granular per-stream/per-topic permissions, Personal Access Tokens for programmatic access, and optional AES-256-GCM encryption at rest. For the HTTP API, JWT tokens are used for session management. See the [Security](/docs/server/security) documentation for details.
+
+## Q: Can I use Iggy with my existing tooling?
+
+Iggy provides a [Model Context Protocol (MCP)](/docs/ai/mcp) server with 40+ tools for LLM integration, [connectors](/docs/connectors/introduction) for piping data to/from external systems (e.g. PostgreSQL, MongoDB, Elasticsearch, ClickHouse, InfluxDB, S3, Delta Lake, Apache Iceberg, Quickwit), Prometheus metrics, and OpenTelemetry traces/logs. The HTTP API works with any REST client.
+
+## Q: What happened to the Tokio-based runtime?
+
+Iggy migrated from Tokio to a thread-per-core architecture with `compio` (which uses `io_uring` on Linux) starting with version 0.6.0. The migration delivered major performance improvements, including up to 92% better P9999 tail latency, and an 18% throughput improvement when fsync is enabled. You can read the full story in the [thread-per-core io_uring blog post](https://iggy.apache.org/blogs/2026/02/27/thread-per-core-io_uring/).
+
+## Q: Is clustering/replication available?
+
+Yes. Replication based on Viewstamped Replication (VSR) is built into the server. Multi-node clustering is configured via the `[cluster]` section (single-node mode is the default, `enabled = false`). It covers consensus, view changes, node authentication, and TLS between nodes, and is maturing toward production readiness. See the [Clustering](/docs/clustering/vsr) documentation for the protocol and [Deploy](/docs/clustering/deploy) for setting up a cluster.
+
+## Q: What examples are available?
+
+Examples are available in the [repository](https://github.com/apache/iggy/tree/master/examples) for multiple languages: Rust (basic, getting-started, message-envelope, message-headers, multi-tenant, new-sdk, sink-data-producer, stream-builder, tcp-tls), C#, Go, Java, Node.js, PHP, and Python. Docker Compose files and Helm charts are also provided.

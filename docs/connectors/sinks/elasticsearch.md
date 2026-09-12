@@ -1,0 +1,76 @@
+# Elasticsearch Sink
+
+> Index messages from Iggy streams into an Elasticsearch index using the bulk API.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sinks/elasticsearch/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sinks/elasticsearch.mdx
+
+The Elasticsearch sink connector consumes messages from Iggy streams and indexes them into an Elasticsearch index using the bulk API.
+
+## Configuration
+
+```toml
+type = "sink"
+key = "elasticsearch-sink"
+enabled = true
+version = 1
+name = "Elasticsearch Sink"
+path = "/path/to/libiggy_connector_elasticsearch_sink.so"
+
+[[streams]]
+stream = "events"
+topics = ["logs"]
+schema = "json"
+batch_length = 100
+poll_interval = "5ms"
+consumer_group = "elasticsearch-sink"
+
+[plugin_config]
+url = "http://localhost:9200"
+index = "events"
+username = "elastic"
+password = "changeme"
+create_index_if_not_exists = true
+```
+
+### Plugin config options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `url` | string | required | Elasticsearch cluster URL |
+| `index` | string | required | Target index name |
+| `username` / `password` | string | none | Optional basic authentication credentials |
+| `create_index_if_not_exists` | bool | `true` | Create the index on startup when it is missing |
+| `index_mapping` | table | none | Body of the create-index request (mappings, settings) |
+| `batch_size` | integer | unused | Accepted but currently not read by the connector |
+| `timeout_seconds` | integer | unused | Accepted but currently not read by the connector |
+
+The stream-level `batch_length` governs batching: each consume cycle bulk-indexes the batch of messages it receives. The connector performs no retries of its own. Failed batches are logged and counted.
+
+### Index mapping
+
+`index_mapping` is sent verbatim as the body of the create-index request, so it must be a structured object, not a JSON string embedded in TOML. Express it as nested TOML tables:
+
+```toml
+[plugin_config.index_mapping.mappings.properties.timestamp]
+type = "date"
+
+[plugin_config.index_mapping.mappings.properties.message]
+type = "text"
+
+[plugin_config.index_mapping.mappings.properties.service_name]
+type = "keyword"
+
+[plugin_config.index_mapping.mappings.properties.level]
+type = "keyword"
+```
+
+## Payload handling
+
+- JSON payloads are indexed as documents directly.
+- Raw payloads are parsed as JSON when possible, and wrapped as `{ "data": "<base64>", "data_type": "raw" }` when that fails.
+- Text payloads are wrapped as `{ "text": "...", "data_type": "text" }`.
+- Other payload formats are skipped with a warning.
+
+Each document is enriched with metadata fields before indexing: `_iggy_offset`, `_iggy_stream`, `_iggy_topic`, `_iggy_partition`, `_iggy_timestamp`, and `_iggy_headers` (when headers are present).

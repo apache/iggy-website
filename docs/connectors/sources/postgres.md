@@ -1,0 +1,110 @@
+# Postgres Source
+
+> Stream rows from PostgreSQL into Iggy topics by incremental table polling or change data capture over logical replication.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sources/postgres/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sources/postgres.mdx
+
+The PostgreSQL source connector fetches data from PostgreSQL databases and streams it to Iggy topics. It supports incremental table polling and Change Data Capture (CDC) via logical replication.
+
+This page is a curated subset of the documentation. The canonical reference, including payload extraction recipes, custom query parameters, and sink round-trip examples, is the upstream [postgres_source README](https://github.com/apache/iggy/tree/master/core/connectors/sources/postgres_source) in the `apache/iggy` repository.
+
+## Features
+
+- **Table Polling**: Incrementally fetch rows using a tracking column
+- **Change Data Capture**: Monitor database changes using PostgreSQL logical replication (`test_decoding` plugin)
+- **Payload Column Extraction**: Emit a single column directly as the message payload (raw bytes, text, or JSONB)
+- **Custom Queries**: Use custom SQL with parameter substitution instead of simple table polling
+- **Delete / Mark Processed**: Optionally delete rows after reading or flag them in a boolean column
+- **Offset Tracking**: Per-table tracking offsets are persisted as connector state and survive restarts
+- **Automatic Retries**: Transient database errors are retried with a configurable delay
+
+## Configuration
+
+```toml
+type = "source"
+key = "postgres-source"
+enabled = true
+version = 1
+name = "Postgres Source"
+path = "/path/to/libiggy_connector_postgres_source.so"
+
+[[streams]]
+stream = "database_changes"
+topic = "table_events"
+schema = "json"
+batch_length = 100
+linger_time = "5ms"
+
+[plugin_config]
+connection_string = "postgresql://username:password@localhost:5432/database"
+mode = "polling"
+tables = ["users", "orders"]
+poll_interval = "30s"
+batch_size = 1000
+tracking_column = "updated_at"
+```
+
+### Plugin config options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `connection_string` | string | required | PostgreSQL connection string |
+| `mode` | string | required | `polling` or `cdc` |
+| `tables` | array | required | Tables to monitor |
+| `poll_interval` | string | `"10s"` | How often to poll (e.g. `1s`, `5m`) |
+| `batch_size` | u32 | `1000` | Max rows per poll |
+| `tracking_column` | string | `"id"` | Column for incremental updates |
+| `initial_offset` | string | none | Starting value for the tracking column |
+| `max_connections` | u32 | `10` | Max database connections |
+| `snake_case_columns` | bool | `false` | Convert column names to snake_case |
+| `include_metadata` | bool | `true` | Wrap results with metadata |
+| `payload_column` | string | none | Column to extract directly as the message payload |
+| `payload_format` | string | none | Format of `payload_column`: `bytea` (alias `raw`), `text`, or `json_direct` (alias `jsonb`) |
+| `delete_after_read` | bool | `false` | Delete rows after reading |
+| `processed_column` | string | none | Boolean column to mark rows as processed |
+| `primary_key_column` | string | `tracking_column` | Primary key used for delete/mark operations |
+| `custom_query` | string | none | Custom SQL with parameter substitution |
+| `replication_slot` | string | `"iggy_slot"` | Replication slot name (CDC mode only) |
+| `capture_operations` | array | `["INSERT","UPDATE","DELETE"]` | CDC operations to capture |
+| `cdc_backend` | string | `"builtin"` | CDC backend; only `builtin` is implemented |
+| `verbose_logging` | bool | `false` | Log at info level instead of debug |
+| `max_retries` | u32 | `3` | Max retry attempts for transient errors |
+| `retry_delay` | string | `"1s"` | Base delay between retries |
+
+## Output Format
+
+By default (no `payload_column`), each row is wrapped in a JSON envelope:
+
+```json
+{
+  "table_name": "users",
+  "operation_type": "SELECT",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "id": 123,
+    "name": "John Doe",
+    "email": "john@example.com",
+    "updated_at": "2024-01-15T10:29:50Z"
+  },
+  "old_data": null
+}
+```
+
+The stream config should use `schema = "json"`. Flat-schema sinks such as Iceberg need the `unwrap_envelope` transform to extract the `data` field. See the [transforms documentation](/docs/connectors/transforms).
+
+### Payload Column Extraction
+
+When `payload_column` is set, the connector skips the envelope and emits that column directly as the message payload. `payload_format` controls how the column is read: `bytea` passes raw bytes through (use `schema = "raw"`), `text` reads UTF-8 text, and `json_direct` serializes a JSONB column to JSON bytes. See the upstream README for schema pairing and round-trip recipes with the PostgreSQL sink.
+
+## CDC Mode
+
+With `mode = "cdc"` the connector reads changes from a logical replication slot instead of polling tables:
+
+- The builtin backend creates (or reuses) a logical replication slot using the `test_decoding` output plugin. The default slot name is `iggy_slot`. No publication is created or required, since `test_decoding` ignores publications entirely.
+- PostgreSQL must run with `wal_level = logical`, and the connection must be direct (no pooler) where replication requires it.
+- `capture_operations` filters which operations (`INSERT`, `UPDATE`, `DELETE`) are emitted.
+- The `pg_replicate` backend (based on Supabase's ETL framework) is **not implemented**: selecting `cdc_backend = "pg_replicate"` fails at startup unless the `cdc_pg_replicate` build feature is enabled, and the backend returns an error even when it is.
+
+When decommissioning a CDC connector, drop the replication slot to stop WAL retention. See the upstream README for details.

@@ -1,0 +1,146 @@
+# Intro
+
+> The Rust SDK, the primary and most complete Iggy client, and where its source lives.
+
+Rendered page: https://iggy.apache.org/docs/sdk/rust/intro/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/rust/intro.mdx
+
+The Rust SDK is the primary and most feature-complete client for Iggy. It is available on [crates.io](https://crates.io/crates/iggy) and the source code is part of the [core repository](https://github.com/apache/iggy/tree/master/core/sdk).
+
+```bash
+cargo add iggy
+```
+
+## Prerequisites
+
+The examples below log in with the `iggy`/`iggy` root credentials, which **only exist** when the server is started with the default-credentials flag (or `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` set) on its first boot. Otherwise root gets a generated password and the examples fail with `InvalidCredentials`:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+`--fresh` **wipes the local data directory**. This setup is for *development only*.
+
+## High-level vs low-level API
+
+The SDK provides two layers:
+
+**High-level API (recommended)** - the easiest way to get started. It handles connection management, auto-batching, consumer group lifecycle, offset commits, retry logic, and reconnection out of the box. Use `IggyClient`, `IggyProducer`, and `IggyConsumer` for the best developer experience.
+
+```rust
+use iggy::prelude::*;
+
+// Connect with a connection string
+let client = IggyClient::from_connection_string("iggy://iggy:iggy@localhost:8090")?;
+client.connect().await?;
+
+// Or use the builder
+let client = IggyClientBuilder::new()
+    .with_tcp()
+    .with_server_address("localhost:8090".to_string())
+    .build()?;
+client.connect().await?;
+client.login_user("iggy", "iggy").await?;
+```
+
+**Low-level API** - direct access to individual protocol operations. Useful when you need fine-grained control over every request, or when building custom abstractions on top.
+
+The high-level API is built on top of the low-level one, so you can always drop down when needed.
+
+## Connection string
+
+The connection string is the simplest way to configure the client. It supports all four transport protocols:
+
+```
+iggy://user:pass@host:port              (TCP, default)
+iggy+tcp://user:pass@host:port          (TCP, explicit)
+iggy+quic://user:pass@host:port         (QUIC)
+iggy+http://user:pass@host:port         (HTTP)
+iggy+ws://user:pass@host:port           (WebSocket)
+```
+
+Options can be appended as query parameters:
+
+```
+iggy://iggy:iggy@my-server:8090?tls=true&tls_ca_file=/path/to/ca.crt
+iggy://iggy:iggy@localhost:8090?reconnection_retries=unlimited&heartbeat_interval=5s
+```
+
+Personal Access Tokens are also supported. Any credential without a colon is treated as a PAT. Paste the token exactly as the server returned it, with **no prefix**:
+
+```
+iggy://<personal-access-token>@localhost:8090
+```
+
+See [Connection Strings](/docs/sdk/connection-strings) for the full per-transport option tables and defaults.
+
+## Quick example
+
+```rust
+use iggy::prelude::*;
+use std::str::FromStr;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")?;
+    client.connect().await?;
+
+    // Re-running this example is fine: an existing stream or topic is not an error.
+    match client.create_stream("my-stream").await {
+        Ok(_) | Err(IggyError::StreamNameAlreadyExists(_)) => {}
+        Err(e) => return Err(e.into()),
+    }
+    // Every topic knob rides `TopicCreateOptions`; fields left as `None`
+    // resolve against the server's defaults at admission.
+    match client
+        .create_topic(
+            &"my-stream".try_into()?,
+            "my-topic",
+            &TopicCreateOptions {
+                partitions_count: Some(1),
+                message_expiry: Some(IggyExpiry::NeverExpire),
+                ..TopicCreateOptions::default()
+            },
+        )
+        .await
+    {
+        Ok(_) | Err(IggyError::TopicNameAlreadyExists(_, _)) => {}
+        Err(e) => return Err(e.into()),
+    }
+
+    let msg = IggyMessage::from_str("hello world")?;
+    client
+        .send_messages(
+            &"my-stream".try_into()?,
+            &"my-topic".try_into()?,
+            &Partitioning::partition_id(0),
+            &mut [msg],
+        )
+        .await?;
+    println!("Message sent");
+
+    let polled = client
+        .poll_messages(
+            &"my-stream".try_into()?,
+            &"my-topic".try_into()?,
+            Some(0),
+            &Consumer::default(),
+            &PollingStrategy::next(),
+            10,
+            true,
+        )
+        .await?;
+
+    for message in &polled.messages {
+        let payload = std::str::from_utf8(&message.payload)?;
+        println!("Offset: {}, Payload: {}", message.header.offset, payload);
+    }
+
+    Ok(())
+}
+```
+
+Partition IDs are **0-based**: the first partition of a topic is partition `0`.
+
+For the full getting started tutorial, see [Getting Started](/docs/introduction/getting-started). For the high-level producer/consumer builders, see [High-level SDK](/docs/sdk/rust/high-level-sdk) and [Stream Builder](/docs/sdk/rust/stream-builder).
