@@ -118,13 +118,15 @@ curl --fail --get http://localhost:7280/api/v1/events/search --data-urlencode 'q
 | `max_retries` | `3` | Total HTTP attempts including the first; `0` and `1` both allow one attempt |
 | `retry_delay` | `"1s"` | Base exponential delay for HTTP retries and readiness probes |
 | `retry_max_delay` | `"5s"` | Cap for calculated HTTP retry delays; a valid `Retry-After` on HTTP 429 overrides it |
-| `max_open_retries` | `10` | Total readiness attempts including the first; `0` and `1` both allow one attempt |
+| `max_open_retries` | `10` | Total attempts per readiness check including the first; `0` and `1` both allow one attempt |
 | `open_retry_max_delay` | `"30s"` | Cap for calculated readiness retry delays |
 | `timeout` | `"30s"` | Timeout per HTTP attempt; retries and their waits can make an operation take longer |
 
 Durations require units and must be positive; invalid or zero durations prevent startup. Unknown plugin keys are rejected. There is no plugin `batch_size` option: `batch_length` limits the polled batch, and the sink splits it by serialized byte size without accumulating across polls.
 
 Readiness uses `GET /health/readyz`, retrying any failed probe. The index check uses `GET /api/v1/indexes/<index_id>`; only a 404 triggers creation with `POST /api/v1/indexes`. If creation receives an error status, a successful index recheck allows startup to continue. A successful existence check does not validate the supplied mapping against the existing one. Requests retain any path prefix from `url`.
+
+After verifying or creating the index, the sink probes the ingest endpoint with an empty body before accepting messages. This waits for the queue on Quickwit versions that return 404 while it starts. These probes submit no documents and retry HTTP 404, 429, 5xx and network failures. Each readiness check uses `max_open_retries` and `open_retry_max_delay`.
 
 ## Payload Shapes
 
