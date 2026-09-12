@@ -36,9 +36,9 @@ Client to server. 256 bytes.
 | 60 | 1 | `command` | u8 | `5` (`Request`). |
 | 61 | 1 | `replica` | u8 | Send zero. |
 | 62 | 66 | reserved | bytes | Zero. |
-| 128 | 16 | `client` | u128 | Client-chosen session identity, non-zero. Minted fresh for each registration. |
-| 144 | 16 | `request_checksum` | u128 | Optional integrity stamp over the request body (the Rust SDK uses XxHash3-64 widened to u128). Lets the server's client table catch a `request` number reused for different arguments. Zero disables the comparison. Stamped only for metadata-plane operations; zero for partition-plane and non-replicated ones. |
-| 160 | 8 | `timestamp` | u64 | Informational; the server echoes it into `ReplyHeader.timestamp`. May be zero. |
+| 128 | 16 | `client` | u128 | Client-chosen identity, non-zero. Mint a fresh id for a new logical client; retain it when resuming that client. |
+| 144 | 16 | `request_checksum` | u128 | Optional integrity stamp over the request body (the Rust SDK uses XxHash3-64 widened to u128). Lets the server's client table catch a `request` number reused for different arguments. Zero disables the comparison. The Rust SDK stamps metadata/session operations and `DeleteSegments`; it sends zero for partition operations and non-replicated ones. |
+| 160 | 8 | `timestamp` | u64 | May be zero. Direct replies can echo it, but committed prepares use a server-assigned timestamp. |
 | 168 | 8 | `request` | u64 | Request number, per client. See [request numbering](#request-numbering). |
 | 176 | 1 | `operation` | u8 | The [`Operation`](#operation-discriminants) discriminant. |
 | 177 | 7 | padding | bytes | Zero. |
@@ -87,19 +87,22 @@ Value 0 is reserved and rejected. The 64..127 range is reserved for server-inter
 
 The planes matter for delivery semantics:
 
-- **Metadata operations** replicate through the metadata consensus group. The server deduplicates them by `(client, request)` and caches replies, so a retried request gets the cached answer instead of a double apply (exactly-once).
-- **Partition operations** replicate through their partition's consensus group. They are at-least-once: no reply cache, a replay may apply again.
-- **Non-replicated operations** are reads. They bypass consensus and deduplication entirely.
+- **Metadata operations** replicate through the metadata consensus group. The server deduplicates them by `(client, request)` within its retained client history. Recent replies are cached and replayed; an older request can remain recognized as already applied after its reply has left the cache. This is not an unlimited exactly-once guarantee.
+- **Partition operations** normally replicate through their partition's consensus group. Each partition retains client request watermarks and a 128-id committed window to suppress duplicates. There is no reply cache: a recognized duplicate gets an empty success, including no offset confirmations for a retried send. Capacity eviction or a new client identity loses this coverage. Single-replica consumer-offset writes with `ack = 0` bypass consensus and this deduplication.
+- **Non-replicated operations** bypass consensus and deduplication. A poll can still submit a separate consumer-offset write when auto-commit is enabled.
 
 ## Request numbering
 
 `request` is a per-client counter the server's client table tracks for metadata-plane operations:
 
-- Metadata operations must send a strictly increasing `request` (the SDK advances the counter per metadata request).
-- Partition operations and non-replicated operations send the current counter value without advancing it. The server doesn't track theirs.
+- New metadata operations must use a `request` above the retained watermark; a retry reuses its original number and arguments.
+- The Rust SDK advances one shared counter for metadata operations, partition operations, logout, and `DeleteSegments`. Non-replicated operations use the current value without advancing it.
+- Register uses `request = 0`; other operations except `NonReplicated` require a non-zero request number.
 - The counter is a watermark, not a contiguous sequence: any value above the last accepted one is admissible.
 
-`session` is the fence epoch: the value handed back by the login reply. Every request after login must echo it. When the same `client` id registers again, the new registration mints a higher epoch and requests carrying the old one are fenced (rejected as zombies).
+`session` is the fence epoch handed back by the login reply, derived from the committed Register log position. Echo it after login. Registering the same `client` again mints a higher epoch; the metadata client table rejects an older epoch. Partition dispatch uses the identity bound to the authenticated connection.
+
+The partition window is measured in the shared client request-id space. An unseen request arriving 128 or more ids below that partition's watermark is treated as already committed and receives success without executing. Avoid allowing an unresolved write to fall outside that window; the protocol does not provide an unlimited reordered-retry guarantee.
 
 ## ReplyHeader
 
@@ -111,21 +114,21 @@ Server to client. 256 bytes, followed by `size - 256` bytes of body.
 | 16 | 16 | `checksum_body` | u128 | Zero on client-facing frames. |
 | 32 | 16 | `cluster` | u128 | Cluster id. |
 | 48 | 4 | `size` | u32 | Total frame length: 256 + body length. |
-| 52 | 4 | `view` | u32 | Consensus view the reply was produced in. |
+| 52 | 4 | `view` | u32 | View associated with the reply. A cached committed reply retains its original view; direct replies can echo the request value. |
 | 56 | 4 | `release` | u32 | Zero. |
 | 60 | 1 | `command` | u8 | `8` (`Reply`). |
-| 61 | 1 | `replica` | u8 | Answering replica index. |
+| 61 | 1 | `replica` | u8 | Replica index stamped by the reply builder. Cached committed replies retain the original primary index. |
 | 62 | 66 | reserved | bytes | Zero. |
 | 128 | 16 | `request_checksum` | u128 | Echoed from the request. |
 | 144 | 16 | `context` | u128 | Server context. |
 | 160 | 16 | `client` | u128 | Echoed client id. |
-| 176 | 8 | `op` | u64 | Log position of the committed operation. |
-| 184 | 8 | `commit` | u64 | Commit point at reply time. |
-| 192 | 8 | `timestamp` | u64 | Echo of the request `timestamp`. |
-| 200 | 8 | `request` | u64 | Echoed request number; correlate replies by this. |
-| 208 | 1 | `operation` | u8 | Echoed operation discriminant. |
+| 176 | 8 | `op` | u64 | Committed log position on consensus replies. Direct replies can instead carry the session epoch or zero; this field alone does not prove a commit. |
+| 184 | 8 | `commit` | u64 | Commit position associated with the reply. A cached committed reply retains its original position. |
+| 192 | 8 | `timestamp` | u64 | Server-assigned prepare timestamp on committed replies, or the request timestamp on direct replies. |
+| 200 | 8 | `request` | u64 | Echoed request number. Non-replicated requests can reuse a number, so it is not a unique correlation id for concurrent reads. |
+| 208 | 1 | `operation` | u8 | Reply operation. Server rewrites can return `64` for CreateTopic, `65` for CreatePartitions, or `68` for DeleteSegments instead of the original client operation. |
 | 209 | 7 | padding | bytes | Zero. |
-| 216 | 4 | `status` | u32 | `0` = accepted. Nonzero = an `IggyError` code for a failure decided **before** commit (authorization denial, admission reject). A nonzero status always comes with an empty body. |
+| 216 | 4 | `status` | u32 | `0` = no header-level failure. Nonzero = an `IggyError` code for a failure decided **before** commit (authorization denial, admission reject). A nonzero status always comes with an empty body. |
 | 220 | 36 | reserved | bytes | Zero. |
 
 Decode order for a client:
@@ -137,7 +140,7 @@ Decode order for a client:
 
 ## Result section
 
-Replies for all metadata operations and for the partition-plane consumer-offset writes (`StoreConsumerOffset`, `DeleteConsumerOffset`) are **result-framed**: the body starts with a committed-result section ahead of the typed payload.
+Replies for all metadata operations, including their server-internal rewrites, and for the partition-plane consumer-offset writes (`StoreConsumerOffset`, `DeleteConsumerOffset`) are **result-framed**. Non-empty Register replies use the same framing. The body starts with a result section ahead of the typed payload.
 
 ```text
 [count: u32]
@@ -145,9 +148,9 @@ count x { index: u32, result: u32 }
 ```
 
 - Success: `count = 0`, and the typed response payload (if any) follows the 4 count bytes.
-- Committed business rejection: one entry `{ index: 0, result: error_code }` and no payload.
+- Business or transient rejection: one entry `{ index: 0, result: error_code }` and no payload.
 
-The header `status` channel and the result section are mutually exclusive by construction: a reply either failed pre-commit (`status` nonzero, empty body) or committed (`status` zero, result section present). A login-register reply carries the result section only when non-empty. On success its body starts directly with the [login response payload](/docs/binary-protocol/connection-lifecycle#login-register).
+A nonzero header `status` has an empty body. With `status = 0`, decode the result section for the operations above: it can report either a committed outcome or a pre-commit transient rejection. Its presence alone does not prove commitment. A successful login-register reply starts with `count = 0`, followed by the [login response payload](/docs/binary-protocol/connection-lifecycle#login-register). An empty Register body is a terminal failure, not a successful login.
 
 Replies to non-replicated commands aren't result-framed: after `status = 0` the body is the response payload directly.
 

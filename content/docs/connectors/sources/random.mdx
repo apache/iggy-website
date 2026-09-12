@@ -7,13 +7,19 @@ The random source connector generates random messages and sends them to Iggy str
 
 ## Configuration
 
+Use the broker credentials and runtime setup from the [source guide](/docs/connectors/sources/source#configuration). Save the configuration below in that runtime's connector directory. From the matching 0.9.0/edge repository root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_random_source
+```
+
 ```toml
 type = "source"
 key = "random-source"
 enabled = true
 version = 1
 name = "Random Source"
-path = "/path/to/libiggy_connector_random_source.so"
+path = "target/release/libiggy_connector_random_source"
 verbose = false
 
 [[streams]]
@@ -34,11 +40,15 @@ payload_size = 256
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `interval` | string | `"1s"` | Delay before each message generation cycle |
+| `interval` | string | `"1s"` | Delay before each message generation cycle; invalid duration strings fall back to `"1s"` |
 | `max_count` | usize | unlimited | Stop producing after this many messages in total; omit for unlimited |
-| `messages_range` | [u32, u32] | `[10, 50]` | Min (inclusive) / max (exclusive) messages per batch (random within range) |
+| `messages_range` | [u32, u32] | `[10, 50]` | Min (inclusive) / max (exclusive) messages per batch, capped by the remaining `max_count`; the lower bound must be smaller |
 | `payload_size` | u32 | `100` | Number of random characters in the `text` field of each message |
 
 Setting `max_count = 0` stops production immediately (the connector produces zero messages). To generate messages without a limit, leave the key out.
 
-The connector persists the total number of produced messages as its state, so `max_count` is enforced across runtime restarts.
+The connector stages its count for each batch and commits it only after the runtime acknowledges delivery and saves the checkpoint. Restoring that checkpoint enforces `max_count` across restarts; missing or undecodable state starts the count at zero. After reaching the limit, polling continues but returns no messages or new checkpoint.
+
+A non-increasing `messages_range` returns a configuration error when message generation is attempted. The SDK logs poll errors and continues polling. Each generated JSON record contains a random UUID `id`, fixed `title = "Hello"` and `name = "World"`, and random alphanumeric `text`. `payload_size` controls only that text, not the total serialized record size.
+
+Create `my-stream` and `my-topic` before starting the runtime, or change the sample to use an existing destination. Configure one destination per source instance.

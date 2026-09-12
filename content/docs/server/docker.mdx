@@ -5,7 +5,7 @@ description: "Run the Iggy server from the official Docker images, and deploy it
 
 ## Docker
 
-You can easily run the Iggy server with Docker - the official images can be found [here](https://hub.docker.com/r/apache/iggy), simply type `docker pull apache/iggy`.
+You can easily run the Iggy server with Docker - the official images can be found [here](https://hub.docker.com/r/apache/iggy), use `docker pull apache/iggy:edge` while preparing for 0.9.0, or `apache/iggy:0.9.0` once released.
 
 These properties of the published image matter for deployment:
 
@@ -20,7 +20,7 @@ The examples use a permissive syscall profile and unlimited locked memory for de
 ```yaml
 services:
   iggy:
-    image: apache/iggy:latest
+    image: apache/iggy:edge
     container_name: iggy
     restart: unless-stopped
     cap_add:
@@ -59,7 +59,7 @@ docker run -d --name iggy \
   -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
   -p 8090:8090 -p 3000:3000 \
   -v iggy:/app/local_data \
-  apache/iggy:latest
+  apache/iggy:edge
 ```
 
 ### Why these capabilities?
@@ -105,17 +105,17 @@ Helm charts for Kubernetes deployment are available in the [repository](https://
 ### Quick start
 
 ```bash
-helm install iggy ./helm/charts/iggy
+helm install iggy ./helm/charts/iggy --set server.image.tag=edge
 ```
 
 ### Chart components
 
-- **Server Deployment** - runs `apache/iggy` with the pod security context the server needs: seccomp profile `Unconfined` (for `io_uring`) plus the `IPC_LOCK` capability (for memory locking). Listener addresses are set to `0.0.0.0` via `server.env`, and the data volume mounts at `/app/local_data`. The chart supplies `IGGY_NODE_ADVERTISED_ADDRESS` as the in-cluster Service DNS name; override it with `server.advertisedAddress` when clients arrive through a LoadBalancer or an Ingress. Images that predate the setting, including the `0.7.0` pinned by default, log the variable as unknown and start anyway.
-- **Server Service** - exposes the `http` (3000), `quic` (8080), and `tcp` (8090) ports. WebSocket is not exposed by the chart.
+- **Server Deployment** - runs `apache/iggy` with the pod security context the server needs: seccomp profile `Unconfined` (for `io_uring`) plus the `IPC_LOCK` capability (for memory locking). Listener addresses are set to `0.0.0.0` via `server.env`, and the data volume mounts at `/app/local_data`. The chart supplies `IGGY_NODE_ADVERTISED_ADDRESS` as the in-cluster Service DNS name; override it with `server.advertisedAddress` when clients arrive through a LoadBalancer or an Ingress. The server image tag defaults to the chart's `appVersion` (`0.9.0-edge.6` in this source revision). The quick start explicitly selects `edge`; use `server.image.tag=0.9.0` after that release is available.
+- **Server Service** - exposes the `http` (3000), `quic` (8080/UDP), `tcp` (8090), and `websocket` (8092) ports.
 - **Web UI Deployment + Service** - a separate `apache/iggy-web-ui` deployment on port 3050, enabled by default (`ui.enabled`).
-- **Secret** - root user credentials from `server.users.root` (default `iggy`/`changeit`). Point `existingSecret` at your own Secret in production.
+- **Secret** - root user credentials from `server.users.root` (default `iggy`/`changeit`). Point `server.users.root.existingSecret.name` at your own Secret in production; `usernameKey` and `passwordKey` select its keys.
 - **PersistentVolumeClaim** - storage for `/app/local_data`, **disabled by default** (`server.persistence.enabled`), 8Gi when enabled.
-- **ServiceAccount**, **HPA**, **Ingress** - the usual optional plumbing, for both server and UI.
+- **ServiceAccount** and **Ingress** - a shared ServiceAccount and separate optional server/UI ingresses. The chart has no HPA template. Server `replicaCount` must not exceed 1; cluster mode uses one release per node, each with its own replica ID and storage.
 - **ServiceMonitor** - Prometheus scrape config (optional). The `/metrics` endpoint requires a bearer credential like every other read, so wire a token (e.g. a personal access token stored in a Secret) into `server.serviceMonitor.authorization` - an unauthenticated scrape gets 401.
 
 ### Key values
@@ -131,11 +131,12 @@ server:
   advertisedAddress: ""
   image:
     repository: apache/iggy
-    tag: "0.7.0"
+    tag: ""  # Falls back to Chart.yaml appVersion
   ports:
     http: 3000
     quic: 8080
     tcp: 8090
+    websocket: 8092
   users:
     root:
       username: iggy
@@ -169,8 +170,8 @@ securityContext:
 resources: {}
 ```
 
-Customize the values file for your environment and deploy with:
+Save the excerpt as `my-values.yaml`, customize it for your environment, and deploy with:
 
 ```bash
-helm install iggy ./helm/charts/iggy -f my-values.yaml
+helm install iggy ./helm/charts/iggy -f my-values.yaml --set server.image.tag=edge
 ```

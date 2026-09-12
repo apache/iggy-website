@@ -5,6 +5,8 @@ description: "Producer and consumer samples for the C# SDK, built on the high-le
 
 These samples use the [High-level SDK](/docs/sdk/csharp/high-level-sdk) - the recommended way to build producers and consumers. For the low-level, per-call equivalents, see the [Guide](/docs/sdk/csharp/guide).
 
+Use the [installation and server setup](/docs/sdk/csharp/intro) first. The snippets share their named resources: run a producer before its corresponding consumer.
+
 ## Producer
 
 A publisher that creates the stream and topic if missing, batches sends in the background, and retries failures:
@@ -18,7 +20,7 @@ using Apache.Iggy.Extensions;
 using Apache.Iggy.Factory;
 using Apache.Iggy.Messages;
 
-var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
 {
     BaseAddress = "127.0.0.1:8090",
     Protocol = Protocol.Tcp
@@ -27,7 +29,7 @@ var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
 await client.ConnectAsync();
 await client.LoginUserAsync("iggy", "iggy");
 
-var publisher = client.CreatePublisherBuilder(
+await using var publisher = client.CreatePublisherBuilder(
         Identifier.String("dev"),
         Identifier.String("events"))
     .CreateStreamIfNotExists("dev")
@@ -46,14 +48,13 @@ for (var i = 0; i < 100; i++)
 
 // Drain the background queue before exiting
 await publisher.WaitUntilAllSendsAsync();
-await publisher.DisposeAsync();
 
-Console.WriteLine("Sent 100 messages");
+Console.WriteLine("Queued 100 messages");
 ```
 
 ## Consumer group
 
-A consumer that creates and joins a consumer group, commits offsets after each received message, and surfaces polling errors:
+A consumer that creates and joins a consumer group, stores each offset after handling the yielded message and requesting the next one, and surfaces polling errors:
 
 ```csharp
 using System.Text;
@@ -65,7 +66,7 @@ using Apache.Iggy.Extensions;
 using Apache.Iggy.Factory;
 using Apache.Iggy.Kinds;
 
-var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
 {
     BaseAddress = "127.0.0.1:8090",
     Protocol = Protocol.Tcp
@@ -74,7 +75,7 @@ var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
 await client.ConnectAsync();
 await client.LoginUserAsync("iggy", "iggy");
 
-var consumer = client.CreateConsumerBuilder(
+await using var consumer = client.CreateConsumerBuilder(
         Identifier.String("dev"),
         Identifier.String("events"),
         Consumer.Group("event-processors"))
@@ -115,7 +116,7 @@ using Apache.Iggy.Factory;
 using Apache.Iggy.Kinds;
 using Apache.Iggy.Publishers;
 
-var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
 {
     BaseAddress = "127.0.0.1:8090",
     Protocol = Protocol.Tcp
@@ -134,11 +135,10 @@ var publisherBuilder = IggyPublisherBuilder<OrderEvent>.Create(
 publisherBuilder.CreateStreamIfNotExists("orders");
 publisherBuilder.CreateTopicIfNotExists("created");
 
-var publisher = publisherBuilder.Build();
+await using var publisher = publisherBuilder.Build();
 await publisher.InitAsync();
 
 await publisher.SendAsync(new OrderEvent(Guid.NewGuid(), 99.90m));
-await publisher.DisposeAsync();
 
 // Consume them
 var consumerBuilder = IggyConsumerBuilder<OrderEvent>.Create(
@@ -151,7 +151,7 @@ var consumerBuilder = IggyConsumerBuilder<OrderEvent>.Create(
 consumerBuilder.WithPollingStrategy(PollingStrategy.Next());
 consumerBuilder.WithAutoCommitMode(AutoCommitMode.AfterReceive);
 
-var consumer = consumerBuilder.Build();
+await using var consumer = consumerBuilder.Build();
 await consumer.InitAsync();
 
 await foreach (var message in consumer.ReceiveDeserializedAsync())
@@ -186,3 +186,28 @@ The [examples/csharp](https://github.com/apache/iggy/tree/master/examples/csharp
 - **MessageEnvelope** - envelope pattern (message type + JSON payload) over the low-level client
 - **MessageHeaders** - user-defined message headers
 - **TcpTls** - TLS-encrypted TCP connection
+
+Repository examples require .NET 10 and reference the local SDK. Build and run from the same checkout as the server:
+
+```bash
+dotnet build examples/csharp/Iggy_SDK.Examples.sln --configuration Release
+dotnet run --no-build --configuration Release --project examples/csharp/src/GettingStarted/Iggy_SDK.Examples.GettingStarted.Producer
+dotnet run --no-build --configuration Release --project examples/csharp/src/GettingStarted/Iggy_SDK.Examples.GettingStarted.Consumer
+```
+
+The getting-started producer sends 50 messages to partition 0; its consumer reads five nonempty batches and then exits. Envelope and header examples also use five batches. NewSdk uses four partitions and its group consumer runs until stopped.
+
+For TcpTls, run from the repository root so `core/certs/iggy_ca_cert.pem` resolves. Start a separate matching server with the example TLS certificate and root credentials:
+
+```bash
+IGGY_ROOT_USERNAME=iggy IGGY_ROOT_PASSWORD=iggy \
+IGGY_TCP_TLS_ENABLED=true \
+IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
+IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
+cargo run --bin iggy-server
+```
+
+```bash
+dotnet run --no-build --configuration Release --project examples/csharp/src/TcpTls/Iggy_SDK.Examples.TcpTls.Producer
+dotnet run --no-build --configuration Release --project examples/csharp/src/TcpTls/Iggy_SDK.Examples.TcpTls.Consumer
+```

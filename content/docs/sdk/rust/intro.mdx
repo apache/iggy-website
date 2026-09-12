@@ -5,23 +5,27 @@ description: "The Rust SDK, the primary and most complete Iggy client, and where
 
 The Rust SDK is the primary and most feature-complete client for Iggy. It is available on [crates.io](https://crates.io/crates/iggy) and the source code is part of the [core repository](https://github.com/apache/iggy/tree/master/core/sdk).
 
+Run from your application crate to add the published SDK:
+
 ```bash
 cargo add iggy
 ```
 
+Use an SDK release compatible with your server. For unreleased changes, build both from the same checkout; the [Getting Started](/docs/introduction/getting-started) guide shows the source dependency setup.
+
 ## Prerequisites
 
-The examples below log in with the `iggy`/`iggy` root credentials, which **only exist** when the server is started with the default-credentials flag (or `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` set) on its first boot. Otherwise root gets a generated password and the examples fail with `InvalidCredentials`:
+The examples below log in with `iggy`/`iggy`. For a new local development instance, with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides, use:
 
 ```bash
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-`--fresh` **wipes the local data directory**. This setup is for *development only*.
+`--fresh` **wipes this replica's local data directory**. Environment credentials take precedence over the flag, and bootstrap settings do not replace recovered credentials. In a cluster, a fresh replica can recover credentials from peers. Use disposable development data. A new standalone server without explicit credentials generates a root password; a new cluster requires explicit credentials.
 
 ## High-level vs low-level API
 
-The SDK provides two layers:
+The SDK provides two layers. The snippets below assume an async Tokio context with a `Result` return type.
 
 **High-level API (recommended)** - the easiest way to get started. It handles connection management, auto-batching, consumer group lifecycle, offset commits, retry logic, and reconnection out of the box. Use `IggyClient`, `IggyProducer`, and `IggyConsumer` for the best developer experience.
 
@@ -29,13 +33,13 @@ The SDK provides two layers:
 use iggy::prelude::*;
 
 // Connect with a connection string
-let client = IggyClient::from_connection_string("iggy://iggy:iggy@localhost:8090")?;
+let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")?;
 client.connect().await?;
 
 // Or use the builder
 let client = IggyClientBuilder::new()
     .with_tcp()
-    .with_server_address("localhost:8090".to_string())
+    .with_server_address("127.0.0.1:8090".to_string())
     .build()?;
 client.connect().await?;
 client.login_user("iggy", "iggy").await?;
@@ -57,17 +61,19 @@ iggy+http://user:pass@host:port         (HTTP)
 iggy+ws://user:pass@host:port           (WebSocket)
 ```
 
+TCP, QUIC, and WebSocket apply connection-string credentials on `connect()`. HTTP requires an explicit login and supports ordinary consumers only.
+
 Options can be appended as query parameters:
 
 ```
-iggy://iggy:iggy@my-server:8090?tls=true&tls_ca_file=/path/to/ca.crt
-iggy://iggy:iggy@localhost:8090?reconnection_retries=unlimited&heartbeat_interval=5s
+iggy://iggy:iggy@127.0.0.1:8090?nodelay=true&heartbeat_interval=5s
+iggy://iggy:iggy@127.0.0.1:8090?reconnection_retries=unlimited&heartbeat_interval=5s
 ```
 
 Personal Access Tokens are also supported. Any credential without a colon is treated as a PAT. Paste the token exactly as the server returned it, with **no prefix**:
 
 ```
-iggy://<personal-access-token>@localhost:8090
+iggy://<personal-access-token>@127.0.0.1:8090
 ```
 
 See [Connection Strings](/docs/sdk/connection-strings) for the full per-transport option tables and defaults.
@@ -138,6 +144,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Partition IDs are **0-based**: the first partition of a topic is partition `0`.
+Partition IDs are **0-based**: the first partition of a topic is partition `0`. The consumer uses the default consumer identity and requests auto-commit; its offset can advance before application processing finishes. Use explicit offset storage after successful processing when that distinction matters.
 
 For the full getting started tutorial, see [Getting Started](/docs/introduction/getting-started). For the high-level producer/consumer builders, see [High-level SDK](/docs/sdk/rust/high-level-sdk) and [Stream Builder](/docs/sdk/rust/stream-builder).

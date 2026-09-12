@@ -7,11 +7,11 @@ description: "The catalog of command codes, their operation bytes, and which com
 
 The u32 command codes. Replicated commands are identified on the wire by their `operation` byte (see [Operation discriminants](/docs/binary-protocol/framing#operation-discriminants)). The code column below is the protocol-level registry and, for non-replicated commands, the value carried in header bytes 196..200.
 
-```bash
+```text
 # System
 PING = 1                                  # non-replicated; works without login
 GET_STATS = 10                            # non-replicated
-GET_SNAPSHOT = 11                         # non-replicated
+GET_SNAPSHOT_FILE = 11                    # non-replicated
 GET_CLUSTER_METADATA = 12                 # non-replicated
 DESCRIBE_OPTIONS = 13                     # non-replicated
 GET_ME = 20                               # non-replicated
@@ -136,7 +136,7 @@ Scope: 1 = topic, 2 = stream, 3 = user. Returns the option catalog for the scope
 [name_len: u8][name: N][options block to end]
 ```
 
-The stream option catalog is empty today, so the block is normally empty (zero bytes).
+The stream option catalog is empty, so the block is normally empty (zero bytes).
 
 **Delete stream. Code: 203.**
 
@@ -222,7 +222,7 @@ Only `compression_algorithm`, `message_expiry`, and `max_topic_size` are updatab
 [stream_id: Identifier][topic_id: Identifier][partition_id: u32][segments_count: u32]
 ```
 
-Deletes the `segments_count` oldest sealed segments of the partition.
+Deletes up to `segments_count` oldest sealed segments of the partition. The active segment is retained.
 
 ### Messages
 
@@ -234,7 +234,7 @@ Deletes the `segments_count` oldest sealed segments of the partition.
 [strategy: 9 bytes][count: u32][auto_commit: u8]
 ```
 
-`strategy` is a [polling strategy](/docs/binary-protocol/encodings#polling-strategy). `count` is the requested number of messages. `auto_commit = 1` stores the consumer offset server-side as part of the poll.
+`strategy` is a [polling strategy](/docs/binary-protocol/encodings#polling-strategy). `count` is the requested number of messages. `auto_commit = 1` asks the server to advance the consumer offset. A primary submits a quorum offset write before replying, but the poll does not wait for that write to commit. A follower-served poll does not advance the durable offset. See [Client failover](/docs/clustering/client-failover#where-requests-are-served).
 
 The response body:
 
@@ -243,7 +243,7 @@ The response body:
 [batch records to end]
 ```
 
-The 16-byte prefix is followed by a stream of [batch records](/docs/binary-protocol/messages) served as stored: each record's header carries the stamped `base_offset` and `base_timestamp`, and each frame's deltas resolve against them. A record may be a server-sliced view of a larger stored batch, so the first polled offset is `base_offset + offset_delta` of the first frame, not necessarily `base_offset` itself. `current_offset` is the partition's newest offset at poll time.
+The 16-byte prefix is followed by a stream of [batch records](/docs/binary-protocol/messages): each record's header carries the stamped `base_offset` and `base_timestamp`, and each frame's deltas resolve against them. A record may be a server-sliced view of a larger stored batch, so the first polled offset is `base_offset + offset_delta` of the first frame, not necessarily `base_offset` itself. `current_offset` is the partition's newest offset at poll time. The server rebuilds records when decrypting encrypted payloads.
 
 **Send messages. Code: 101.**
 
@@ -255,6 +255,15 @@ The 16-byte prefix is followed by a stream of [batch records](/docs/binary-proto
 ```
 
 `metadata_length` counts the bytes from `stream_id` through `messages_count` inclusive, so a reader can skip straight to the batch. The producer leaves `partition_id`, `base_offset`, and `base_timestamp` zero in the [batch header](/docs/binary-protocol/messages), and the server stamps them. Every checksum is producer-computed and verified at admission. The reserved regions must be zero.
+
+A committed append returns offset confirmations without a metadata result section:
+
+```text
+[confirmations_count: u32]
+[stream_id: u32][topic_id: u32][partition_id: u32][base_offset: u64] x confirmations_count
+```
+
+Each confirmation is 20 bytes. The server reports one partition per append. A zero count or an empty successful body supplies no offset information; deduplicated requests receive an empty body. Retry coverage is [bounded](/docs/binary-protocol/framing#request-numbering), and crash durability depends on the topic's [durability policy](/docs/server/durability).
 
 **Flush unsaved buffer. Code: 102.**
 
@@ -273,7 +282,7 @@ Parses, but the server always answers `FeatureUnavailable`: there is no on-deman
 [partition_flag: u8][partition_id: u32]
 ```
 
-Response body (20 bytes):
+When an offset is stored, the response body is 20 bytes. When none is stored, a successful reply has an empty body.
 
 ```text
 [partition_id: u32][current_offset: u64][stored_offset: u64]
@@ -297,7 +306,7 @@ The trailing `ack` byte is mandatory on both write commands. A payload without i
 
 | Value | Level | Meaning |
 |-------|-------|---------|
-| 0 | `NoAck` | Leader-local write; respond as soon as local state is updated (the fast path `PollMessages` auto-commit uses) |
+| 0 | `NoAck` | Local write on a single-replica partition; replicated partitions use the same consensus path as `Quorum` |
 | 1 | `Quorum` | Replicate through partition consensus; respond after a quorum commit (default for explicit writes) |
 
 ### Consumer groups
@@ -364,7 +373,7 @@ Read-only: a member asks for its current partition assignment and the group gene
 [options block to end]
 ```
 
-`permissions_len` and the permissions bytes are present **only** when `has_permissions = 1`. When it is 0 the options block follows immediately. The user option catalog is empty today, so the block is normally empty. `status`: 1 = active, 2 = inactive.
+`permissions_len` and the permissions bytes are present **only** when `has_permissions = 1`. When it is 0 the options block follows immediately. The user option catalog is empty, so the block is normally empty. `status`: 1 = active, 2 = inactive.
 
 **Delete user. Code: 34.**
 

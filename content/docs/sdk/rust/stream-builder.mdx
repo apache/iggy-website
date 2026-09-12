@@ -17,13 +17,15 @@ The stream builder provides a convenient way to create the iggy client, producer
 All source code examples are located in the [**examples folder**](https://github.com/apache/iggy/tree/master/examples/rust/src/stream-builder) of the iggy repository. Also,
 if you encounter a problem with any of the examples below, please ask in the [**community discord**](https://discord.gg/apache-iggy).
 
-The examples below connect with the `iggy`/`iggy` root credentials, which **only exist** when the server was started with:
+The examples below use `iggy`/`iggy`. For a new local development instance, with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides, use:
 
 ```bash
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-Setting `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` works too. Otherwise root gets a generated password and the examples fail with `InvalidCredentials`.
+Environment credentials take precedence over the flag, and bootstrap settings do not replace recovered credentials. `--fresh` deletes this replica's local data; use disposable development data. A new standalone server without explicit credentials generates a root password; a new cluster requires explicit credentials.
+
+Use the SDK and server from the same checkout for unreleased changes. The examples import `PrintEventConsumer` from the local `iggy_examples` crate and can run as the targets in `examples/rust`. In your own application, use the implementation shown below instead of that import.
 
 ## IggyStream Builder
 
@@ -35,7 +37,7 @@ use iggy_examples::shared::stream::PrintEventConsumer;
 use std::str::FromStr;
 use tokio::sync::oneshot;
 
-const IGGY_URL: &str = "iggy://iggy:iggy@localhost:8090";
+const IGGY_URL: &str = "iggy://iggy:iggy@127.0.0.1:8090";
 
 #[tokio::main]
 async fn main() -> Result<(), IggyError> {
@@ -110,7 +112,7 @@ When you implement the producer side, you can use the `IggyStreamProducer` to ge
 use iggy::prelude::*;
 use std::str::FromStr;
 
-const IGGY_URL: &str = "iggy://iggy:iggy@localhost:8090";
+const IGGY_URL: &str = "iggy://iggy:iggy@127.0.0.1:8090";
 
 #[tokio::main]
 async fn main() -> Result<(), IggyError> {
@@ -153,7 +155,7 @@ repository.
 
 The IggyProducerConfig gives you a way to configure the producer in sufficient detail. Please note, if you have
 questions about any of those settings, please ask in the community discord. For basic customization, the `from_stream_topic` constructor
-lets you set a custom stream and topic name as well as the maximum batch length and linger time between sends.
+lets you set a custom stream and topic name as well as the maximum batch length and linger time between sends. The producer resolves destinations by name; keep the corresponding identifier fields consistent with those names.
 
 ```rust
 use iggy::prelude::*;
@@ -209,8 +211,8 @@ async fn main() -> Result<(), IggyError> {
         // - `PartitionId` - the partition ID is provided by the client.
         // - `MessagesKey` - the client hashes the provided messages key
         //    to a partition ID.
-        // The partition count is cached per topic and not refreshed
-        // while the client stays connected.
+        // Binary clients cache the partition count for their lifetime;
+        // reconnecting does not refresh it.
         .partitioning(Partitioning::balanced())
         // Sets the retry policy (maximum number of retries and interval)
         // in case of messages sending failure.
@@ -218,12 +220,12 @@ async fn main() -> Result<(), IggyError> {
         // or to the server rejecting the messages.
         // Default is 3 retries with 1 second interval between them.
         .send_retries_count(3)
-        .send_retries_interval(IggyDuration::new_from_secs(1))
+        .send_retries_interval(NonZeroIggyDuration::ONE_SECOND)
         // Optionally, set a custom client side encryptor for encrypting
         // the messages' payloads. Currently only Aes256Gcm is supported.
         // Note, this is independent of server side encryption.
         // You can add client encryption, server encryption, or both.
-        // .encryptor(Arc::new(EncryptorKind::Aes256Gcm(Aes256GcmEncryptor::new(&[1; 32])?)))
+        // .encryptor(std::sync::Arc::new(EncryptorKind::Aes256Gcm(Aes256GcmEncryptor::new(&[1; 32])?)))
         .build();
     Ok(())
 }
@@ -245,7 +247,7 @@ use iggy::prelude::*;
 use iggy_examples::shared::stream::PrintEventConsumer;
 use tokio::sync::oneshot;
 
-const IGGY_URL: &str = "iggy://iggy:iggy@localhost:8090";
+const IGGY_URL: &str = "iggy://iggy:iggy@127.0.0.1:8090";
 
 #[tokio::main]
 async fn main() -> Result<(), IggyError> {
@@ -322,27 +324,27 @@ async fn main() -> Result<(), IggyError> {
         .create_stream_if_not_exists(true)
         // Create the topic if it doesn't exist.
         .create_topic_if_not_exists(true)
-        // The name of the consumer. Must be unique.
+        // Members of the same consumer group use the same name.
         .consumer_name("test_consumer".to_string())
         // The type of consumer. It can be either `Consumer` or `ConsumerGroup`.
         // ConsumerGroup is default.
         .consumer_kind(ConsumerKind::ConsumerGroup)
-        // Sets the number of partitions for ConsumerKind `Consumer`.
-        // Does not apply to `ConsumerGroup`.
+        // Partition count when creating a topic. Also used as the partition
+        // ID for an ordinary consumer; group assignment ignores this value.
         .partitions_count(1)
         // The polling interval for messages.
         .polling_interval(IggyDuration::from_str("5ms").unwrap())
         // `PollingStrategy` specifies from where to start polling messages.
         // It has the following kinds:
         // - `Offset` - start polling from the specified offset.
-        // - `Timestamp` - start polling from the specified timestamp.
+        // - `Timestamp` - start at or after the broker append timestamp.
         // - `First` - start polling from the first message in the partition.
-        // - `Last` - start polling from the last message in the partition.
+        // - `Last` - read up to batch_length messages ending at the committed offset.
         // - `Next` - start polling from the next message after the
         // last polled message based on the stored consumer offset.
         .polling_strategy(PollingStrategy::last())
         // Sets the polling retry interval in case of server disconnection.
-        .polling_retry_interval(IggyDuration::new_from_secs(1))
+        .polling_retry_interval(NonZeroIggyDuration::ONE_SECOND)
         // Sets the number of retries and the interval when initializing
         // the consumer if the stream or topic is not found.
         // Useful when the stream or topic is created dynamically
@@ -350,19 +352,21 @@ async fn main() -> Result<(), IggyError> {
         // The default is 5 retries with a 3 second interval,
         // so init retry is enabled out of the box.
         .init_retries(5)
-        .init_interval(IggyDuration::new_from_secs(1))
-        // Optionally, set a custom client side encryptor for encrypting
-        // the messages' payloads. Currently only Aes256Gcm is supported.
+        .init_interval(NonZeroIggyDuration::ONE_SECOND)
+        // Optionally, configure Aes256Gcm payload and user-header decryption.
+        // Replace PollingMessages auto-commit with a compatible mode first.
         // Key must be identical to the one used by the producer;
         // thus ensure secure key exchange.
         // Note, this is independent of server side encryption.
         // you can add client encryption, server encryption, or both.
-        // .encryptor(Arc::new(EncryptorKind::Aes256Gcm(Aes256GcmEncryptor::new(&[1; 32])?)))
+        // .encryptor(std::sync::Arc::new(EncryptorKind::Aes256Gcm(Aes256GcmEncryptor::new(&[1; 32])?)))
         .build();
 
     Ok(())
 }
 ```
+
+`partitions_count` also selects the partition ID for an ordinary consumer. When it creates a topic with `n` partitions, the valid IDs are `0..n-1`, so using the same `n` as an ordinary consumer's ID fails. The sample uses a consumer group. For an ordinary consumer, create the topic separately and use `client.consumer(name, stream, topic, partition_id)` to select a valid partition.
 
 ## Add consumers dynamically at runtime.
 
@@ -376,13 +380,11 @@ you have to set `create_stream_if_not_exists` and `create_topic_if_not_exists` t
 the `IggyStreamConsumer` constructors as before i.e.:
 
 ```rust
-    let config = get_my_custom_iggy_consumer_config();
     let (client, mut consumer) =
         IggyStreamConsumer::with_client_from_url(IGGY_URL, &config).await?;
 ```
 
-Where `get_my_custom_iggy_consumer_config` refers to a function that returns an `IggyConsumerConfig`
-that specifies the stream and topic to consume as well the init retry or whether to create the stream and topic.
+Here `config` is the `IggyConsumerConfig` built above, which selects the stream and topic, initialization retries, and automatic creation behavior.
 
 ## Add producers dynamically at runtime.
 
