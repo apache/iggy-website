@@ -1,13 +1,28 @@
 ---
 title: SurrealDB Sink
-description: "Write messages from Iggy streams into SurrealDB over the HTTP API, one bulk insert per batch."
+description: "Write messages from Iggy streams into SurrealDB over the HTTP API, bulk inserts split by the configured batch size."
 ---
 
-The SurrealDB sink connector writes messages from Iggy streams into SurrealDB over the HTTP API. Each batch becomes one SurrealQL bulk `INSERT IGNORE`. Every record gets a deterministic record id derived from stream, topic, partition, offset, and message id, so replayed batches are idempotent and existing records are left untouched.
+The SurrealDB sink connector writes messages from Iggy streams into SurrealDB over the HTTP API. Each poll is split into chunks of at most `batch_size` messages, with one SurrealQL bulk `INSERT IGNORE ... RETURN NONE` for each chunk containing valid records. Every record gets a deterministic record id derived from stream, topic, partition, offset, and message id, so replaying the same identities leaves existing records untouched. Messages are not buffered across polls.
 
 This page is a curated subset of the documentation. The canonical reference is the upstream [surrealdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/surrealdb_sink) in the `apache/iggy` repository.
 
 ## Configuration
+
+Use the broker credentials and runtime setup from the [sink guide](/docs/connectors/sinks/sink#configuration). From the matching 0.9.0/edge Iggy checkout root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_surrealdb_sink
+```
+
+Start a local SurrealDB instance with the credentials used below. This example stores SurrealDB data in memory:
+
+```bash
+docker run -d --name iggy-surrealdb -p 127.0.0.1:8000:8000 surrealdb/surrealdb:v3.1.4 start --bind 0.0.0.0:8000 --user root --pass root memory
+curl --fail http://127.0.0.1:8000/health
+```
+
+After the health request succeeds, save this connector file in the runtime's connector directory. Its plugin path assumes the runtime starts from the checkout root.
 
 ```toml
 type = "sink"
@@ -37,6 +52,20 @@ auto_define_table = true
 batch_size = 1000
 ```
 
+Create the Iggy resources and send a JSON message, then start the runtime as described in the sink guide:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create example_stream
+./target/release/iggy --username iggy --password iggy topic create example_stream example_topic 1 none 1d
+./target/release/iggy --username iggy --password iggy message send --partition-id 0 example_stream example_topic '{"event":"created","count":1}'
+```
+
+Query the stored records:
+
+```bash
+curl --fail --user root:root -H 'Accept: application/json' -H 'Surreal-NS: iggy' -H 'Surreal-DB: connectors' --data 'SELECT * FROM iggy_messages;' http://127.0.0.1:8000/sql
+```
+
 ### Common Options
 
 | Option | Type | Default | Description |
@@ -45,24 +74,45 @@ batch_size = 1000
 | `namespace` | string | **required** | Namespace selected at startup |
 | `database` | string | **required** | Database selected at startup |
 | `table` | string | **required** | Target table; must be a safe SurrealQL identifier |
-| `username` / `password` | string | none | Optional credentials |
+| `username` / `password` | string | none | Both required unless `auth_scope = "none"` |
 | `auth_scope` | string | `root` | `root`, `namespace`, `database`, or `none` |
 | `use_tls` | bool | `false` | Use `https://` when `endpoint` has no scheme |
-| `auto_define_table` | bool | `false` | Run `DEFINE TABLE IF NOT EXISTS <table> SCHEMALESS` at startup |
-| `define_indexes` | bool | `false` | Define an offset index on stream/topic/partition/offset; requires `auto_define_table` |
-| `batch_size` | u32 | `1000` | Maximum records per SurrealDB request |
+| `auto_define_table` | bool | `false` | Create missing namespace/database and a schemaless table; requires `auth_scope = "root"` |
+| `define_indexes` | bool | `false` | Define a non-unique stream/topic/partition/offset index; requires metadata and only runs with automatic table definition |
+| `batch_size` | u32 | `1000` | Maximum input records per insert chunk; `0` is raised to `1` |
 | `payload_format` | string | `auto` | `auto`, `json`, `text`, `base64`, or `binary` (alias for `base64`) |
 | `include_metadata` | bool | `true` | Store stream/topic/partition/offset/timestamp/schema fields |
 
-The `include_headers`, `include_checksum`, and `include_origin_timestamp` flags also default to `true`. Retry and timeout options: `query_timeout` (`30s`), `max_retries` (`3` total attempts), `retry_delay` (`100ms`), `max_retry_delay` (`5s`), plus `verbose_logging`. See the upstream [surrealdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/surrealdb_sink) for the full table.
+The `include_headers`, `include_checksum`, and `include_origin_timestamp` flags also default to `true` and work independently of `include_metadata`. Retry and timeout options are `query_timeout` (`30s` per HTTP request), `max_retries` (`3` total write attempts, with `0` raised to `1`), `retry_delay` (`100ms`), and `max_retry_delay` (`5s`). Invalid duration strings log a warning and fall back to `1s`; zero durations are accepted. The maximum delay is raised to the base delay if configured smaller. `verbose_logging` defaults to `false` and raises per-poll submission logs from debug to info. See the upstream [surrealdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/surrealdb_sink) for the full table.
+
+Namespace, database and table names must start with an ASCII letter or underscore and contain only ASCII letters, digits and underscores. Endpoint URLs cannot contain credentials, a path beyond `/`, a query or a fragment. An explicit `http://` or `https://` scheme takes precedence over `use_tls`. Payload-format and authentication-scope names are case-insensitive; unknown values prevent startup.
+
+With root, namespace or database authentication, startup calls `/signin` and SQL requests use Basic authentication with the configured scope. Namespace/database users require pre-existing resources and `auto_define_table = false`. With `auth_scope = "none"`, credentials are ignored; the server must permit those unauthenticated operations. Automatic DDL uses `IF NOT EXISTS` and does not migrate existing definitions. The optional `<table>_iggy_offset_idx` index is not a uniqueness constraint. `define_indexes = true` with metadata disabled rejects startup; without automatic DDL it only logs a warning and skips index creation.
 
 ## Stored Shape
 
-With metadata enabled, each record contains the deterministic `id`, the `iggy_message_id`, provenance fields (`iggy_stream`, `iggy_topic`, `iggy_partition_id`, `iggy_offset`, `iggy_timestamp`, `iggy_origin_timestamp`, `iggy_checksum`, `iggy_schema`), `iggy_headers`, the `payload`, and its `payload_encoding`. With `payload_format = "auto"`, JSON payloads are stored as queryable SurrealDB values, text payloads as strings, and binary payloads as base64 strings.
+Every submitted record contains `id`, `iggy_message_id`, `payload` and `payload_encoding`. `include_metadata` adds `iggy_stream`, `iggy_topic`, `iggy_partition_id`, `iggy_offset`, `iggy_timestamp` and `iggy_schema`. The checksum and origin timestamp have separate flags. `iggy_headers` appears only when enabled and nonempty.
+
+Iggy message IDs, partition IDs, offsets, timestamps and checksums are stored as strings. Timestamps retain Iggy's microsecond values, not SurrealDB datetime values. Record IDs encode stream/topic UTF-8 bytes as hex, then append partition, offset and the 32-digit hexadecimal message ID. Changing the payload or transforms does not change that identity; changing any identity component creates a different key.
+
+Payload formatting operates after the runtime decoder and transforms:
+
+| `payload_format` | Stored payload and encoding |
+| ---------------- | --------------------------- |
+| `auto` | JSON values as `json`; text/Proto variants as `text`; raw/Avro/FlatBuffer bytes as `base64`, even when raw bytes contain valid JSON |
+| `json` | A JSON value, parsing other payload variants as JSON; invalid JSON is rejected |
+| `text` | A string, decoding other payload bytes as UTF-8; invalid UTF-8 is rejected |
+| `base64` / `binary` | Base64 of the payload bytes, with `payload_encoding = "base64"` |
+
+Non-raw headers are stored as strings, including numbers and booleans. Raw headers use `{"data":"AQID","iggy_header_encoding":"base64"}`. Payload JSON is sent as SurrealQL values, so destination schema, numeric and other value constraints still apply.
 
 ## Delivery Semantics
 
-The runtime commits consumer offsets before `consume()` runs, so persistent write failures are **at-most-once**: they are logged but not redelivered. Transient failures are retried inside the batch with capped exponential backoff. Because records use deterministic ids and `INSERT IGNORE`, a replayed batch (for example after a connector restart re-reads uncommitted messages) doesn't create duplicates.
+The runtime auto-commits while polling, logs/counts plugin callback failures, and continues without replaying the failed batch. The sink retries transaction-conflict errors, connection/timeouts, and HTTP 408, 429, 500, 502, 503 and 504. Delays use capped exponential backoff with jitter; `Retry-After` is not used. Connection errors trigger reconnection and repeat sign-in/health/optional DDL. A failed reconnect stops that chunk, and retries plus startup requests can exceed `query_timeout` in total.
+
+A malformed record is skipped while valid records in its chunk are still submitted. A failed chunk does not stop later chunks, and the last error is returned. The sink checks HTTP and SQL statement statuses. Its own processed counter counts records submitted in successful statements, including records ignored by `INSERT IGNORE`; runtime counters instead reflect whether the whole callback succeeded. Neither is a count of newly inserted rows.
+
+[SurrealQL `INSERT IGNORE`](https://surrealdb.com/docs/reference/query-language/statements/insert#ignoring-duplicates) preserves existing records with the same ID, including their old payloads. With the SurrealDB 3.1.4 instance above, `IGNORE` also silently skips unique-index conflicts and field-assertion failures while accepting valid records from the same chunk. These skips return a successful statement and are included in processed counters. This protects repeated writes of the same identities; it does not ensure that a failed batch will be delivered. There is no end-to-end at-least-once guarantee.
 
 ## Transforms
 

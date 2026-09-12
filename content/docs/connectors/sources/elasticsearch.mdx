@@ -3,9 +3,31 @@ title: Elasticsearch Source
 description: "Poll documents from an Elasticsearch index into Iggy streams, incrementally when a timestamp field is configured."
 ---
 
-The Elasticsearch source connector polls documents from an Elasticsearch index and produces them to Iggy streams. With a timestamp field configured, each poll only fetches documents newer than the last one seen, giving incremental, restart-safe ingestion.
+The Elasticsearch source connector polls documents from an Elasticsearch index and produces them to Iggy streams. With a timestamp field configured, it filters searches using the last acknowledged timestamp. This is a timestamp watermark, with the limitations described below.
 
 ## Configuration
+
+Use the broker credentials and main runtime configuration from the [source guide](/docs/connectors/sources/source#configuration). From the matching 0.9.0/edge Iggy checkout root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_elasticsearch_source
+```
+
+For this local example, start Elasticsearch with authentication disabled:
+
+```bash
+docker run -d --name iggy-elasticsearch-source -p 127.0.0.1:9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false -e 'ES_JAVA_OPTS=-Xms512m -Xmx512m' elasticsearch:9.3.0
+curl --fail 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=30s'
+```
+
+Wait until the health response reports `timed_out: false`, then create the source index and a document:
+
+```bash
+curl --fail -X PUT http://localhost:9200/logs -H 'Content-Type: application/json' --data '{"mappings":{"properties":{"@timestamp":{"type":"date"},"level":{"type":"keyword"}}}}'
+curl --fail -X PUT 'http://localhost:9200/logs/_doc/1?refresh=true' -H 'Content-Type: application/json' --data '{"@timestamp":"2026-01-01T00:00:00Z","level":"error","message":"example"}'
+```
+
+Save this connector entry in the runtime's connector directory. Start the runtime from the checkout root so the plugin path resolves.
 
 ```toml
 type = "source"
@@ -30,17 +52,30 @@ batch_size = 100
 timestamp_field = "@timestamp"
 ```
 
+Create the destination before starting the runtime:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create elasticsearch_stream
+./target/release/iggy --username iggy --password iggy topic create elasticsearch_stream documents 1 none 1d
+```
+
+Start the runtime as described in the source guide. After the configured 30-second polling delay, read the produced message:
+
+```bash
+./target/release/iggy --username iggy --password iggy message poll --offset 0 elasticsearch_stream documents 0
+```
+
 ### Plugin config options
 
 | Option | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
 | `url` | string | required | Elasticsearch cluster URL |
 | `index` | string | required | Index to poll; must exist when the connector starts |
-| `username` / `password` | string | none | Optional basic authentication credentials |
+| `username` / `password` | string | none | Basic authentication is enabled only when both are present |
 | `query` | table | `match_all` | Elasticsearch query DSL applied on each poll |
-| `polling_interval` | string | `"10s"` | Delay before each poll cycle |
-| `batch_size` | integer | `100` | Maximum documents fetched per poll |
-| `timestamp_field` | string | none | Document field used for incremental polling |
+| `polling_interval` | string | `"10s"` | Delay before each poll cycle; invalid strings fall back to `10s`, and zero is accepted |
+| `batch_size` | integer | `100` | Search size per poll; `0` returns no hits, and Elasticsearch enforces its own result-window limit |
+| `timestamp_field` | string | none | Top-level RFC3339 string field used to advance the watermark |
 
 A custom `query` must be a structured object. In TOML that means nested tables (an inline JSON string won't work):
 
@@ -49,16 +84,26 @@ A custom `query` must be a structured object. In TOML that means nested tables (
 value = "error"
 ```
 
-Alternatively, set `plugin_config_format = "json"` and provide the plugin config as JSON, as the crate's own [config example](https://github.com/apache/iggy/tree/master/core/connectors/sources/elasticsearch_source) does.
+The connector file remains TOML. `plugin_config_format = "json"` only selects the default format of the HTTP API's plugin-config response; it does not change how the local file is parsed. The [upstream config example](https://github.com/apache/iggy/tree/master/core/connectors/sources/elasticsearch_source) also uses TOML with a structured `[plugin_config]` table.
 
 ## How Polling Works
 
-Each cycle the connector waits `polling_interval`, then runs a search against `index` with the configured `query`, `size = batch_size`, sorted ascending by `timestamp_field` (`@timestamp` when unset). Every document's `_source` becomes one JSON message.
+Each cycle the connector waits `polling_interval`, then runs a search against `index` with the configured `query`, `size = batch_size`, sorted ascending by `timestamp_field` (`@timestamp` when unset). Every hit with `_source` becomes one JSON message. Elasticsearch `_id` is not copied into the payload or used as the Iggy message ID; headers and timestamps are also unset by this plugin.
 
-When `timestamp_field` is set, the query is also filtered to documents whose timestamp is greater than the newest one seen so far, so already-processed documents are not fetched again. Without a `timestamp_field` there is no incremental cursor and each poll returns the first `batch_size` matching documents.
+When `timestamp_field` is set, the query is also filtered to values strictly greater than the last acknowledged timestamp. Only top-level strings that parse as RFC3339 update the watermark; numeric timestamps, date-only strings and nested paths do not. Without a `timestamp_field` there is no incremental cursor and each poll returns the first `batch_size` matching documents.
+
+The connector does not use scroll, `search_after` or a document-ID tiebreaker. If a timestamp group spans multiple batches, advancing past that timestamp skips the remaining tied documents. Late arrivals and updates at or below the watermark are also skipped. `scroll_timeout` is accepted but unused. Without a usable timestamp, repeated polls can produce duplicates; the default `@timestamp` sort still requires a sortable field in the index mapping.
+
+Search and JSON-decoding failures, `timed_out: true`, and a nonzero `_shards.failed` count are returned as poll errors without advancing the watermark. The next polling cycle retries from the previous watermark. Poll errors are logged by the SDK; they do not increment the runtime's forwarding-error counter or change the runtime connector status. There is no per-query retry loop or configured HTTP request timeout. The source stages a candidate watermark and applies it only after runtime `Ack`; `Nack` keeps the previous watermark so the next search can fetch the rejected records again. Fetched-document and byte counters include these repeated attempts. This does not remove the timestamp limitations above or provide exactly-once delivery.
 
 ## State
 
-State is managed by the connectors runtime, not by the connector itself. Along with each batch of produced messages, the connector returns its progress (last poll timestamp plus document, poll, and error counters). The runtime persists it atomically to a per-connector file, `source_<key>.state`, under the `[state]` path from the runtime config (default `local_state`). On restart the runtime hands the saved state back to the connector, which resumes polling from the last processed timestamp.
+Along with each successful poll, including an empty one, the connector returns a MessagePack checkpoint containing its timestamp watermark and counters. After sending the batch, the runtime saves that checkpoint and acknowledges it. With the default file state backend, it uses `source_<key>.state` under the runtime `[state]` path (default `local_state`); the runtime also supports an HTTP state backend. On restart, the saved checkpoint is passed to the plugin. Invalid MessagePack state logs a warning and starts fresh.
 
-State persistence requires no plugin configuration. To reset the connector's position, stop the runtime and delete the state file.
+Runtime state persistence requires no plugin configuration. To reset its position with the file backend, stop the runtime and delete the source's state file.
+
+The optional `[plugin_config.state]` enables a separate JSON snapshot loaded during `open()` and saved during `close()`. Its loaded values can override the runtime checkpoint. It defaults to `./connector_states/elasticsearch_source_<numeric_id>.json`; `state_id` and `storage_config.base_path` customize that location. Only file storage is implemented. Selecting `elasticsearch`, `redis` or an unknown storage type warns and falls back to `./connector_states`, ignoring the supplied backend location.
+
+`state.auto_save_interval` and `state.tracked_fields` do not affect the runtime plugin. Its JSON snapshot is a direct file write, separate from the runtime's atomic checkpoint protocol, and snapshot errors only warn. If enabled, account for this second snapshot when resetting or restoring progress; removing only the runtime state file does not reset the plugin snapshot.
+
+The saved counters include fetched documents, successful polls (including empty polls), empty polls, serialized payload bytes, errors and the last error text. The average successful-poll duration includes the configured polling delay. Document-ID, scroll-ID and offset fields are retained in state but do not drive polling. These plugin counters are separate from the runtime's sent/error metrics.

@@ -3,14 +3,41 @@ title: Quickwit Sink
 description: "Send messages from Iggy streams to a Quickwit index over HTTP, creating the index when it does not exist."
 ---
 
-The Quickwit connector allows you to send data to the Quickwit API using HTTP. This sink will ensure that the index exists (create it if it doesn't) and will append the data to the index using the same batch size as specified in the Iggy configuration.
+The Quickwit connector allows you to send data to the Quickwit API using HTTP. At startup it checks readiness, creates a missing index, and appends messages as newline-delimited JSON (NDJSON). Each poll can become multiple requests, each limited to 8 MiB including document newlines.
 
 ## Configuration
 
-- `url`: The URL of the Quickwit server.
-- `index`: The index configuration using YAML, as described in the [Quickwit index configuration docs](https://quickwit.io/docs/configuration/index-config)
+Use the broker credentials and runtime setup from the [sink guide](/docs/connectors/sinks/sink#configuration). From the matching 0.9.0/edge Iggy checkout root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_quickwit_sink
+```
+
+For a local Quickwit instance with support for the example's 0.9 index configuration:
+
+```bash
+docker run -d --name iggy-quickwit -p 127.0.0.1:7280:7280 -e QW_LISTEN_ADDRESS=0.0.0.0 quickwit/quickwit:edge run
+curl --fail http://localhost:7280/health/readyz
+```
+
+Wait for readiness, then save this connector file in the runtime's connector directory. `index` is a YAML string following the [Quickwit index configuration format](https://quickwit.io/docs/configuration/index-config). Use a format version supported by your Quickwit server. The sink sends this YAML when creating a missing index; it does not update or compare an existing index's mapping.
 
 ```toml
+type = "sink"
+key = "quickwit"
+enabled = true
+version = 1
+name = "Quickwit Sink"
+path = "target/release/libiggy_connector_quickwit_sink"
+
+[[streams]]
+stream = "events"
+topics = ["logs"]
+schema = "json"
+batch_length = 100
+poll_interval = "5ms"
+consumer_group = "quickwit-sink"
+
 [plugin_config]
 url = "http://localhost:7280"
 index = """
@@ -63,3 +90,62 @@ retention:
   schedule: daily
 """
 ```
+
+Create the Iggy resources and send a document that matches the strict mapping:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create events
+./target/release/iggy --username iggy --password iggy topic create events logs 1 none 1d
+timestamp=$(date +%s)
+./target/release/iggy --username iggy --password iggy message send --partition-id 0 events logs "{\"timestamp\":$timestamp,\"service_name\":\"example\",\"message\":\"hello Quickwit\"}"
+```
+
+Indexing happens asynchronously. Search after the split has committed:
+
+```bash
+curl --fail --get http://localhost:7280/api/v1/events/search --data-urlencode 'query=message:hello'
+```
+
+`commit_timeout_secs = 10` requests a time-based commit; it is not a ten-second delivery deadline. Retention uses the document's `timestamp` field. The example requests seven-day retention checked daily. The timestamp mapping accepts Unix timestamps and formats search results as nanoseconds, with millisecond fast-field precision.
+
+## Plugin config options
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `url` | required | HTTP(S) base URL with a host; path prefixes/trailing slashes work, query strings and fragments are rejected |
+| `index` | required | YAML index configuration containing a nonempty `index_id` |
+| `verbose_logging` | `false` | Log received/submitted document counts at info instead of debug |
+| `max_retries` | `3` | Total HTTP attempts including the first; `0` and `1` both allow one attempt |
+| `retry_delay` | `"1s"` | Base exponential delay for HTTP retries and readiness probes |
+| `retry_max_delay` | `"5s"` | Cap for calculated HTTP retry delays; a valid `Retry-After` on HTTP 429 overrides it |
+| `max_open_retries` | `10` | Total readiness attempts including the first; `0` and `1` both allow one attempt |
+| `open_retry_max_delay` | `"30s"` | Cap for calculated readiness retry delays |
+| `timeout` | `"30s"` | Timeout per HTTP attempt; retries and their waits can make an operation take longer |
+
+Durations require units and must be positive; invalid or zero durations prevent startup. Unknown plugin keys are rejected. There is no plugin `batch_size` option: `batch_length` limits the polled batch, and the sink splits it by serialized byte size without accumulating across polls.
+
+Readiness uses `GET /health/readyz`, retrying any failed probe. The index check uses `GET /api/v1/indexes/<index_id>`; only a 404 triggers creation with `POST /api/v1/indexes`. If creation receives an error status, a successful index recheck allows startup to continue. A successful existence check does not validate the supplied mapping against the existing one. Requests retain any path prefix from `url`.
+
+## Payload Shapes
+
+The sink does not add Iggy IDs, offsets, timestamps or headers. It serializes the payload after runtime decoding and transforms:
+
+| Payload | Document sent to Quickwit |
+| ------- | ------------------------- |
+| JSON object, or a JSON object parsed from raw bytes | The object itself |
+| JSON array or scalar | `{"data":[1,2],"data_type":"json"}` or `{"data":42,"data_type":"json"}` |
+| Other raw UTF-8 | `{"data":"hello","data_type":"raw","data_encoding":"utf8"}` |
+| Raw non-UTF-8 bytes | Base64 under `data`, with `data_type = "raw"` and `data_encoding = "base64"` |
+| Text | `{"text":"hello","data_type":"text"}` |
+
+Raw arrays, scalars and malformed JSON retain their original bytes in the raw wrapper. Avro and FlatBuffer payload variants use that raw path; Proto uses the text wrapper. Which variant arrives depends on the runtime decoder and transforms.
+
+The strict mapping above accepts only mapped fields and requires `timestamp`. To use wrapper documents, map their fields or use `mode: dynamic`, and remove `timestamp_field` and its dependent `retention` section unless every document supplies a timestamp. The `add_fields` transform enriches JSON objects; it does not add timestamps to raw/text wrappers created later by this sink.
+
+## Delivery Semantics
+
+The sink calls `POST /api/v1/<index_id>/ingest?commit=auto`. HTTP success means submission for indexing, not search visibility or acceptance of every document. The sink checks the status and does not inspect per-document rejection counts in the response. See the [Quickwit ingest API](https://quickwit.io/docs/reference/rest-api#ingest-api).
+
+HTTP 429, 5xx and network failures can retry. Calculated waits use exponential backoff with jitter and the configured cap; a valid `Retry-After` on 429 replaces that wait. Other HTTP statuses stop that request's retry loop. Readiness has its separate attempt budget. There is no circuit breaker or sink deduplication key, so retrying an accepted request can produce duplicates. `max_retries = 1` disables the sink's HTTP retry loop.
+
+An individual serialized document exceeding 8 MiB, including its newline, is logged and skipped. Other documents and later chunks are still attempted, and the last error is returned. Successful chunks are not rolled back. The runtime logs/counts plugin callback errors and continues without replaying the failed batch; it auto-commits while polling. A failed callback can therefore coexist with stored documents, and a successful callback can include documents rejected by Quickwit. Runtime processed counts do not prove successful indexing. The sink provides no end-to-end at-least-once guarantee.

@@ -9,6 +9,14 @@ This page is a curated subset of the documentation. The canonical reference is t
 
 ## Configuration
 
+Use the broker credentials and runtime setup from the [sink guide](/docs/connectors/sinks/sink#configuration). From the matching 0.9.0/edge repository root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_meilisearch_sink
+```
+
+Save this connector file in the runtime's connector directory. Replace the URL and API key with your Meilisearch endpoint and credentials. The key needs permission to inspect the index, submit documents and read tasks, plus create the index when needed. Startup checks health, checks the index, and waits for index creation to succeed even when `wait_for_tasks = false`. Set `primary_key` to match an existing index. A mismatch only produces a startup warning; the connector does not change the index key, and document tasks can fail.
+
 ```toml
 type = "sink"
 key = "meilisearch"
@@ -27,7 +35,7 @@ poll_interval = "5ms"
 consumer_group = "meilisearch_sink"
 
 [plugin_config]
-url = "https://meilisearch.example.com"
+url = "http://localhost:7700"
 index = "iggy_messages"
 api_key = "replace_with_secret_key"
 primary_key = "iggy_id"
@@ -35,34 +43,48 @@ document_action = "replace"
 batch_size = 1000
 ```
 
+Create the Iggy resources and send a document:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create events
+./target/release/iggy --username iggy --password iggy topic create events search_events 1 none 1d
+./target/release/iggy --username iggy --password iggy message send --partition-id 0 events search_events '{"title":"First event","category":"example"}'
+```
+
 ### Common Options
 
 | Option | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
-| `url` | string | **required** | Meilisearch base URL; paths and query strings are ignored |
+| `url` | string | **required** | Meilisearch base URL; paths, query strings and fragments are ignored; missing scheme defaults to HTTP |
 | `index` | string | **required** | Target index UID |
 | `api_key` | string | none | API key sent as `Authorization: Bearer`; use HTTPS for non-local hosts |
 | `primary_key` | string | `iggy_id` | Index primary key field |
 | `document_action` | string | `replace` | `replace` (add-or-replace) or `update` (add-or-update) |
 | `create_index_if_not_exists` | bool | `true` | Create the index during startup when missing |
 | `include_metadata` | bool | `true` | Add reserved `iggy_*` provenance fields to each document |
-| `batch_size` | usize | `1000` | Maximum documents per Meilisearch request |
-| `wait_for_tasks` | bool | `true` | Poll Meilisearch tasks to a terminal state before returning |
-| `timeout` | string | `30s` | Request timeout |
+| `batch_size` | usize | `1000` | Maximum documents per Meilisearch request; `0` behaves as `1` |
+| `wait_for_tasks` | bool | `true` | Wait for indexing success or failure, bounded by `task_timeout` |
+| `timeout` | string | `30s` | Total deadline per retried SDK operation; per attempt for health checks |
 
-Further options cover task polling (`task_timeout` `30s`, `task_poll_interval` `100ms`) and transient retries (`max_retries` `3`, `retry_delay` `500ms`, `max_retry_delay` `5s`, `max_open_retries` `5`). See the upstream [meilisearch_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/meilisearch_sink) for details.
+Further options cover task polling (`task_timeout` `30s`, `task_poll_interval` `100ms`) and transient retries (`max_retries` `3`, `retry_delay` `500ms`, `max_retry_delay` `5s`, `max_open_retries` `5`). Both retry limits count retries after the first request, so `max_retries = 3` permits up to four attempts within the operation deadline. Backoff doubles from `retry_delay`, adds ±20% jitter and is capped at `max_retry_delay`; reversed delay bounds are swapped. Invalid duration strings warn and fall back to `1s`. There is no single deadline for the whole startup sequence. See the upstream [meilisearch_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/meilisearch_sink) for details.
 
 ## Document Mapping
 
-JSON object payloads are indexed as documents directly. JSON arrays and scalars are wrapped in a `value` field, since Meilisearch documents must be objects. Raw payloads are parsed as JSON when possible and otherwise indexed as base64 data. Text payloads land in a `text` field. Records with unsupported payload schemas are skipped with a warning and counted as errors.
+JSON object payloads are indexed as documents directly. JSON arrays and scalars are wrapped in a `value` field, since Meilisearch documents must be objects. Raw payloads are parsed as JSON when possible and otherwise indexed in `data` as base64, with `data_type = "raw"` and `data_encoding = "base64"`. Text payloads land in `text` with `data_type = "text"`. These mappings apply after stream decoding and transforms; use `schema = "raw"` or `schema = "text"` for those representations. Unsupported payload variants are skipped with a warning and counted in the plugin's private error counter. A successful callback after these drops can still count the whole batch as processed in runtime statistics.
 
-When the configured primary key is absent from a document, the connector injects a stable value derived from the stream, topic, partition, offset, and message ID, avoiding Meilisearch primary-key inference failures. If your payloads carry their own primary key, its values must be unique. Otherwise add-or-replace semantics collapse distinct messages into one document.
+When the configured primary key is absent from a document, the connector injects a stable value derived from the stream, topic, partition, offset, and message ID, avoiding Meilisearch primary-key inference failures. An existing key is preserved, including an invalid or null value that Meilisearch may reject, unless a reserved metadata field below overwrites it. Use unique values that meet [Meilisearch's document ID rules](https://www.meilisearch.com/docs/resources/internals/primary_key). Reusing a key with `replace` replaces the whole document, removing omitted fields; `update` keeps fields omitted from the new document. Both actions can insert a new document.
 
-With `include_metadata = true`, reserved `iggy_*` fields (stream, topic, partition, offset, checksum, timestamps) are written after payload parsing and overwrite same-named payload fields.
+With `include_metadata = true`, stream, topic, partition, offset, checksum, message ID, timestamps and available headers are written as reserved `iggy_*` fields after payload parsing, overwriting same-named payload fields. The exception is a supplied `iggy_id` when it is the configured primary key. With a different primary key, `iggy_id` holds the generated Iggy identity. Avoid other reserved metadata fields as your primary key because metadata overwrites them.
+
+`iggy_checksum` and `iggy_message_id` are strings; offsets and message timestamps remain numbers. Message timestamps are microseconds, while `iggy_ingested_at` uses current wall-clock milliseconds. Disabling metadata leaves payload fields intact and still injects a missing primary key.
 
 ## Delivery Semantics
 
-The runtime commits consumer offsets when messages are polled and doesn't gate commits on `consume()`'s result, so the effective guarantee is **at-most-once** on sink errors. The retry settings provide best-effort retries within a single batch. Setting `wait_for_tasks = false` makes indexing fire-and-forget: submission succeeds before Meilisearch confirms indexing, and later task failures are neither observed nor retried.
+Each polled batch is split into requests of at most `batch_size` documents, with no accumulation across polls. The first failed chunk stops the loop; later chunks are not attempted. Earlier chunks may already be indexed.
+
+Transient submission and task-status errors are retried within their budgets. A failed indexing task is returned as an error without resubmitting it. A task timeout does not cancel the remote task, so it may finish later. The runtime records plugin errors and continues polling with consumer auto-commit; it does not replay failed batches. This does not provide an end-to-end at-least-once guarantee, and retries or manual replay after uncertain outcomes can repeat writes.
+
+Setting `wait_for_tasks = false` returns after submission, before Meilisearch confirms indexing. Later task failures are neither observed nor retried by the connector. Index-creation tasks are still awaited during startup. Closing the connector does not wait for outstanding document tasks.
 
 ## Transforms
 

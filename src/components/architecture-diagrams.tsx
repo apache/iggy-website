@@ -919,11 +919,11 @@ export function ConnectorPipeline() {
   return (
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Source Flow (Ingest)</h3>
-      <p className="text-xs text-fd-muted-foreground m-0 mb-4">External systems push data into Iggy streams via source plugins</p>
+      <p className="text-xs text-fd-muted-foreground m-0 mb-4">Source plugins fetch or generate data for Iggy streams</p>
 
       <div className="flex flex-col md:flex-row items-center gap-3 mb-8">
         <div className="flex-1 w-full rounded-lg border border-fd-border bg-fd-muted/20 p-4">
-          <span className="text-xs font-semibold text-fd-muted-foreground block mb-2">External System</span>
+          <span className="text-xs font-semibold text-fd-muted-foreground block mb-2">Data source</span>
           <div className="flex flex-wrap gap-1.5">
             {sources.map((s) => (
               <span key={s.name} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-fd-card text-fd-foreground border border-fd-border">
@@ -937,10 +937,10 @@ export function ConnectorPipeline() {
         <Arrow />
 
         <div className="flex-1 w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
-          <span className="text-xs font-semibold text-emerald-400 block mb-1">Source Plugin</span>
-          <span className="text-[10px] text-fd-muted-foreground block mb-2">poll() via FFI/postcard</span>
+          <span className="text-xs font-semibold text-emerald-400 block mb-1">Connector runtime</span>
+          <span className="text-[10px] text-fd-muted-foreground block mb-2">Source plugin: poll()</span>
           <div className="rounded bg-fd-muted/30 px-2 py-1">
-            <span className="text-[10px] text-fd-muted-foreground">Transforms: </span>
+            <span className="text-[10px] text-fd-muted-foreground">Runtime transforms: </span>
             {transforms.map((t, i) => (
               <span key={t}>
                 <code className="text-[9px] text-fd-foreground">{t}</code>
@@ -948,6 +948,7 @@ export function ConnectorPipeline() {
               </span>
             ))}
           </div>
+          <span className="text-[10px] text-fd-muted-foreground block mt-2">Encode and send to Iggy</span>
         </div>
 
         <Arrow />
@@ -959,7 +960,7 @@ export function ConnectorPipeline() {
       </div>
 
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Sink Flow (Egress)</h3>
-      <p className="text-xs text-fd-muted-foreground m-0 mb-4">Iggy streams forward data to external systems via sink plugins</p>
+      <p className="text-xs text-fd-muted-foreground m-0 mb-4">Iggy messages are polled, transformed and passed to sink plugins</p>
 
       <div className="flex flex-col md:flex-row items-center gap-3">
         <div className="shrink-0 rounded-lg border-2 border-fd-primary/40 bg-fd-primary/5 px-5 py-3 text-center">
@@ -970,10 +971,10 @@ export function ConnectorPipeline() {
         <Arrow />
 
         <div className="flex-1 w-full rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
-          <span className="text-xs font-semibold text-blue-400 block mb-1">Sink Plugin</span>
-          <span className="text-[10px] text-fd-muted-foreground block mb-2">consume() via FFI/postcard</span>
+          <span className="text-xs font-semibold text-blue-400 block mb-1">Connector runtime</span>
+          <span className="text-[10px] text-fd-muted-foreground block mb-2">Poll and decode from Iggy</span>
           <div className="rounded bg-fd-muted/30 px-2 py-1">
-            <span className="text-[10px] text-fd-muted-foreground">Transforms: </span>
+            <span className="text-[10px] text-fd-muted-foreground">Runtime transforms: </span>
             {transforms.map((t, i) => (
               <span key={t}>
                 <code className="text-[9px] text-fd-foreground">{t}</code>
@@ -981,6 +982,7 @@ export function ConnectorPipeline() {
               </span>
             ))}
           </div>
+          <span className="text-[10px] text-fd-muted-foreground block mt-2">Sink plugin: consume()</span>
         </div>
 
         <Arrow />

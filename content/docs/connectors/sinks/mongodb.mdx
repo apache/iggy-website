@@ -7,13 +7,21 @@ The MongoDB sink connector writes messages from Iggy streams to a MongoDB databa
 
 ## Configuration
 
+Use the broker credentials and runtime setup from the [sink guide](/docs/connectors/sinks/sink#configuration). From the matching 0.9.0/edge repository root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_mongodb_sink
+```
+
+Save this connector file in the runtime's connector directory and replace the MongoDB URI and destination names for your deployment. Startup parses the URI and pings the target database. `max_pool_size`, when set, overrides the URI's pool setting; other connection options come from the MongoDB driver and URI.
+
 ```toml
 type = "sink"
 key = "mongodb-sink"
 enabled = true
 version = 1
 name = "MongoDB Sink"
-path = "/path/to/libiggy_connector_mongodb_sink.so"
+path = "target/release/libiggy_connector_mongodb_sink"
 verbose = false
 
 [[streams]]
@@ -39,6 +47,14 @@ max_retries = 3
 retry_delay = "1s"
 ```
 
+Create the Iggy resources and send a message:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create my-stream
+./target/release/iggy --username iggy --password iggy topic create my-stream my-topic 1 none 1d
+./target/release/iggy --username iggy --password iggy message send --partition-id 0 my-stream my-topic '{"hello":"mongodb","internal_field":"remove me"}'
+```
+
 ## Plugin config options
 
 | Option | Type | Default | Description |
@@ -47,15 +63,37 @@ retry_delay = "1s"
 | `database` | string | required | Target database name |
 | `collection` | string | required | Target collection name |
 | `max_pool_size` | u32 | driver default | Maximum connections in the MongoDB client pool |
-| `batch_size` | u32 | `100` | Number of documents to insert per batch |
-| `include_metadata` | bool | `true` | Include message metadata (offset, timestamp) in documents |
+| `batch_size` | u32 | `100` | Maximum documents per insert call; `0` behaves as `1` |
+| `include_metadata` | bool | `true` | Include offset, timestamp, stream, topic and partition metadata |
 | `include_checksum` | bool | `true` | Include message checksum |
 | `include_origin_timestamp` | bool | `true` | Include client-provided timestamp |
 | `payload_format` | string | `"binary"` | How to store the payload: `"json"`, `"string"` (alias `"text"`), or `"binary"`; unknown values fall back to binary with a warning |
-| `auto_create_collection` | bool | `false` | Create the collection if it doesn't exist |
+| `auto_create_collection` | bool | `false` | Explicitly create a missing collection at startup; `false` still permits creation by the first insert |
 | `verbose_logging` | bool | `false` | Enable detailed logging |
-| `max_retries` | u32 | `3` | Max retry attempts on failure |
-| `retry_delay` | string | `"1s"` | Delay between retries |
+| `max_retries` | u32 | `3` | Total attempts per transiently failing insert call, including the first; `0` and `1` both allow one attempt |
+| `retry_delay` | string | `"1s"` | Base for linear backoff: delay multiplied by the retry number |
+
+## Stored Documents
+
+Every document has a generated `_id` of `stream:topic:partition:message_id` and a `payload` field. The offset is not part of the ID. Payload fields remain nested under `payload`, so a payload's own `_id` does not replace the connector's ID. Message headers are not stored.
+
+- `json` parses the payload and converts it to a BSON value under `payload`, including objects, arrays and scalars. Invalid JSON or an unsupported BSON conversion rejects the whole chunk before insertion.
+- `string` and its `text` alias require valid UTF-8 and store a BSON string.
+- `binary` stores BSON Binary with the generic subtype. Use `schema = "raw"` and no payload-changing transform to preserve original bytes.
+
+Format names are case-insensitive. Formatting happens after stream decoding and transforms, so JSON decoding can change the original bytes.
+
+With `include_metadata = true`, documents contain `iggy_offset`, `iggy_timestamp`, `iggy_stream`, `iggy_topic` and `iggy_partition_id`. Offsets above the signed 64-bit range use `iggy_offset_str` instead. Partition IDs use a BSON 32-bit integer when possible and a 64-bit integer otherwise. `iggy_checksum` is a 64-bit integer when possible and a decimal string otherwise. Message and origin timestamps become BSON datetimes, truncating microseconds to milliseconds. Checksum and origin timestamp flags are independent of `include_metadata`; `_id` and `payload` are always present.
+
+## Delivery Semantics
+
+Each polled batch is split into chunks of at most `batch_size` messages. Chunks are inserted immediately with unordered `insert_many`; other documents can succeed when one is rejected. Later chunks are still attempted after a failure, and the last chunk error is returned. There is no accumulation across polls and no transaction covering the batch.
+
+The connector retries transient insert failures up to `max_retries` total attempts, with linear waits of `retry_delay`, twice that delay, and so on. An invalid delay silently falls back to `1s`. Driver-level retryable writes may add retries independently, according to the URI and MongoDB deployment. Startup has no connector-level retry loop.
+
+An insert error containing only duplicate-key errors (`11000`) and no write-concern error is treated as success. This covers all unique indexes, not only `_id`, and does not compare payload contents. Reusing a message ID in one stream/topic/partition preserves the existing document. A conflict on another unique index can also discard a distinct message while runtime reports it processed. Account for this when choosing collection indexes.
+
+The runtime auto-commits while polling, records plugin errors and continues without replaying the failed batch. Earlier or later chunks may already be stored, and a timeout can leave the write outcome uncertain. Duplicate tolerance and retries do not provide an end-to-end at-least-once guarantee.
 
 ## Transforms
 
