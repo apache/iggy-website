@@ -20,12 +20,16 @@
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import { siteOptions } from "@/lib/layout.shared";
 import { SiteFooter } from "@/components/site-footer";
+import { AnnouncementBar } from "@/components/announcement-bar";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <HomeLayout {...siteOptions()}>
-      {children}
-      <SiteFooter />
-    </HomeLayout>
+    <>
+      <AnnouncementBar />
+      <HomeLayout {...siteOptions()}>
+        {children}
+        <SiteFooter />
+      </HomeLayout>
+    </>
   );
 }

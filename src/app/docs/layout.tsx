@@ -21,10 +21,12 @@ import { source } from "@/lib/source";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { docsOptions } from "@/lib/layout.shared";
 import { SiteFooter } from "@/components/site-footer";
+import { AnnouncementBar } from "@/components/announcement-bar";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
+      <AnnouncementBar />
       <DocsLayout tree={source.getPageTree()} {...docsOptions()}>
         {children}
       </DocsLayout>
