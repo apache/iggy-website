@@ -56,23 +56,23 @@ VSR uses three main flows:
 2. **View change**: replicas exchange `StartViewChange` and `DoViewChange`, then the new primary sends `StartView`.
 3. **Recovery**: a restarted or lagging replica requests the current view and repairs missing WAL ranges before serving current state.
 
-A cluster of `2f + 1` replicas tolerates `f` unavailable replicas. Use **at least three replicas** for one-node fault tolerance. A two-node cluster is useful for development, but it **cannot make progress** after either node fails.
+Three replicas tolerate one unavailable replica; five tolerate two. Larger groups use a capped replication quorum and a growing view-change quorum, so the usual `2f + 1` rule does not apply to every group size. See [Cluster durability](/docs/clustering/durability#what-an-acknowledgement-means) for the quorum rules. Use **at least three replicas** for one-node fault tolerance. A two-node cluster is useful for development, but it **cannot make progress** after either node fails.
 
 ## Wire protocol and SDKs
 
-VSR framing is the *only* wire protocol. Every SDK (Rust, Go, Java, C#, C++, Node.js, Python) speaks it, and every BDD suite runs against the clustered-capable `iggy-server`. Clients built before the VSR migration **cannot talk to current servers**.
+VSR framing is the *only binary* wire protocol, used by TCP, QUIC, and WebSocket connections. HTTP uses the REST API. Every SDK (Rust, Go, Java, C#, C++, Node.js, Python) speaks it, and every BDD suite runs against the clustered-capable `iggy-server`. Binary clients built before the VSR migration **cannot talk to current servers**.
 
 The Rust SDK needs no feature flags. Depend on the published crate:
 
 ```toml
 [dependencies]
-iggy = "0.11.0-edge.4"
+iggy = "0.11.0-edge.7"
 tokio = { version = "1", features = ["full"] }
 ```
 
 or track the repository directly with `iggy = { git = "https://github.com/apache/iggy" }`.
 
-The client API is the same in single-node and cluster mode:
+The client API is the same in single-node and cluster mode. This example uses the `iggy` / `iggy` credentials explicitly provisioned in [Getting started](/docs/introduction/getting-started):
 
 ```rust
 use iggy::prelude::*;

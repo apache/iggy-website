@@ -39,7 +39,7 @@ Iggy's replication quorum is not a strict majority for every group size:
 Except for two replicas, the replication quorum is `min(ceil(n / 2), 3)`
 and the view-change quorum is `n - replication_quorum + 1`. Two replicas
 require both for either quorum. The quorums therefore intersect. These are
-the [implemented quorum rules](https://github.com/apache/iggy/blob/97f7b0c0335f81691bef34f923f21d783016a6a4/core/consensus/src/impls.rs),
+the [implemented quorum rules](https://github.com/apache/iggy/blob/4a38798a506c9231afdfc83a34ebed394d41dac2/core/consensus/src/impls.rs),
 not a configurable acknowledgement count.
 
 ## Replicated completion
@@ -63,15 +63,17 @@ Replication count alone does not establish a bound on that loss.
 ## Persisted completion
 
 When either policy is `persisted`, each multi-replica partition uses a
-bounded on-disk prepare WAL. The WAL records full prepares, including message
-payloads. A prepare requiring persistence cannot release its `PrepareOk`
-until its history and durable frontier are recoverable.
+bounded on-disk prepare WAL. Message prepares contain headers and segment
+references; their payloads live in segment files retained by hard links until
+the WAL history can be reclaimed. Other operations are stored inline. A prepare
+requiring persistence cannot release its `PrepareOk` until its message bodies,
+WAL history, and durable frontier are recoverable.
 
 Prepares can be forwarded while local persistence is pending. Once enough
 replicas have met the required barrier, the operation can commit and the
-primary can apply it and reply. An acknowledged message may still be in
-the prepare WAL rather than in a segment file; its recovery does not depend
-on first reaching a segment flush threshold.
+primary can apply it and reply. An acknowledged message can be recovered
+through the WAL before ordinary segment materialization and index updates
+finish; recovery does not depend on first reaching a segment flush threshold.
 
 The WAL also retains predecessors across message and offset operations.
 Consequently:
@@ -79,7 +81,7 @@ Consequently:
 - `durability=persisted` does not make an offset response persisted when
   `consumer_offset_durability=replicated`.
 - `consumer_offset_durability=persisted` with replicated messages still
-  journals message payloads. A durable offset's predecessor history must
+  retains message payloads through WAL segment references. A durable offset's predecessor history must
   remain recoverable.
 - A shared barrier can also persist co-batched operations with the weaker
   policy. That incidental persistence does not strengthen what their earlier
@@ -89,8 +91,9 @@ Consequently:
 
 WAL history is reclaimed only after the materialized segment and offset
 state needed to replace it has been synchronized. The server's
-`[partition] wal_bytes_max` setting, default `256 MiB`, bounds active WAL
-and queued/in-flight prepare bytes per partition. Capacity pressure causes
+`[partition] wal_bytes_max` setting, default `256 MiB`, bounds retained
+and queued/in-flight prepare bytes per partition. The accounting includes
+message bodies even when the WAL stores only references to them. Capacity pressure causes
 checkpointing and backpressure; it does not downgrade a persisted operation.
 Temporary rewrites need additional disk space.
 
@@ -130,8 +133,8 @@ Neither policy turns HTTP `ack=none` or a poll's auto-commit into an awaited
 durable result. See [Which responses prove completion](/docs/server/durability#which-responses-prove-completion).
 
 The storage mechanisms are implemented in the
-[partition persistence worker](https://github.com/apache/iggy/blob/97f7b0c0335f81691bef34f923f21d783016a6a4/core/partitions/src/persistence.rs)
-and [prepare journal](https://github.com/apache/iggy/blob/97f7b0c0335f81691bef34f923f21d783016a6a4/core/journal/src/partition_journal.rs).
-The [crash-recovery tests](https://github.com/apache/iggy/blob/97f7b0c0335f81691bef34f923f21d783016a6a4/core/integration/tests/cluster/crash_durability.rs)
+[partition persistence worker](https://github.com/apache/iggy/blob/4a38798a506c9231afdfc83a34ebed394d41dac2/core/partitions/src/persistence.rs)
+and [prepare journal](https://github.com/apache/iggy/blob/4a38798a506c9231afdfc83a34ebed394d41dac2/core/journal/src/partition_journal.rs).
+The [crash-recovery tests](https://github.com/apache/iggy/blob/4a38798a506c9231afdfc83a34ebed394d41dac2/core/integration/tests/cluster/crash_durability.rs)
 exercise acknowledged persisted messages and offsets below ordinary flush
 thresholds, on both a singleton and a three-replica cluster.

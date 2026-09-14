@@ -7,6 +7,8 @@ Iggy Web UI provides a comprehensive dashboard for Iggy server. It allows you to
 
 ![Web UI](/img/iggy_web_ui.png)
 
+These instructions target Iggy server 0.9.0. The container examples use `edge` while the release is being prepared. Use the matching source checkout for local builds.
+
 ## How it connects
 
 The Web UI is a purely client-side application: every call to the Iggy HTTP API is issued by your browser, not by the Web UI container or server. Two things follow from this:
@@ -28,22 +30,32 @@ enabled = true
 web_ui = true   # Enable embedded Web UI at /ui
 ```
 
+When building from source, generate the static assets before compiling the server. Run from the repository root:
+
+```bash
+npm --prefix web ci
+npm --prefix web run build:static
+cargo build --bin iggy-server
+```
+
+The feature alone does not generate these assets. A server binary built without them returns 404 at `/ui`.
+
 If the server is compiled without the `iggy-web` feature and `web_ui = true`, a warning is logged but the server continues to run normally.
 
 ### Standalone mode
 
-Run the Web UI as a separate container:
+Start an Iggy server with HTTP enabled, as shown in [Getting started](/docs/introduction/getting-started), then run the Web UI as a separate container:
 
 ```bash
-docker pull apache/iggy-web-ui
-docker run -e PUBLIC_IGGY_API_URL=http://localhost:3000 -p 3050:3050 apache/iggy-web-ui
+docker pull apache/iggy-web-ui:edge
+docker run -e PUBLIC_IGGY_API_URL=http://localhost:3000 -p 3050:3050 apache/iggy-web-ui:edge
 ```
 
 `PUBLIC_IGGY_API_URL` is consumed by the browser: if the Iggy server also runs in Docker, use the host-published HTTP port here, not the container's network alias.
 
 ### Local development
 
-The Web UI lives in the `web/` folder of the [repository](https://github.com/apache/iggy/tree/master/web). Use a Node.js version supported by the frontend toolchain (Vite requires `^20.19.0 || >=22.12.0`, so 22 LTS is a safe default) and `npm` (`pnpm` and `yarn` are not part of the supported workflow):
+The Web UI lives in the `web/` folder of the [repository](https://github.com/apache/iggy/tree/master/web). Use a Node.js version supported by the frontend toolchain (`^20.19.0 || ^22.13.0 || >=24`, for example Node.js 22.13 or later in the 22.x series) and `npm` (`pnpm` and `yarn` are not part of the supported workflow):
 
 ```bash
 cd web
@@ -59,16 +71,18 @@ The Web UI provides the following pages and functionality:
 
 - **Overview** - server health and key metrics
 - **Streams** - list, create, and manage streams
-- **Topics** - manage topics per stream (create, update, delete, purge)
+- **Topics** - create and delete topics, and edit their name and message expiry
 - **Partitions** - view partition details per topic
 - **Messages** - browse messages per partition with built-in decoders:
   - JSON decoder (formatted JSON output)
   - String decoder (UTF-8 text)
   - XML decoder
-- **Users** - user management (create, update, delete, permissions)
+- **Users** - list and create users, including their initial permissions
 - **Settings** - Web UI preferences
 
-Some pages visible in the navigation (Clients, Logs, terminal, server settings) are placeholders that aren't functional yet. See the [roadmap](https://github.com/apache/iggy/tree/master/web#roadmap) for what is planned.
+Topic updates share the HTTP API's [retention update limitations](/docs/server/topic-options). Other topic options require the CLI or HTTP API.
+
+The Clients, Logs and terminal routes are placeholders hidden from navigation. The Server settings page displays information, but saving settings is disabled. Editing and deleting existing users, changing their permissions and bulk user actions are also placeholders. See the [roadmap](https://github.com/apache/iggy/tree/master/web#roadmap) for what is planned.
 
 ## Docker Compose example
 
@@ -77,7 +91,7 @@ Here's the full example of the `docker-compose.yml` file that starts the Iggy se
 ```yaml
 services:
   iggy:
-    image: apache/iggy:latest
+    image: apache/iggy:edge
     container_name: iggy
     restart: unless-stopped
     cap_add:
@@ -111,7 +125,7 @@ services:
       - iggy:/app/local_data
 
   init-iggy:
-    image: apache/iggy:latest
+    image: apache/iggy:edge
     container_name: init-iggy
     networks:
       - iggy
@@ -130,7 +144,7 @@ services:
       "
 
   iggy-web-ui:
-    image: apache/iggy-web-ui:latest
+    image: apache/iggy-web-ui:edge
     container_name: iggy-web-ui
     restart: unless-stopped
     environment:

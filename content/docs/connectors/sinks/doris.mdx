@@ -3,11 +3,17 @@ title: Apache Doris Sink
 description: "Load JSON messages from Iggy streams into a pre-created Apache Doris table through the Stream Load HTTP API."
 ---
 
-The Apache Doris sink connector consumes JSON messages from Iggy streams and writes them to a pre-created Doris table via Doris's Stream Load HTTP API. Batches are loaded under deterministic labels so that in-request retries deduplicate instead of doubling rows.
+The Apache Doris sink connector consumes JSON messages from Iggy streams and writes them to a pre-created Doris table via Doris's Stream Load HTTP API. Batches are loaded under deterministic labels so that retries deduplicate while Doris retains those labels.
 
 This page is a curated subset of the documentation. The canonical reference, including the label scheme, redirect security model, and operational guidance, is the upstream [doris_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/doris_sink) in the `apache/iggy` repository.
 
 ## Configuration
+
+Use the broker credentials and runtime setup from the [sink guide](/docs/connectors/sinks/sink#configuration). Save the configuration below in the runtime's connector directory and replace the Doris password with your own. From the matching 0.9.0/edge repository root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_doris_sink
+```
 
 ```toml
 type = "sink"
@@ -16,7 +22,6 @@ enabled = true
 version = 0
 name = "Doris sink"
 path = "target/release/libiggy_connector_doris_sink"
-plugin_config_format = "toml"
 
 [[streams]]
 stream = "events"
@@ -37,7 +42,15 @@ batch_size = 1000
 timeout = "30s"
 ```
 
-The target database and table must be pre-created. The connector never issues DDL. `database` and `table` must match `[A-Za-z0-9_]+` or startup fails. Streams must use `schema = "json"`.
+The target database and table must be pre-created. The connector never issues DDL. `database` and `table` must match `[A-Za-z0-9_]+` or startup fails. Streams must use `schema = "json"`. Startup validates the configuration but does not check the table or connection; these are first used when a batch arrives.
+
+For a table with columns `id` (`BIGINT`) and `name` (`STRING`), create the Iggy resources and send a row:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create events
+./target/release/iggy --username iggy --password iggy topic create events doris_events 1 none 1d
+./target/release/iggy --username iggy --password iggy message send --partition-id 0 events doris_events '{"id":1,"name":"hello"}'
+```
 
 ### Common Options
 
@@ -46,31 +59,37 @@ The target database and table must be pre-created. The connector never issues DD
 | `fe_url` | string | **required** | Doris frontend HTTP base URL, e.g. `http://localhost:8030` |
 | `database` | string | **required** | Target database, `[A-Za-z0-9_]+` |
 | `table` | string | **required** | Target table, `[A-Za-z0-9_]+` |
-| `username` | string | **required** | Doris user with `LOAD_PRIV` on the table |
+| `username` | string | **required** | Doris user authorized for Stream Load; check the grants required by your Doris version |
 | `password` | string | **required** | Doris user password, never logged |
-| `batch_size` | u32 | `1000` | Maximum messages per Stream Load request |
+| `batch_size` | u32 | `1000` | Maximum messages per Stream Load request; `0` is treated as `1` |
 | `output_format` | string | `json` | `json` or `csv`; CSV is opt-in for throughput and requires `columns` |
 | `columns` | string | unset | Forwarded as the `columns` Stream Load header; pins column order for CSV |
-| `timeout` | string | `30s` | Per-request HTTP timeout |
-| `max_retries` | u32 | `3` | Total Stream Load attempts per batch on transient failures |
+| `timeout` | string | `30s` | Per-request HTTP timeout, including each redirect request |
+| `max_retries` | u32 | `3` | Total Stream Load attempts per chunk on transient failures; `0` or `1` means one attempt |
 
 Further options cover the label prefix, connect timeout, retry backoff (`retry_delay`, `max_retry_delay`), `max_filter_ratio`, a `where` filter, and redirect security (`allow_insecure_redirect`, `allowed_redirect_hosts`). See the upstream [doris_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/doris_sink) for the full table with defaults.
 
 ## Output Formats
 
 - **`json`** (default): payloads are sent as a JSON array with `strip_outer_array: true`. Values map to columns by name, so the JSON shape must match the table (use `columns` if the JSON field names differ from the table columns or you need derived expressions).
-- **`csv`**: opt-in for throughput. Doris CSV is positional, so `output_format = "csv"` **requires `columns`** to pin the column order. Startup fails without it. Rows are framed with control-character separators and quoted with `enclose`/`escape`, so embedded commas and newlines are safe. JSON `null` and missing keys become SQL `NULL`, and nested objects or arrays are stringified as JSON.
+- **`csv`**: opt-in for throughput. Doris CSV is positional, so `output_format = "csv"` **requires `columns`** to pin the column order. Startup fails without it. List bare JSON field names in order before any derived expressions in `columns`; CSV reads only the leading names before the first `=` expression. Rows are framed with control-character separators and quoted with `enclose`/`escape`, so embedded commas and newlines are safe. JSON `null` and missing keys become SQL `NULL`, empty strings remain empty, and nested objects or arrays are stringified as JSON. The target Doris column types must accept the resulting values.
 
 ## Delivery Semantics
 
-Each batch is loaded under a deterministic label derived from the stream, topic, partition, and offset range. Transient failures (HTTP 5xx/408/429, transport errors) are retried in-request with exponential backoff and jitter under the same label, which Doris deduplicates, so an ambiguous success is absorbed rather than doubled. Permanent errors (4xx, `Fail` status, malformed responses) are never retried.
+Each poll is split into chunks of at most `batch_size` messages. Each chunk gets a deterministic label based on `label_prefix`, the target table, stream, topic, partition, and first/last offsets. Transient failures (HTTP 5xx/408/429, transport errors, empty or unreadable successful responses) are retried under the same label. Backoff starts at `retry_delay`, doubles for each retry, applies ±20% jitter, and never exceeds `max_retry_delay`. Other HTTP 4xx responses, `Fail` status, and nonempty malformed responses are permanent errors and are not retried.
 
-The runtime commits consumer offsets at poll time and doesn't inspect `consume()`'s return value, so delivery is **at-most-once** across polls: a failure that outlives the retry budget, or a crash mid-load, is not replayed. Keep `batch_size` stable across a manual redrive, since changing it shifts chunk boundaries and defeats label deduplication.
+`Label Already Exists` is accepted only when the existing job is `FINISHED`; `RUNNING` and `CANCELLED` are retried. `Publish Timeout` is accepted as committed, although rows may not yet be visible. Deduplication lasts only while Doris retains the label. Check the retention settings for your Doris version; Doris 4.0.3 uses `streaming_label_keep_max_second` (default 12 hours) for Stream Load. See [Doris FE configuration](https://doris.apache.org/docs/4.x/admin-manual/config/fe-config/#streaming_label_keep_max_second).
+
+The runtime uses consumer auto-commit before the sink finishes. After a chunk fails, the plugin still attempts later chunks and returns the first error. The runtime logs and counts that error, adds no processed messages for the failed batch, and continues polling without replaying it. A crash or exhausted retry budget can therefore lose data. A non-JSON payload aborts the remaining chunks immediately.
+
+For a manual redrive, preserve the label inputs and chunk boundaries, including both `batch_length` and `batch_size`. Poll sizes can also vary, so unchanged settings alone do not guarantee the same labels. Changed boundaries or expired labels can produce duplicates. This is not an end-to-end exactly-once guarantee.
+
+If `max_filter_ratio` permits malformed rows, Doris can accept a load while dropping those rows; the plugin logs a warning when Doris reports them. The `where` option deliberately excludes rows before loading.
 
 ## Security Notes
 
 - Use `https://` for `fe_url` in production: credentials travel as HTTP Basic auth.
-- The connector preserves the `Authorization` header across the Doris FE-to-BE 307 redirect, validating the target first: scheme downgrades are refused unless `allow_insecure_redirect = true`, and `allowed_redirect_hosts` can pin redirects to known backend endpoints.
+- The connector preserves the `Authorization` header across Doris FE-to-BE 307/308 redirects, validating each target first. When `fe_url` uses HTTPS, an HTTP redirect target is refused unless `allow_insecure_redirect = true`. `Location` must be absolute, and at most five redirects are followed per attempt. A nonempty `allowed_redirect_hosts` list restricts destinations to the listed hosts or `host:port` endpoints; an unset or empty list does not restrict hosts.
 - `columns` and `where` are forwarded verbatim to Doris and evaluated as SQL expressions. Keep this config trusted.
 
 ## Transforms

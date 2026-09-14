@@ -43,7 +43,7 @@ Several commands take an optional partition id encoded as 5 fixed bytes:
 [flag: u8][partition_id: u32]
 ```
 
-`flag = 1` means the id is set. `flag = 0` means none (the value bytes are then zero). For consumer-group consumers the partition id is left unset and the server resolves it.
+`flag = 1` means the id is set. `flag = 0` means none (the value bytes are then zero). Group polls and group offset writes require an explicit assigned partition. Plain-consumer polls and consumer-offset reads use partition 0 when the id is omitted.
 
 ## Partitioning
 
@@ -57,7 +57,7 @@ How `SendMessages` picks the target partition:
 - `PartitionId`: `kind = 2`, `length = 4`, value is a u32 partition id.
 - `MessagesKey`: `kind = 3`, `length = 1..255`, value is a routing key hashed to a partition.
 
-First-party binary SDKs pre-resolve balanced and key routing client-side and normally send `kind = 2`.
+The Rust binary SDK resolves balanced and key routing client-side and sends `kind = 2`. SDKs can also send the other wire strategies for server-side resolution.
 
 ## Polling strategy
 
@@ -100,7 +100,7 @@ A user headers block (inside a [message frame](/docs/binary-protocol/messages)) 
 [kind: u8][length: u32][data: length bytes]
 ```
 
-Fields pair up: first the key, then the value. Keys are `String` kind. Every `length` must be 1..=255, kind 0 is rejected, and the block must consume its byte range exactly. Unknown value kind codes are preserved and forwarded, so headers survive mixed-version clusters.
+Fields pair up: first the key, then the value. Keys and values can both use the header kinds above. Every `length` must be 1..=255, kind 0 is rejected, and the block must consume its byte range exactly. The wire validator preserves unknown non-zero kind codes. A typed SDK accessor may still reject a kind it does not recognize.
 
 ## Options block
 
@@ -110,7 +110,7 @@ On top of the TLV walk, options enforce: string keys only (kind 2, valid UTF-8),
 
 Semantics:
 
-- **Create** requests resolve absent keys to server defaults and persist the effective values, so `GetTopic` always shows what is in force.
+- **Create** requests resolve absent keys to server defaults and persist the effective values. An update using a zero retention sentinel can make `GetTopic` option values disagree with its fixed expiry/size fields; see [update semantics](/docs/server/topic-options).
 - **Update** requests are patches: keys absent from the block are left alone, never reset. A client built before a key existed cannot erase it.
 - Unknown keys are rejected at the wire edge, never silently skipped.
 
@@ -125,4 +125,4 @@ The `compression_algorithm` value used by topic options:
 | 1, `none` | No compression (default) |
 | 2, `gzip` | Gzip |
 
-Any other value is rejected. The option is a **placeholder today**: the value is validated, persisted, and echoed back, but neither the server nor the SDKs compress or decompress payloads yet. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers) in the Iggy repo.
+Any other value is rejected. The option is a **placeholder today**: the value is validated, persisted, and echoed back, but it does not enable automatic payload compression or decompression. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers) in the Iggy repo.

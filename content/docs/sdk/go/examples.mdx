@@ -7,17 +7,17 @@ A runnable getting-started example lives in the [examples/go](https://github.com
 
 ## Starting the server
 
-The Go SDK speaks the VSR (Viewstamped Replication) wire protocol, so the examples run against the VSR server. The examples log in as `iggy`/`iggy`, and root credentials are applied **only on the very first startup**, when no data directory exists yet. Start the server with the default root credentials:
+The Go SDK speaks the VSR (Viewstamped Replication) wire protocol. Build the SDK and server from the same checkout for unreleased changes. The examples require Go 1.25 or newer and log in as `iggy`/`iggy`. From the repository root, start a disposable development server with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides:
 
 ```bash
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-If an example fails to log in, the server data directory (`local_data` by default) was created with different credentials: delete it and start the server again with the defaults. This setup is intended only for development and testing.
+`--fresh` **wipes this replica's local data directory** (`local_data` by default). Environment credentials take precedence over the flag, and bootstrap settings do not replace recovered credentials. A fresh cluster replica can recover credentials from peers. This setup is intended only for development and testing.
 
 ## Getting started
 
-The [producer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/producer/main.go) creates `sample-stream` and `sample-topic` (if missing) and sends 5 batches of 10 messages to partition `0`. The [consumer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/consumer/main.go) polls them from offset `0` and exits after 5 batches. Stream, topic, and partition IDs are **0-based**.
+The [producer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/producer/main.go) creates `sample-stream` and `sample-topic` (if missing) and sends 5 batches of 10 messages to partition `0`. The [consumer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/consumer/main.go) polls them from offset `0` and exits after 5 batches. Stream, topic, and partition IDs are **0-based**. These repository examples use numeric stream and topic IDs `0`, so create no other streams or topics before running the producer on the fresh server. Run the producer first.
 
 Run both from the `examples/go` directory:
 
@@ -26,7 +26,7 @@ go run ./getting-started/producer/main.go
 go run ./getting-started/consumer/main.go
 ```
 
-Run multiple producers and consumers at once to see how messages are distributed across clients.
+Each consumer reads partition `0` independently, starting from offset `0` or the earliest retained message. Running several consumers reads the same messages; these examples do not join a consumer group.
 
 Both binaries accept the same flags:
 
@@ -37,16 +37,16 @@ Both binaries accept the same flags:
 
 ## TLS
 
-Start the server with TLS enabled, using the development certificates from the repository:
+From the repository root, start a disposable server with TLS enabled and the development certificates:
 
 ```bash
 IGGY_TCP_TLS_ENABLED=true \
 IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
 IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
-cargo run --bin iggy-server
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-Then run the examples with the TLS flags (paths relative to `examples/go`):
+The same data and credential prerequisites apply. These certificates are for development only. Run the producer before the consumer with the TLS flags (paths relative to `examples/go`):
 
 ```bash
 go run ./getting-started/producer/main.go --tcp-server-address localhost:8090 --tls --tls-ca-file ../../core/certs/iggy_ca_cert.pem

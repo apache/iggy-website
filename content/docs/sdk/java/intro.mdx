@@ -7,24 +7,45 @@ The Iggy Java SDK is a client library for interacting with the Iggy server from 
 
 ## Server compatibility
 
-The TCP transport speaks the VSR (Viewstamped Replication) wire protocol. The SDK and the server must speak the same protocol: the latest published artifact (`0.6.0`) predates VSR and only pairs with servers of the same era, while the SDK on `master` requires a current server. When working from source, build the SDK and the server from the same repository checkout. The code on this page tracks `master`.
+This documentation prepares for server **0.9.0**. The TCP transport speaks the VSR (Viewstamped Replication) wire protocol. The released Java artifact `0.8.0` uses the older protocol; use the `0.9.0-SNAPSHOT` build below for the pre-release SDK. When working from source, build the SDK and the server from the same repository checkout.
 
 ## Installation
 
+Use Java 17 or newer. These examples use the ASF snapshot repository until the `0.9.0` artifact is published to Maven Central.
+
 ### Maven
 
+Add the repository and dependency under the `project` element in `pom.xml`:
+
 ```xml
-<dependency>
-    <groupId>org.apache.iggy</groupId>
-    <artifactId>iggy</artifactId>
-    <version>0.6.0</version>
-</dependency>
+<repositories>
+    <repository>
+        <id>apache-snapshots</id>
+        <url>https://repository.apache.org/content/repositories/snapshots/</url>
+        <snapshots><enabled>true</enabled></snapshots>
+    </repository>
+</repositories>
+
+<dependencies>
+    <dependency>
+        <groupId>org.apache.iggy</groupId>
+        <artifactId>iggy</artifactId>
+        <version>0.9.0-SNAPSHOT</version>
+    </dependency>
+</dependencies>
 ```
 
 ### Gradle
 
 ```groovy
-implementation 'org.apache.iggy:iggy:0.6.0'
+repositories {
+    mavenCentral()
+    maven { url = uri('https://repository.apache.org/content/repositories/snapshots/') }
+}
+
+dependencies {
+    implementation 'org.apache.iggy:iggy:0.9.0-SNAPSHOT'
+}
 ```
 
 Check [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy) for the latest published version. Snapshot builds are available from the [ASF snapshot repository](https://repository.apache.org/content/repositories/snapshots/).
@@ -32,6 +53,8 @@ Check [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy
 ## Quick start
 
 The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/gettingstarted). Stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
+
+Start a development server using the [example setup](/docs/sdk/java/examples#starting-the-server), with `iggy`/`iggy` credentials, then run the producer before the consumer. Bootstrap credentials do not replace recovered credentials.
 
 ### Producer
 
@@ -135,13 +158,15 @@ public class SampleConsumer {
                 for (Message message : polledMessages.messages()) {
                     String payload = new String(message.payload(), StandardCharsets.UTF_8);
                     System.out.printf("Offset: %d, Payload: %s%n", message.header().offset(), payload);
+                    offset = message.header().offset().add(BigInteger.ONE);
                 }
-                offset = offset.add(BigInteger.valueOf(polledMessages.messages().size()));
             }
         }
     }
 }
 ```
+
+The consumer reads partition `0` independently and stops on an empty poll. Its cursor starts at offset `0` or the earliest retained message each time it runs; `autoCommit` is disabled, so this sample does not store its progress on the server.
 
 ## Client types and configuration
 
@@ -175,18 +200,21 @@ var httpClient = Iggy.httpClientBuilder()
     .buildAndLogin();
 ```
 
-The TCP builder also accepts TLS and resilience options:
+Close clients when finished: `client.close()`, `asyncClient.close().join()`, and `httpClient.close()`. The HTTP close method declares `IOException`.
+
+The TCP builder also accepts TLS and resilience options. Start the [TLS development server](/docs/sdk/java/examples#running-the-examples) and run this fragment with `examples/java` as the working directory:
 
 ```java
 import java.time.Duration;
+import org.apache.iggy.Iggy;
 import org.apache.iggy.config.RetryPolicy;
 
 var client = Iggy.tcpClientBuilder()
     .blocking()
-    .host("iggy.example.com")
+    .host("localhost")
     .port(8090)
     .enableTls()
-    .tlsCertificate("/path/to/ca.pem")   // optional custom CA
+    .tlsCertificate("../../core/certs/iggy_ca_cert.pem")
     .connectionTimeout(Duration.ofSeconds(10))
     .requestTimeout(Duration.ofSeconds(30))
     .retryPolicy(RetryPolicy.exponentialBackoff())
@@ -194,7 +222,7 @@ var client = Iggy.tcpClientBuilder()
     .buildAndLogin();
 ```
 
-Beyond streams, topics, and messages, the client exposes consumer groups, partitions, users, and personal access tokens through `client.consumerGroups()`, `client.partitions()`, `client.users()`, and `client.personalAccessTokens()`. All SDK exceptions inherit from `IggyException`.
+Beyond streams, topics, and messages, the client exposes consumer groups, partitions, users, and personal access tokens through `client.consumerGroups()`, `client.partitions()`, `client.users()`, and `client.personalAccessTokens()`. The SDK's custom exception types inherit from `IggyException`; failed futures can wrap them in `CompletionException` when joined.
 
 ## Examples
 
