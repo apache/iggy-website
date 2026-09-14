@@ -25,12 +25,15 @@ import {
 } from "@/lib/organizations";
 
 /**
- * Height is pinned rather than capped. `max-h-*` with `w-auto` leaves a
- * replaced element inside a shrink-to-fit flex chain with a circular size
- * dependency that browsers resolve to zero, and a fixed height is what makes
- * logos of different aspect ratios read as one row.
+ * Height is pinned rather than capped. An SVG with a viewBox but no width or
+ * height attribute has no intrinsic size, and with only `max-h-*` and `max-w-*`
+ * Chrome resolves it to zero inside this flex chain, so those logos vanish. A
+ * fixed height gives every logo a size and makes marks of different aspect
+ * ratios read as one row. It is h-10 rather than the earlier h-7 so square
+ * marks are not dwarfed by wordmarks; `max-w-28` with `object-contain` still
+ * caps the wide ones.
  */
-const WALL_LOGO_CLASS = "max-h-10 max-w-28 shrink-0 object-contain";
+const WALL_LOGO_CLASS = "h-10 w-auto max-w-28 shrink-0 object-contain";
 const USE_CASE_LOGO_CLASS = "h-9 w-auto max-w-36 shrink-0 object-contain";
 
 /**
