@@ -11,16 +11,22 @@ This page covers installing the CLI, connecting to a server, authenticating, and
 
 ### Cargo
 
-Install from crates.io with the Cargo package manager:
+These docs target server 0.9.0 and the CLI built from the same source checkout. The CLI has its own version number. From the root of that checkout, install it with:
 
 ```bash
-cargo install iggy-cli
+cargo install --path core/cli --locked
 ```
 
-This builds and installs the `iggy` binary. If you have [cargo-binstall](https://github.com/cargo-bins/cargo-binstall), you can skip compilation and fetch a prebuilt release binary:
+A published edge package is also available from crates.io. Version `0.14.0-edge.7` predates the new durability flags and CLI fixes documented here; use the source build for those commands:
 
 ```bash
-cargo binstall iggy-cli
+cargo install iggy-cli --version 0.14.0-edge.7
+```
+
+This builds and installs the `iggy` binary. If you have [cargo-binstall](https://github.com/cargo-bins/cargo-binstall), it can fetch a matching prebuilt binary when one is available, otherwise it falls back to compilation:
+
+```bash
+cargo binstall iggy-cli --version 0.14.0-edge.7
 ```
 
 ### Docker
@@ -28,7 +34,7 @@ cargo binstall iggy-cli
 The official `apache/iggy` image ships the CLI alongside the server, installed as `/usr/local/bin/iggy`. The image entrypoint is the server, so override it to run the CLI:
 
 ```bash
-docker run --rm -it --network host --entrypoint iggy apache/iggy -u iggy -p iggy ping
+docker run --rm -it --network host --entrypoint iggy apache/iggy:edge -u iggy -p iggy ping
 ```
 
 `--network host` works on **Linux**. On macOS and Windows, point the CLI at the host instead: `--tcp-server-address host.docker.internal:8090`.
@@ -70,13 +76,15 @@ Each transport also exposes reconnection and tuning flags (retry counts, interva
 
 ## Authentication
 
-Commands that talk to the server require credentials. The CLI resolves them in this order, **first match wins**:
+Broker commands require credentials, except for `ping`. For commands other than `login`, the CLI resolves credentials in this order, **first match wins**:
 
 1. A cached login session token (created by `iggy login`).
 2. `-n, --token-name <name>`: a personal access token stored in the platform keyring under that name.
 3. `-t, --token <token>`: a personal access token passed directly.
 4. `-u, --username <user>` with `-p, --password <password>`. When `-p` is omitted, the CLI prompts for the password interactively (or reads one line from stdin when piped).
 5. The `IGGY_USERNAME` and `IGGY_PASSWORD` environment variables (both must be set).
+
+`iggy login` tries the supplied credentials before a cached session, so it can replace an expired login. Other commands fail if their cached token is rejected; they do not retry with the next credential source in the same invocation.
 
 `-u`, `-t` and `-n` are **mutually exclusive**. Avoid passing the password inline with `-p`: it lands in your **shell history**. Prefer `iggy login`, the interactive prompt, or the environment variables.
 
@@ -92,7 +100,7 @@ iggy stream list
 
 ### Login sessions
 
-`iggy login` authenticates once and stores a session token in the platform's secure credential store: Secret Service on Linux and the BSDs, Keychain on macOS, Credential Manager on Windows. Subsequent commands use the cached token automatically.
+`iggy login` authenticates once and stores a session token in the platform's secure credential store: Secret Service on Linux and the BSDs, Keychain on macOS, Credential Manager on Windows. Subsequent commands use the cached token automatically. This requires the default `login-session` feature and an available credential-store backend; Linux and BSD need a running Secret Service provider on the D-Bus session.
 
 ```bash
 # Login for 1 hour (default is 15 minutes; "none" disables expiry)
@@ -108,7 +116,7 @@ iggy session status
 iggy logout
 ```
 
-`iggy session status` only checks whether a token exists in the local keyring. An expired token **still reports as active**. Run `iggy me` to verify the session against the server.
+`iggy session status` only checks whether a token exists in the local keyring. An expired token **still reports as active**. On TCP, QUIC and WebSocket, run `iggy me` to verify the session against the server. HTTP does not support `me`; use an authenticated command such as `iggy stream list` with the required permissions.
 
 ### Personal access tokens
 
@@ -125,8 +133,8 @@ iggy -n my-token stream list
 `--store-token` is mutually exclusive with an expiry: stored tokens **never expire**. They're also **namespaced per server address**, so a token stored for one server isn't visible when connecting to another. Alternatively, create a token with an expiry and pass its value with `-t`:
 
 ```bash
-iggy -u iggy -p iggy pat create ci-token 7d
-iggy -t <token-value> stream list
+iggy_cli_token=$(iggy -u iggy -p iggy -q pat create ci-token 7d)
+iggy -t "$iggy_cli_token" stream list
 ```
 
 ## Connection contexts
@@ -153,16 +161,21 @@ iggy context show production
 iggy context delete production
 ```
 
-There's no `--context` flag: the active context is persistent state, switched with `iggy context use <name>`. Flags passed on the command line override the corresponding values from the active context.
+There's no `--context` flag: the active context is persistent state, switched with `iggy context use <name>`. Flags passed on the command line override the corresponding values from the active context. Credential fields merge independently: supplying `--username` does not clear a context token, which still has higher authentication priority.
 
-Contexts are stored in `contexts.toml`, and the active context name in `.active_context`, both under the Iggy home directory: `~/.iggy` by default, overridable with the `IGGY_HOME` environment variable. The `default` context always exists and **cannot be deleted or redefined**. Deleting the currently active context switches back to `default`. Context names may contain letters, digits, hyphens and underscores.
+Contexts are stored in `contexts.toml`, and the active context name in `.active_context`, both under the Iggy home directory: `~/.iggy` by default, overridable with the `IGGY_HOME` environment variable. The `default` context always exists and **cannot be deleted or recreated through context commands**. Deleting the currently active context switches back to `default`. Context names may contain letters, digits, hyphens and underscores. Passwords and raw tokens supplied to `context create` are stored as plaintext in `contexts.toml` (owner-only permissions on Unix); use a stored token name when the credential should stay in the keyring.
 
 ## Shell completions
 
 Generate completions for bash, zsh, fish, elvish or powershell with `--generate`:
 
 ```bash
-iggy --generate bash > /etc/bash_completion.d/iggy
+iggy --generate bash > iggy_completion.bash
+source iggy_completion.bash
+
+mkdir -p ~/.zfunc ~/.config/fish/completions
 iggy --generate zsh > ~/.zfunc/_iggy
 iggy --generate fish > ~/.config/fish/completions/iggy.fish
 ```
+
+For zsh, add `~/.zfunc` to `fpath` before running `compinit` in your shell configuration.

@@ -34,25 +34,25 @@ On macOS the library is `libiggy_php.dylib`.
 
 ## Quick start
 
-The sample below expects an Iggy server on `127.0.0.1:8090`:
+The sample below targets Iggy 0.9.0 on `127.0.0.1:8090`. When testing unreleased SDK changes, build the server from the same source checkout:
 
 ```bash
-# Latest release
+# Server 0.9.0
 docker run --rm \
   --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
   -p 8090:8090 \
   -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
   -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
-  apache/iggy:latest
+  apache/iggy:0.9.0
 
-# Or from the repository source
+# Or from the repository root
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and set the `iggy`/`iggy` root credentials the sample's connection string uses.
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and bootstrap the `iggy`/`iggy` root credentials for a new data directory. Existing stored credentials are not replaced. For the source command, ensure `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` are unset or match the sample; environment values take precedence over the flag. `--fresh` removes the local replica state, so use it only for disposable development data.
 
-Credentials in the connection string take effect on `connect()`. Alternatively, construct the client with a plain address (`new \Iggy\Client('127.0.0.1:8090')`) and call `loginUser('iggy', 'iggy')` explicitly.
+For binary transports, credentials in the connection string take effect on `connect()`. HTTP requires `loginUser()` explicitly. Alternatively, construct the client with a plain address (`new \Iggy\Client('127.0.0.1:8090')`) and call `loginUser('iggy', 'iggy')` explicitly.
 
 ```php
 <?php
@@ -90,7 +90,7 @@ foreach ($polled as $message) {
 
 ## Consumer groups
 
-`consumerGroup()` returns an `Iggy\Consumer` that creates and joins the group by default. Consume with a bounded callback loop or a PHP iterator:
+`consumerGroup()` returns an `Iggy\Consumer` that creates and joins the group by default. The partition argument is ignored for consumer groups; the server assigns partitions. After the quickstart has sent ten messages, these two loops consume five each. Both wait for messages until their limit is reached:
 
 ```php
 <?php
@@ -105,19 +105,22 @@ $consumer = $client->consumerGroup(
     \Iggy\AutoCommit::disabled(),
 );
 
-// Callback style: the message limit is required and must be finite.
+$limit = 5;
 $consumer->consumeMessages(
     function (\Iggy\ReceiveMessage $message) use ($consumer): void {
-        process($message->payload());
+        echo $message->payload(), PHP_EOL;
         $consumer->storeOffset($message->offset(), $message->partitionId());
     },
-    100,
+    $limit,
 );
 
-// Iterator style: break out when done.
+$consumed = 0;
 foreach ($consumer->iterMessages() as $message) {
-    process($message->payload());
+    echo $message->payload(), PHP_EOL;
     $consumer->storeOffset($message->offset(), $message->partitionId());
+    if (++$consumed === $limit) {
+        break;
+    }
 }
 ```
 
@@ -129,7 +132,7 @@ foreach ($consumer->iterMessages() as $message) {
 - Partition ids are 0-based: for a topic with one partition, use `0`.
 - PHP strings are passed as named identifiers, including strings that contain only digits. PHP integers are passed as numeric identifiers.
 - `PollingStrategy::timestamp()` and `timestampMicros()` expect microseconds since the Unix epoch. Use `PollingStrategy::timestampSeconds()` for PHP `time()` values.
-- Large unsigned values that can overflow PHP integers, such as message checksums, are returned as decimal strings.
+- Message IDs and checksums are returned as decimal strings. Offset and timestamp getters return PHP integers and are limited to `PHP_INT_MAX`.
 - Errors are thrown as exceptions under `Iggy\Exception`: `AuthenticationException`, `ConnectionException`, `NotFoundException`, `TransientException`, and the `IggyException` base.
 - TLS uses the Rust SDK connection-string format, for example `iggy+tcp://user:pass@host:port?tls=true&tls_domain=localhost&tls_ca_file=/path/to/ca.pem`.
 - The extension owns a lazy global Tokio runtime. Don't call `pcntl_fork()` after the first Iggy call: the child inherits file descriptors but not the runtime's worker threads.
@@ -140,9 +143,10 @@ foreach ($consumer->iterMessages() as $message) {
 
 ## Examples
 
-Working examples are available in the [examples/php](https://github.com/apache/iggy/tree/master/examples/php) directory. They read `IGGY_CONNECTION_STRING`, or build one from `IGGY_HOST`, `IGGY_PORT`, `IGGY_USERNAME`, and `IGGY_PASSWORD`:
+Working examples are available in the [examples/php](https://github.com/apache/iggy/tree/master/examples/php) directory. They read `IGGY_CONNECTION_STRING` for a binary transport with credentials. Otherwise they connect over TCP using `IGGY_HOST` and `IGGY_PORT`, then log in with the literal `IGGY_USERNAME` and `IGGY_PASSWORD` values:
 
 ```bash
+# From the repository root
 cd examples/php
 (cd ../../foreign/php && cargo build)
 export PHP_IGGY_EXTENSION="$(pwd)/../../foreign/php/target/debug/libiggy_php.so"

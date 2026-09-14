@@ -9,6 +9,14 @@ This page is a curated subset of the documentation. The canonical reference is t
 
 ## Configuration
 
+Use the broker credentials and runtime setup from the [sink guide](/docs/connectors/sinks/sink#configuration). From the matching 0.9.0/edge Iggy checkout root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_s3_sink
+```
+
+Create the bucket separately, then save this connector file in the runtime's connector directory. The plugin does not create buckets. Paths below assume the runtime starts from the checkout root.
+
 ```toml
 type = "sink"
 key = "s3"
@@ -41,26 +49,49 @@ output_format = "json_lines"
 | Option | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
 | `bucket` | string | **required** | S3 bucket name |
-| `region` | string | **required** | AWS region, e.g. `us-east-1` (`auto` for R2) |
-| `prefix` | string | none | Key prefix prepended to all objects |
+| `region` | string | **required** | AWS region, e.g. `us-east-1` (`auto` for [R2](https://developers.cloudflare.com/r2/api/s3/api/)) |
+| `prefix` | string | none | Prefix for data objects and loss markers; leading/trailing slashes are removed |
 | `endpoint` | string | none | Custom S3 endpoint for MinIO, R2, and other compatible stores |
 | `path_template` | string | `{stream}/{topic}/{date}/{hour}` | Directory structure for S3 keys |
 | `file_rotation` | string | `size` | `size` or `messages` |
-| `max_file_size` | string | `8MiB` | Rotation threshold when `file_rotation = "size"` |
-| `max_messages_per_file` | u64 | none | Rotation threshold, required when `file_rotation = "messages"` |
+| `max_file_size` | string | `8MiB` | Size rotation threshold; must be positive and at most `5GiB`, even in message-count mode |
+| `max_messages_per_file` | u64 | none | Positive count required in `messages` mode; ignored by size rotation |
 | `output_format` | string | `json_lines` | `json_lines`, `json_array`, or `raw` |
-| `include_metadata` | bool | `true` | Include stream/topic/partition/offset in the output |
-| `include_headers` | bool | `false` | Include message headers in the output |
+| `include_metadata` | bool | `true` | Include stream/topic/partition/offset/timestamp in JSON output |
+| `include_headers` | bool | `false` | Include available headers in JSON output, independently of metadata |
 
-Further options cover credentials (`access_key_id` / `secret_access_key`), retries (`max_attempts` `3`, `retry_delay` `1s` with exponential backoff and jitter), and `path_style` addressing (auto-enabled when `endpoint` is set). See the upstream [s3_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/s3_sink) for the full reference.
+Further options cover credentials (`access_key_id` / `secret_access_key`), retries (`max_attempts` defaults to `3`, `retry_delay` to `1s`), and `path_style` addressing (auto-enabled when `endpoint` is set, overridable with `false`). `max_retries` is an alias for `max_attempts`; `0` and `1` both make one outer upload attempt. Invalid retry durations prevent startup; `0s` is allowed. Output format names are case-insensitive, with `jsonl` and `jsonlines` aliases for `json_lines`. See the upstream [s3_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/s3_sink) for the full reference.
 
-Path templates support `{stream}`, `{topic}`, `{partition}`, `{date}`, `{hour}`, and `{timestamp}`. The time-based variables derive from the first message timestamp in each buffer. File names embed the partition (zero-padded to 5 digits, to prevent cross-partition collisions) and the offset range (zero-padded to 20 digits), e.g. `application_logs/api_requests/2026-03-16/14/00000-00000000000000000000-00000000000000000999.jsonl`.
+Each stream/topic/partition has its own buffer, retained across polls. Rotation is checked after appending a complete formatted record. Size mode counts record bytes but excludes JSON newlines, commas and array brackets, so an object can exceed `max_file_size`. Message-count mode does not also enforce the size threshold. Uploads use one `PutObject`, with no multipart upload; choose thresholds and message sizes that fit the [store's single-upload limit](https://docs.aws.amazon.com/AmazonS3/latest/userguide/upload-objects.html). There is no timer flush: a partial buffer waits until its threshold is reached or the connector closes.
+
+Path templates support `{stream}`, `{topic}`, `{partition}`, `{date}`, `{hour}`, and `{timestamp}`. The time-based variables derive from the first message timestamp in each buffer: date/hour use UTC, and `{timestamp}` is epoch milliseconds. File names embed the partition (zero-padded to 5 digits, to prevent cross-partition collisions) and the offset range (zero-padded to 20 digits), e.g. `application_logs/api_requests/2026-03-16/14/00000-00000000000000000000-00000000000000000999.jsonl` before adding the configured prefix.
+
+Stream/topic substitutions preserve ASCII letters, digits, `.`, `_` and `-`, replacing other characters with `_`. Distinct names can therefore produce the same key. Keep stream/topic separation in the template, use names that remain distinct after replacement, and avoid sharing the same output paths across independent producers. A repeated object key overwrites the current object, subject to bucket versioning; the offset range alone does not provide global deduplication. Extensions are `.jsonl`, `.json` and `.bin` for the three formats.
 
 ## Credentials
 
-Credentials resolve in order of precedence: explicit `access_key_id` + `secret_access_key` in the config (both together or neither), the standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` environment variables, the AWS shared credentials file (`~/.aws/credentials`), then container credentials or the instance profile when running on EC2/ECS/EKS.
+Credentials resolve in order of precedence: explicit `access_key_id` + `secret_access_key` in the config (both together or neither), environment credentials, the shared credentials file, STS web identity, ECS container credentials, then EC2 instance metadata (IMDSv2 before v1). The chain is provided by the pinned `aws-creds` dependency, not the AWS SDK.
+
+Environment credentials use `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`, with optional `AWS_SESSION_TOKEN` / `AWS_SECURITY_TOKEN`. The file path is `AWS_SHARED_CREDENTIALS_FILE` or `~/.aws/credentials`; this plugin reads its `[default]` section and does not select `AWS_PROFILE`. Web identity uses `AWS_ROLE_ARN` and `AWS_WEB_IDENTITY_TOKEN_FILE`. The container path uses `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`. Explicit config credentials have no session-token option; use the environment or credentials file for a temporary key pair and token.
+
+Startup writes an empty object at the bucket-root key `.iggy-sink-probe`, then attempts to delete it. The probe ignores `prefix`, needs `PutObject` on that key, and rejects non-success HTTP statuses. `ListBucket` is not required; failed probe cleanup does not prevent startup. Reserve this key: an existing object at that name is overwritten, and deleted if the credentials permit cleanup.
 
 ### MinIO example
+
+Start a local MinIO server:
+
+```bash
+docker run -d --name iggy-s3 -p 127.0.0.1:9000:9000 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+curl --fail http://localhost:9000/minio/health/live
+```
+
+After the health request succeeds, create the bucket using MinIO's client. These commands use Docker host networking on Linux:
+
+```bash
+docker run --rm --network host -e MC_HOST_iggy=http://minioadmin:minioadmin@localhost:9000 minio/mc mb iggy/my-bucket
+```
+
+Replace the earlier `[plugin_config]` table with this local configuration. One message per file makes the example upload immediately:
 
 ```toml
 [plugin_config]
@@ -69,11 +100,43 @@ region = "us-east-1"
 endpoint = "http://localhost:9000"
 access_key_id = "minioadmin"
 secret_access_key = "minioadmin"
+file_rotation = "messages"
+max_messages_per_file = 1
+output_format = "json_lines"
 ```
+
+Create the Iggy resources, send a JSON message, and start the runtime as described in the sink guide:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create application_logs
+./target/release/iggy --username iggy --password iggy topic create application_logs api_requests 1 none 1d
+./target/release/iggy --username iggy --password iggy topic create application_logs errors 1 none 1d
+./target/release/iggy --username iggy --password iggy message send --partition-id 0 application_logs api_requests '{"method":"GET","path":"/api/users","status":200}'
+```
+
+List the uploaded objects:
+
+```bash
+docker run --rm --network host -e MC_HOST_iggy=http://minioadmin:minioadmin@localhost:9000 minio/mc ls --recursive iggy/my-bucket
+```
+
+## Output Formats
+
+JSON Lines and JSON Array contain wrapper objects with the decoded/transformed payload under `payload`. JSON payloads retain their JSON value; text and Proto variants become strings. Raw bytes containing valid JSON are parsed, while other raw bytes, Avro and FlatBuffer variants become base64 strings. Those strings do not carry an encoding tag.
+
+With metadata enabled, each wrapper also contains `offset`, a UTC timestamp at second precision, `stream`, `topic` and `partition_id`. Message IDs, checksums and origin timestamps are not included. Headers are a separate optional object: string values remain strings, raw values become base64, booleans become booleans and supported numeric types become JSON numbers; other values use strings.
+
+Raw output concatenates payload bytes without delimiters and ignores both inclusion flags. To preserve the original payload bytes, use `schema = "raw"` and no transform that changes them; decoding JSON before raw output can reserialize it.
 
 ## Delivery Semantics
 
-The connector runtime commits consumer offsets before `consume()` runs and does not inspect its return value, so the effective guarantee is **at-most-once**: upload failures are retried only by the sink's internal retry loop, and a crash loses whatever is buffered in memory but not yet flushed to S3 (there is no write-ahead log or dead-letter queue). Size your rotation thresholds accordingly: smaller files bound the loss window, larger files upload more efficiently.
+The runtime auto-commits while polling. It logs/counts a failed plugin callback and continues without replaying that batch. A successful callback can mean only that messages were buffered, so runtime processed counts do not establish delivery to S3. A crash loses unflushed buffers; there is no write-ahead log or dead-letter queue.
+
+The sink retries HTTP 408, 429, 5xx and client errors. Other HTTP statuses stop the upload immediately. Its exponential backoff includes jitter and a 60-second cap, without handling `Retry-After`. The S3 library also retries transport errors once internally and uses a 60-second request timeout, so `max_attempts` counts outer `PutObject` calls rather than individual network requests or a total time budget. The startup probe does not use the sink's upload retry loop.
+
+Buffers are cleared before upload. A failed upload loses those messages and stops processing the remainder of that poll. The sink tries to write an additional `.lost` object containing the offset range, message count and error, using the same retry policy. This marker contains no payload and may also fail. Graceful close attempts to flush remaining buffers, logs failures, and still returns success. Neither runtime counters nor shutdown success prove that every message was stored, and the sink provides no end-to-end delivery or deduplication guarantee.
+
+Size your rotation thresholds accordingly: smaller files bound the loss window, larger files upload more efficiently.
 
 ## Transforms
 

@@ -7,23 +7,35 @@ The Iggy Go SDK is a client library for interacting with the Iggy server from Go
 
 ## Server compatibility
 
-The SDK and the server must speak the same wire protocol. Tagged releases up to `v0.8.0` predate VSR (and the current API) and pair only with servers of the same era. The module on `master` speaks VSR only and requires a current server. When working from source, build the SDK and the server from the same repository checkout. The code on this page tracks `master`.
+The SDK and the server must speak the same wire protocol. Tagged releases up to `v0.8.0` predate VSR (and the current API) and pair only with servers of the same era. The current SDK speaks VSR only. This page prepares for server `0.9.0`; use a compatible SDK release or edge version. When working from source, build the SDK and the server from the same repository checkout.
 
 ## Installation
+
+The current source requires Go 1.25 or newer. Run these commands from your application module:
 
 ```bash
 go get github.com/apache/iggy/foreign/go
 ```
 
-`go get` resolves to the latest tagged release. Until a post-VSR release is tagged, track `master` to talk to a current server:
+`go get` without a version does not automatically select prereleases. For prerelease testing, pin a compatible VSR edge version, for example:
 
 ```bash
-go get github.com/apache/iggy/foreign/go@master
+go get github.com/apache/iggy/foreign/go@v0.9.0-edge.6
 ```
+
+For unreleased changes, use the local SDK replacement shown in the [repository examples](/docs/sdk/go/examples). A published edge tag need not contain every change in your checkout.
 
 ## Quick start
 
 The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/master/examples/go/getting-started). Stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
+
+Run the server from the repository root with disposable development data and no root credential overrides:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+`--fresh` **wipes this replica's local data directory**. `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` take precedence over the flag; bootstrap settings do not replace recovered credentials, including credentials recovered from cluster peers. The snippets use `iggy`/`iggy`. Run the producer before the consumer.
 
 ### Producer
 
@@ -183,28 +195,30 @@ func main() {
 			continue
 		}
 
-		offset += uint64(len(polled.Messages))
 		for _, message := range polled.Messages {
 			fmt.Printf("Offset: %d, Payload: %s\n",
 				message.Header.Offset, string(message.Payload))
+			offset = message.Header.Offset + 1
 		}
 	}
 }
 ```
 
-Polled message payloads and user headers alias the reply buffer, so retaining one message pins the whole reply. Copy the bytes out when they outlive the poll.
+The consumer reads partition `0` independently and keeps its offset only in memory. Restarting reads from offset `0` again, or the earliest retained message if older messages were removed.
+
+Uncompressed payloads and user headers alias the reply buffer, so retaining their slices pins the whole reply. Copy those bytes to retain only the message you need. S2 decompression allocates a separate payload buffer.
 
 ## TLS
 
-Wrap the TCP options with `tcp.WithTLS`:
+Replace the quick-start client constructor with the following TCP options. Start the TLS server as shown on the [examples page](/docs/sdk/go/examples#tls); the development CA path below is relative to `examples/go`:
 
 ```go
 cli, err := client.NewIggyClient(
 	client.WithTcp(
-		tcp.WithServerAddress("iggy.example.com:8090"),
+		tcp.WithServerAddress("localhost:8090"),
 		tcp.WithTLS(
-			tcp.WithTLSCAFile("/path/to/ca.pem"),
-			tcp.WithTLSDomain("iggy.example.com"),
+			tcp.WithTLSCAFile("../../core/certs/iggy_ca_cert.pem"),
+			tcp.WithTLSDomain("localhost"),
 		),
 	),
 )
@@ -214,7 +228,9 @@ cli, err := client.NewIggyClient(
 
 ## Delivery semantics
 
-`SendMessages` returns the placements the server committed. Delivery is at-least-once. A send whose reply is lost to a dropped connection returns `ErrDisconnected` without a replay: a reconnect registers a fresh client identity, so the server could not deduplicate the replay against a batch that may have already committed. Retrying such a send is the caller's decision and may write the batch twice. Consumers that need exactly-once handling deduplicate on the message id. A confirmation reports an in-memory commit, not a flush to disk, and an empty confirmation list is a valid success.
+`SendMessages` returns any placements the server reports. A send whose reply is lost to a dropped connection returns `ErrDisconnected` without a replay: a reconnect registers a fresh client identity, so the server could not deduplicate the replay against a batch that may have already committed. Retrying such a send is the caller's decision and may write the batch twice. Consumers must handle duplicates through idempotent processing or application-level deduplication.
+
+Crash durability follows the topic's `durability` policy: `replicated` confirms replication, while `persisted` also waits for the required replicas to persist the message data. See [Durability](/docs/server/durability). An empty confirmation list is a valid success but does not by itself prove that new messages were appended.
 
 ## Consumer groups
 

@@ -37,11 +37,11 @@ export function MessageFlowDiagram() {
 
   const steps = [
     { label: "Client", desc: "Client sends messages via TCP/QUIC/WS/HTTP", icon: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z" },
-    { label: "Listener", desc: "Transport listener receives the request on a shard thread", icon: "M21 3L3 10.53v.98l6.84 2.65L12.48 21h.98L21 3z" },
+    { label: "Listener", desc: "Shard 0 accepts connections; the connection owner decodes requests", icon: "M21 3L3 10.53v.98l6.84 2.65L12.48 21h.98L21 3z" },
+    { label: "Stream", desc: "Resolve the stream ID or name from local metadata", icon: "M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" },
+    { label: "Topic", desc: "Resolve the topic and target partition; compression is not applied", icon: "M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" },
     { label: "Router", desc: "Request routed to owning shard via IggyNamespace hash", icon: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" },
-    { label: "Stream", desc: "Stream lookup by ID (metadata read from left-right)", icon: "M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" },
-    { label: "Topic", desc: "Topic lookup within stream, compression applied", icon: "M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" },
-    { label: "Partition", desc: "Messages buffered in the partition journal (PartitionJournal)", icon: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z" },
+    { label: "Partition", desc: "The partition primary admits and replicates the write through VSR", icon: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z" },
     { label: "Segment", desc: "Flushed to .log file via vectored I/O (io_uring)", icon: "M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" },
   ];
 
@@ -126,7 +126,7 @@ export function ShardDiagram() {
       id: 0,
       label: "Shard 0 (Coordinator)",
       color: "var(--color-fd-primary)",
-      features: ["Binds all listeners: TCP, QUIC, HTTP, WS", "Replica plane listener", "Metadata plane (left-right write handle)", "QUIC + TCP-TLS terminate here", "Hands plaintext TCP/WS to peers (fd transfer)"],
+      features: ["Binds all listeners: TCP, QUIC, HTTP, WS", "Replica plane listener", "Metadata plane (left-right write handle)", "QUIC + TCP-TLS + WSS + HTTP terminate here", "Hands plaintext TCP/WS to peers (fd transfer)"],
       partitions: ["P0", "P3", "P6"],
     },
     {
@@ -174,7 +174,7 @@ export function ShardDiagram() {
               <span className="text-[10px] font-mono text-fd-muted-foreground block mb-1">compio runtime</span>
               <div className="flex items-center gap-1">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ring-glow" />
-                <span className="text-[10px] text-fd-foreground">io_uring (4096 ops)</span>
+                <span className="text-[10px] text-fd-foreground">io_uring (default capacity: 4096)</span>
               </div>
             </div>
 
@@ -213,8 +213,8 @@ export function ShardDiagram() {
           <span className="text-xs font-medium text-fd-muted-foreground">Inter-shard communication</span>
         </div>
         <p className="text-xs text-fd-muted-foreground m-0">
-          Shards communicate via <code className="text-[11px]">crossfire</code> bounded mpsc channels. Metadata mutations route to Shard 0, the only shard that commits; peers hold left-right read handles.
-          Partition ops route to the owning shard via the lock-free <code className="text-[11px]">papaya::HashMap&lt;IggyNamespace, PartitionLocation&gt;</code>.
+          Shards communicate via <code className="text-[11px]">crossfire</code> bounded mpsc channels. Metadata mutations route to Shard 0, the only shard that commits metadata; peers hold left-right read handles.
+          CPU labels and partition assignments above are illustrative. Partition ops route to the owning shard via the lock-free <code className="text-[11px]">papaya::HashMap&lt;IggyNamespace, PartitionLocation&gt;</code>.
         </p>
       </div>
     </div>
@@ -239,7 +239,7 @@ export function IoUringComparison() {
             </div>
           ))}
           <div className="rounded-md bg-red-500/10 border border-red-500/20 p-2 mt-2">
-            <span className="text-[11px] text-red-400 block">Files are &quot;always ready&quot; for epoll. Tokio uses a blocking thread pool (up to 512 threads) for file I/O.</span>
+            <span className="text-[11px] text-red-400 block">Regular files cannot be registered with epoll. Tokio uses a blocking pool for file I/O (512 threads by default, configurable).</span>
           </div>
         </div>
       </div>
@@ -259,7 +259,7 @@ export function IoUringComparison() {
             </div>
           ))}
           <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-2 mt-2">
-            <span className="text-[11px] text-emerald-400 block">Both SQ and CQ are lock-free ring buffers shared between user space and kernel. No syscall per I/O in the hot path.</span>
+            <span className="text-[11px] text-emerald-400 block">SQ and CQ are shared ring buffers. Batching amortizes submission and completion syscalls across operations.</span>
           </div>
         </div>
       </div>
@@ -280,7 +280,7 @@ export function SegmentVisualization() {
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Partition Storage Layout</h3>
       <p className="text-xs text-fd-muted-foreground m-0 mb-5">
-        Each partition contains a segmented log. Segments are sealed at 1 GiB and new ones created automatically. Click a segment to inspect its files.
+        Example partition at the default 1 GiB segment size. Rotation can exceed that size by one batch; message counts depend on payload and batch sizes. Click a segment to inspect its files.
       </p>
 
       <div className="space-y-3">
@@ -343,7 +343,7 @@ export function SegmentVisualization() {
                       <span className="text-[11px] font-mono font-bold text-fd-foreground">.log</span>
                     </div>
                     <span className="text-[10px] text-fd-muted-foreground block">Message data (headers + payloads)</span>
-                    <span className="text-[10px] text-fd-muted-foreground block">batch records, 48-byte frame per message</span>
+                    <span className="text-[10px] text-fd-muted-foreground block">batch records, 48-byte header per message</span>
                   </div>
                   <div className="rounded-lg bg-fd-accent/30 p-3">
                     <div className="flex items-center gap-2 mb-1">
@@ -356,8 +356,8 @@ export function SegmentVisualization() {
                 </div>
                 <div className="flex gap-4 text-[10px] text-fd-muted-foreground">
                   <span>Offsets: <code className="text-fd-foreground">{seg.startOffset.toLocaleString()}</code> .. <code className="text-fd-foreground">{seg.endOffset.toLocaleString()}</code></span>
-                  {seg.status === "sealed" && <span>Read-only, safe to archive</span>}
-                  {seg.status === "active" && <span>Accepting writes via vectored I/O</span>}
+                  {seg.status === "sealed" && <span>Read-only segment</span>}
+                  {seg.status === "active" && <span>Active; flushed with vectored I/O</span>}
                 </div>
               </div>
             )}
@@ -373,8 +373,8 @@ export function MessageHeaderDiagram() {
 
   const fields = [
     { name: "checksum", bytes: "0-8", size: 8, type: "u64", desc: "xxHash3 integrity checksum", color: "#ef4444" },
-    { name: "id", bytes: "8-24", size: 16, type: "u128", desc: "Unique message ID (UUIDv4)", color: "#f59e0b" },
-    { name: "offset", bytes: "24-32", size: 8, type: "u64", desc: "Sequential offset in partition", color: "#10b981" },
+    { name: "id", bytes: "8-24", size: 16, type: "u128", desc: "Client-supplied 128-bit ID; Rust SDK generates UUIDv4 when omitted", color: "#f59e0b" },
+    { name: "offset", bytes: "24-32", size: 8, type: "u64", desc: "Increasing offset within the partition", color: "#10b981" },
     { name: "timestamp", bytes: "32-40", size: 8, type: "u64", desc: "Server-assigned timestamp", color: "#3b82f6" },
     { name: "origin_ts", bytes: "40-48", size: 8, type: "u64", desc: "Client-provided timestamp", color: "#6366f1" },
     { name: "hdrs_len", bytes: "48-52", size: 4, type: "u32", desc: "User headers length", color: "#8b5cf6" },
@@ -386,9 +386,9 @@ export function MessageHeaderDiagram() {
 
   return (
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
-      <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Message Header (64 bytes, little-endian)</h3>
+      <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Rust SDK Header (64 bytes, little-endian)</h3>
       <p className="text-xs text-fd-muted-foreground m-0 mb-5">
-        Every message starts with this fixed-size header for efficient aligned reads.
+        This is the SDK byte representation. Wire and disk batches use a 48-byte per-message frame header.
       </p>
 
       <div className="flex rounded-lg overflow-hidden mb-4 h-10">
@@ -454,7 +454,7 @@ export function BenchmarkChart() {
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Latency Improvements: Tokio vs Thread-per-Core</h3>
       <p className="text-xs text-fd-muted-foreground m-0 mb-5">
-        Relative latency comparison (lower is better). Thread-per-core with io_uring vs Tokio work-stealing.
+        Selected historical results (lower is better): v0.5.0 vs v0.7.0 at approximately 1,000 MB/s per node. See the linked migration benchmark for workloads.
       </p>
 
       <div className="space-y-4">
@@ -483,7 +483,7 @@ export function BenchmarkChart() {
 
 export function NamespacePacking() {
   const bitGroups = [
-    { label: "unused (12 bits)", bits: 12, color: undefined, range: "63..52" },
+    { label: "zero for partitions (12 bits)", bits: 12, color: undefined, range: "63..52" },
     { label: "stream", bits: 20, color: "#f59e0b88", range: "51..32", sub: "20 bits" },
     { label: "topic", bits: 12, color: "#3b82f688", range: "31..20", sub: "12 bits" },
     { label: "partition", bits: 20, color: "#10b98188", range: "19..0", sub: "20 bits" },
@@ -499,7 +499,7 @@ export function NamespacePacking() {
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">IggyNamespace Bit Packing (u64)</h3>
       <p className="text-xs text-fd-muted-foreground m-0 mb-5">
-        Stream, topic, and partition IDs are packed into a single u64 for efficient hashing and shard routing.
+        Stream, topic, and partition IDs are packed into a single u64 for efficient hashing and shard routing. Bit 63 is reserved for the separate metadata consensus group.
       </p>
 
       <div className="flex rounded-lg overflow-hidden h-12 mb-3">
@@ -761,7 +761,7 @@ export function ConsumerGroupViz() {
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Consumer Group</h3>
       <p className="text-xs text-fd-muted-foreground m-0 mb-6">
-        Each partition is assigned to exactly one consumer. When a consumer joins or leaves, partitions are rebalanced.
+        Within this group, each partition has at most one member permitted to poll it. Joins and leaves trigger rebalancing; pending handoffs can temporarily pause polling.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-6 items-center">
@@ -850,7 +850,7 @@ export function ServerEcosystem() {
         <div className="relative rounded-2xl border-2 border-fd-primary/40 bg-gradient-to-br from-fd-primary/10 to-fd-primary/5 px-8 py-5 text-center shadow-lg shadow-fd-primary/10">
           <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-fd-primary shard-pulse" />
           <span className="text-lg font-bold text-fd-primary block">Iggy Server</span>
-          <span className="text-xs text-fd-muted-foreground block mt-1">Thread-per-core + io_uring</span>
+          <span className="text-xs text-fd-muted-foreground block mt-1">Thread-per-core + io_uring (Linux)</span>
           <div className="flex justify-center gap-1.5 mt-2">
             {["TCP :8090", "QUIC :8080", "HTTP :3000", "WS :8092"].map((p) => (
               <span key={p} className="px-1.5 py-0.5 rounded text-[8px] font-mono font-medium bg-fd-primary/15 text-fd-primary">{p}</span>
@@ -919,11 +919,11 @@ export function ConnectorPipeline() {
   return (
     <div className="my-8 rounded-xl border border-fd-border bg-fd-card p-6">
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Source Flow (Ingest)</h3>
-      <p className="text-xs text-fd-muted-foreground m-0 mb-4">External systems push data into Iggy streams via source plugins</p>
+      <p className="text-xs text-fd-muted-foreground m-0 mb-4">Source plugins fetch or generate data for Iggy streams</p>
 
       <div className="flex flex-col md:flex-row items-center gap-3 mb-8">
         <div className="flex-1 w-full rounded-lg border border-fd-border bg-fd-muted/20 p-4">
-          <span className="text-xs font-semibold text-fd-muted-foreground block mb-2">External System</span>
+          <span className="text-xs font-semibold text-fd-muted-foreground block mb-2">Data source</span>
           <div className="flex flex-wrap gap-1.5">
             {sources.map((s) => (
               <span key={s.name} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-fd-card text-fd-foreground border border-fd-border">
@@ -937,10 +937,10 @@ export function ConnectorPipeline() {
         <Arrow />
 
         <div className="flex-1 w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
-          <span className="text-xs font-semibold text-emerald-400 block mb-1">Source Plugin</span>
-          <span className="text-[10px] text-fd-muted-foreground block mb-2">poll() via FFI/postcard</span>
+          <span className="text-xs font-semibold text-emerald-400 block mb-1">Connector runtime</span>
+          <span className="text-[10px] text-fd-muted-foreground block mb-2">Source plugin: poll()</span>
           <div className="rounded bg-fd-muted/30 px-2 py-1">
-            <span className="text-[10px] text-fd-muted-foreground">Transforms: </span>
+            <span className="text-[10px] text-fd-muted-foreground">Runtime transforms: </span>
             {transforms.map((t, i) => (
               <span key={t}>
                 <code className="text-[9px] text-fd-foreground">{t}</code>
@@ -948,6 +948,7 @@ export function ConnectorPipeline() {
               </span>
             ))}
           </div>
+          <span className="text-[10px] text-fd-muted-foreground block mt-2">Encode and send to Iggy</span>
         </div>
 
         <Arrow />
@@ -959,7 +960,7 @@ export function ConnectorPipeline() {
       </div>
 
       <h3 className="text-lg font-semibold text-fd-foreground m-0 mb-2">Sink Flow (Egress)</h3>
-      <p className="text-xs text-fd-muted-foreground m-0 mb-4">Iggy streams forward data to external systems via sink plugins</p>
+      <p className="text-xs text-fd-muted-foreground m-0 mb-4">Iggy messages are polled, transformed and passed to sink plugins</p>
 
       <div className="flex flex-col md:flex-row items-center gap-3">
         <div className="shrink-0 rounded-lg border-2 border-fd-primary/40 bg-fd-primary/5 px-5 py-3 text-center">
@@ -970,10 +971,10 @@ export function ConnectorPipeline() {
         <Arrow />
 
         <div className="flex-1 w-full rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
-          <span className="text-xs font-semibold text-blue-400 block mb-1">Sink Plugin</span>
-          <span className="text-[10px] text-fd-muted-foreground block mb-2">consume() via FFI/postcard</span>
+          <span className="text-xs font-semibold text-blue-400 block mb-1">Connector runtime</span>
+          <span className="text-[10px] text-fd-muted-foreground block mb-2">Poll and decode from Iggy</span>
           <div className="rounded bg-fd-muted/30 px-2 py-1">
-            <span className="text-[10px] text-fd-muted-foreground">Transforms: </span>
+            <span className="text-[10px] text-fd-muted-foreground">Runtime transforms: </span>
             {transforms.map((t, i) => (
               <span key={t}>
                 <code className="text-[9px] text-fd-foreground">{t}</code>
@@ -981,6 +982,7 @@ export function ConnectorPipeline() {
               </span>
             ))}
           </div>
+          <span className="text-[10px] text-fd-muted-foreground block mt-2">Sink plugin: consume()</span>
         </div>
 
         <Arrow />
@@ -1012,13 +1014,13 @@ export function WhyIggy() {
     {
       label: "I/O model",
       traditional: "epoll + blocking thread pool for disk",
-      iggy: "io_uring completion-based, kernel does the I/O",
+      iggy: "io_uring completion-based I/O on Linux",
       iggyColor: "#f59e0b",
     },
     {
       label: "Threading",
       traditional: "Work-stealing across shared threads",
-      iggy: "Thread-per-core, CPU-pinned, NUMA-aware",
+      iggy: "Thread-per-core, configurable CPU/NUMA affinity",
       iggyColor: "#3b82f6",
     },
     {
@@ -1030,13 +1032,13 @@ export function WhyIggy() {
     {
       label: "Memory",
       traditional: "Heap allocations on hot path",
-      iggy: "Pre-allocated 4 GiB pool, 28 bucket sizes (4 KiB to 512 MiB)",
+      iggy: "4 GiB pool budget, on-demand buffers, 28 sizes (4 KiB to 512 MiB)",
       iggyColor: "#ec4899",
     },
     {
       label: "Binary",
       traditional: "JVM + Zookeeper / KRaft + dependencies",
-      iggy: "Single ~20 MB binary, no dependencies",
+      iggy: "Single ~20 MB binary with native OS libraries",
       iggyColor: "#14b8a6",
     },
   ];
@@ -1108,7 +1110,7 @@ export function DocsHero() {
   const stats = [
     { stat: "Sub-ms latency", accent: "Tail latency under 1ms at P99" },
     { stat: "Millions msgs/sec", accent: "Multi GB/s throughput on a single node" },
-    { stat: "Zero-copy I/O", accent: "io_uring + vectored writes to disk" },
+    { stat: "Batched disk I/O", accent: "io_uring + vectored writes on Linux" },
   ];
 
   const sources = [
@@ -1127,7 +1129,7 @@ export function DocsHero() {
 
   const links = [
     { title: "Getting Started", href: "/docs/introduction/getting-started", desc: "Install, configure, send your first messages", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-    { title: "Architecture", href: "/docs/introduction/architecture", desc: "Thread-per-core, io_uring, shared-nothing design", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1v-2z" },
+    { title: "Architecture", href: "/docs/introduction/architecture", desc: "Thread-per-core, io_uring, partition ownership", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1v-2z" },
     { title: "Connectors", href: "/docs/connectors/introduction", desc: "Source & sink plugins for data integration", icon: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" },
     { title: "SDKs", href: "/docs/sdk/introduction", desc: "Rust, Python, Java, Go, Node.js, C#, C++, PHP", icon: "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" },
     { title: "Server Config", href: "/docs/server/configuration", desc: "Tune performance, storage, and security", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" },
@@ -1213,7 +1215,7 @@ export function DocsHero() {
 
             <a href="/docs/introduction/architecture" className="flex-1 rounded-lg border-2 border-fd-primary/30 bg-fd-primary/5 p-3 text-center no-underline group hover:border-fd-primary/50 transition-colors">
               <span className="text-sm font-bold text-fd-primary block">Iggy Server</span>
-              <span className="text-[10px] text-fd-muted-foreground block mt-1">Thread-per-core + io_uring</span>
+              <span className="text-[10px] text-fd-muted-foreground block mt-1">Thread-per-core + io_uring (Linux)</span>
               <div className="flex justify-center gap-1 mt-2">
                 {["TCP", "QUIC", "WS", "HTTP"].map((p) => (
                   <span key={p} className="px-1.5 py-0.5 rounded text-[8px] font-mono font-bold bg-fd-primary/15 text-fd-primary">{p}</span>
@@ -1248,7 +1250,7 @@ export function DocsHero() {
               { label: "MCP Server", href: "/docs/ai/mcp", sub: "40+ LLM tools" },
               { label: "Web UI", href: "/docs/web_ui/start", sub: "Dashboard" },
               { label: "CLI", href: "/docs/cli/start", sub: "Terminal" },
-              { label: "8 SDKs", href: "/docs/sdk/introduction", sub: "All languages" },
+              { label: "8 SDKs", href: "/docs/sdk/introduction", sub: "Client libraries" },
             ].map((t) => (
               <a key={t.label} href={t.href} className="text-center no-underline group">
                 <span className="text-[10px] font-semibold text-fd-foreground group-hover:text-fd-primary transition-colors block">{t.label}</span>

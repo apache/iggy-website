@@ -14,7 +14,7 @@ Iggy provides official client SDKs in multiple languages. The **Rust SDK** is th
 | Go | [iggy-go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) | pkg.go.dev | TCP | No |
 | C# | [Apache.Iggy](https://www.nuget.org/packages/Apache.Iggy/) | NuGet | TCP, HTTP | No |
 | C++ | [iggy-cpp](https://github.com/apache/iggy/tree/master/foreign/cpp) | GitHub (WIP) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
-| PHP | [apache/iggy-php](https://github.com/apache/iggy/tree/master/foreign/php) | Composer (experimental) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
+| PHP | [apache/iggy-php](https://github.com/apache/iggy/tree/master/foreign/php) | GitHub (source) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
 
 Python, C++, and PHP wrap the Rust SDK, so they inherit all transport protocols when using connection strings. Java and C# implement TCP and HTTP natively. Go and Node.js currently support TCP *only*.
 
@@ -22,13 +22,13 @@ The Rust SDK is always the first to receive new features.
 
 ## Prerequisites
 
-The samples across the SDK docs log in with the `iggy`/`iggy` root credentials. These **only exist** when the server is started with the default-credentials flag (or `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` set) on its first boot. Otherwise root gets a generated password and the samples fail with `InvalidCredentials`:
+The examples below use the `iggy`/`iggy` root credentials. For a new local development instance, with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides, use:
 
 ```bash
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-`--fresh` **wipes the local data directory**, so an existing server with different stored credentials is re-initialized. This setup is for *development only*.
+`--fresh` **wipes this replica's local data directory**. In a cluster, it can recover stored credentials from another replica. The environment takes precedence over the default-credentials flag, and bootstrap settings do not replace recovered credentials. This setup is for *development only*; use a disposable data directory. See [Connection Strings](/docs/sdk/connection-strings) for the authentication details.
 
 ## Connection string
 
@@ -58,29 +58,34 @@ iggy://<personal-access-token>@host:port
 
 **Examples:**
 
+The Rust snippets assume an async Tokio context. HTTP requires an explicit login after construction; connection-string credentials are applied automatically only by the binary transports.
+
 ```rust
+use iggy::prelude::*;
+
 // Rust - TCP with default options
-let client = IggyClient::from_connection_string("iggy://iggy:iggy@localhost:8090")?;
+let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")?;
 
 // Rust - QUIC
-let client = IggyClient::from_connection_string("iggy+quic://iggy:iggy@localhost:8080")?;
+let client = IggyClient::from_connection_string("iggy+quic://iggy:iggy@127.0.0.1:8080")?;
 
 // Rust - TCP with options
 let client = IggyClient::from_connection_string(
-    "iggy://iggy:iggy@localhost:8090?tls=true&reconnection_retries=unlimited&heartbeat_interval=5s"
+    "iggy://iggy:iggy@127.0.0.1:8090?nodelay=true&reconnection_retries=unlimited&heartbeat_interval=5s"
 )?;
 ```
 
 ```python
-# Python
-client = IggyClient.from_connection_string("iggy://iggy:iggy@localhost:8090")
+from apache_iggy import IggyClient
+
+client = IggyClient.from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")
 ```
 
 The option keys differ per transport and unknown keys are rejected as **hard errors**. See [Connection Strings](/docs/sdk/connection-strings) for the full per-transport option tables, defaults, and default ports.
 
 ## Common operations
 
-All SDKs provide the same core operations through the unified client interface:
+The Rust SDK exposes these operations through traits on `IggyClient`. Availability and method names vary across foreign SDKs and transports:
 
 - **SystemClient** - ping, stats, snapshot
 - **StreamClient** - create, get, list, update, delete, purge streams
@@ -96,19 +101,19 @@ All SDKs provide the same core operations through the unified client interface:
 
 ## Polling strategies
 
-When polling messages, you can choose from several strategies:
+When polling messages, you can choose from several strategies (Rust method names are shown):
 
 | Strategy | Description |
 |----------|-------------|
 | `offset(n)` | Start from a specific offset |
-| `timestamp(t)` | Start after a specific timestamp |
+| `timestamp(t)` | Start at or after the given broker append timestamp |
 | `first()` | Start from the earliest available message |
-| `last()` | Start from the latest message |
-| `next()` | Continue from the last committed offset |
+| `last()` | Read the tail ending at the committed offset, up to the requested count |
+| `next()` | Continue after the stored consumer offset, or start at zero if none is stored |
 
 ## Partitioning strategies
 
-When sending messages, you can control partition routing:
+When sending messages, you can control partition routing (Rust method names are shown):
 
 | Strategy | Description |
 |----------|-------------|
@@ -116,4 +121,4 @@ When sending messages, you can control partition routing:
 | `balanced()` | Round-robin across partitions |
 | `messages_key(key)` | Hash-based routing by key |
 
-Strategies resolve in the client on binary transports, and on the server for the HTTP API and the Node SDK.
+The Rust SDK resolves these strategies before sending a binary request. The Rust HTTP client and Node SDK send the strategy to the server for resolution.
