@@ -1,0 +1,254 @@
+# Runtime
+
+> How the connector runtime loads plugins, resolves its configuration, and manages connector lifecycles.
+
+Rendered page: https://iggy.apache.org/docs/connectors/runtime/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/runtime.mdx
+
+Runtime is responsible for managing the lifecycle of the connectors and providing the necessary infrastructure for the connectors to run.
+
+The runtime uses a shared [Tokio runtime](https://tokio.rs) for its connector-management and forwarding tasks. Each loaded plugin library also has an SDK Tokio runtime shared by its instances. Additionally, it has built-in support for logging via [tracing](https://docs.rs/tracing/latest/tracing/) crate.
+
+The connector are implemented as Rust libraries, and these are loaded dynamically during the runtime initialization process.
+
+Internally, [dlopen2](https://github.com/OpenByteDev/dlopen2) loads plugin libraries and resolves their C FFI symbols. Plugins execute inside the runtime process.
+
+By default, runtime will look for the configuration file, to decide which connectors to load and how to configure them.
+
+Set the broker credentials and connector configuration directory before starting the runtime. The embedded default has an empty connector directory and cannot start unchanged. For a complete setup, follow the [quick start](/docs/connectors/introduction#quick-start).
+
+The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, and can be fetched via `docker pull apache/iggy-connect:edge`.
+
+## How configuration is resolved
+
+- The configuration file path defaults to `core/connectors/runtime/config.toml` and can be overridden by the `IGGY_CONNECTORS_CONFIG_PATH` environment variable.
+- A default configuration is embedded in the binary and always merged as the base, so omitted settings inherit its values. A local provider still needs a nonempty `connectors.config_dir`.
+- On startup the runtime loads environment variables from the first `.env` file found in the working directory or its parents, or from the file pointed to by `IGGY_CONNECTORS_ENV_PATH`.
+- Supported scalar fields and indexed list entries can be overridden by environment variables using the `IGGY_CONNECTORS_<SECTION>_<KEY>` convention (nested keys joined by underscores), e.g. `IGGY_CONNECTORS_IGGY_USERNAME` or `IGGY_CONNECTORS_HTTP_ADDRESS`.
+
+## How plugins are resolved
+
+The `path` field of a connector configuration accepts both `plugin.so` and `plugin` - the OS-specific extension (`.so` / `.dylib` / `.dll`) is appended when missing. Absolute paths are checked at the literal location. Relative paths are searched in order:
+
+1. Literal path (relative to the working directory)
+2. Directory of the runtime binary (filename only)
+3. Current working directory (filename only)
+4. `/usr/lib`, `/usr/lib64`, `/lib`, `/lib64`, `/usr/local/lib`, `/usr/local/lib64`
+
+A connector whose plugin cannot be resolved or loaded is surfaced with the `Error` status via the HTTP API instead of blocking the remaining connectors.
+
+## Minimal configuration
+
+The runtime opens two Iggy TCP clients, one for producers and one for consumers. Set credentials matching the broker and a connector configuration provider. Omitted settings use the embedded defaults, including file-based source state storage. Save this example as `connectors.toml` in the repository root and replace `path/to/connectors` with your connector configuration directory.
+
+```toml
+[iggy]
+address = "localhost:8090"
+username = "iggy"
+password = "iggy"
+token = "" # Personal Access Token (PAT) can be used instead of username and password
+
+[iggy.tls] # Optional TLS configuration for Iggy TCP connection
+enabled = false
+ca_file = "core/certs/iggy_ca_cert.pem"
+domain = "" # Optional domain for TLS connection
+
+[state]
+path = "local_state"
+
+[connectors]
+config_type = "local"
+config_dir = "path/to/connectors"
+```
+
+Start it from the repository root:
+
+```bash
+IGGY_CONNECTORS_CONFIG_PATH=connectors.toml cargo run --bin iggy-connectors
+```
+
+Beyond these sections, the runtime configuration also supports `[http]` for the HTTP API (see below), and `[telemetry]`, `[logging]`, and `[http.metrics]` covered on the **[Observability page](/docs/connectors/observability)**.
+
+## State storage
+
+Source plugins supply optional checkpoint bytes. The default `file` backend writes them to `{state.path}/source_{key}.state` using a temporary file, file synchronization and atomic rename. On Unix, it also synchronizes the parent directory. The runtime stores these bytes unchanged; the SDK provides MessagePack serialization helpers.
+
+To use an HTTP state server, replace the `[state]` section above and add:
+
+```toml
+[state]
+storage = "http"
+
+[state.http]
+url = "http://127.0.0.1:8080/connectors/state"
+load_method = "get"
+save_method = "put"
+timeout = "5s"
+
+[state.http.request_headers]
+authorization = "Bearer your-state-api-token"
+
+[state.http.retry]
+enabled = true
+max_attempts = 4
+initial_backoff = "200ms"
+max_backoff = "2s"
+backoff_multiplier = 2
+```
+
+The runtime appends `source_{key}` as a URL path segment, preserving any query string. URL query values are redacted from runtime configuration logs and transport errors. Static request headers are passed to the state server; configure this map in TOML. The other state settings support environment overrides such as `IGGY_CONNECTORS_STATE_STORAGE` and `IGGY_CONNECTORS_STATE_HTTP_URL`.
+
+The HTTP server must implement this checkpoint contract:
+
+- Load uses `GET` by default, or `POST`. Return `200` with the stored bytes and a strong `ETag`, or `404` when no state exists. An empty `200` body is valid state.
+- Save uses `PUT` by default, or `POST`/`PATCH`, with `Content-Type: application/octet-stream`. Atomically enforce `If-Match` for a known ETag or `If-None-Match: *` for a new checkpoint. Successful `200`, `201` or `204` responses must include the new strong `ETag`.
+- Each logical save has an `Idempotency-Key`, reused across retries and resolution of an uncertain write. The server must replay the original outcome for that key without applying the write again.
+- `If-Match`, `If-None-Match`, `Idempotency-Key` and `Content-Type` are managed by the runtime and cannot be overridden in `request_headers`.
+
+Timeouts, connection failures, `425`, `429` and `5xx` responses are retried. `max_attempts` counts retries after the first request, so the default 4 allows up to 5 requests. Integer-seconds `Retry-After` values are honored up to `max_backoff`. Other save failures, including version conflicts or missing ETags, latch the provider: further saves fail until the connector restarts. An HTTP state-load failure while an enabled source starts aborts runtime startup.
+
+The runtime forwards a source batch to Iggy, saves its optional checkpoint, then acknowledges the batch to the plugin. A failed send or checkpoint save produces a negative acknowledgement. Remote checkpoint durability depends on the state server. Connector lifecycle operations do not delete remote state.
+
+## Configuration Providers
+
+The runtime supports two types of configuration providers for managing connector configurations:
+
+### Local File Provider
+
+The default configuration provider reads connector configurations from local files. Each connector (source or sink) is configured in its own separate file within the directory specified by `connectors.config_dir`. An empty `config_dir` is a fatal startup error. A missing directory is created automatically with a warning, and no connectors are loaded from it.
+
+```toml
+[connectors]
+config_type = "local"
+config_dir = "path/to/connectors"
+```
+
+Additional mechanics of the local provider:
+
+- Only `*.toml` files directly inside the directory are loaded - hidden files (starting with `.`) and `Cargo.toml` are skipped.
+- Multiple files sharing the same connector `key` form a version history (each file carries its own `version`). The active version of each connector is persisted in `{config_dir}/.active_versions.toml` and can be selected via the HTTP API for the next process startup. Without a saved selection, the highest version is used. Changing this selection does not update a running connector. The connector restart endpoint currently loads the highest local version, which can differ from the selected active version.
+- Top-level `plugin_config` fields can be overridden per connector via environment variables using the `IGGY_CONNECTORS_{SINK|SOURCE}_{KEY}_PLUGIN_CONFIG_<FIELD>` convention, e.g. `IGGY_CONNECTORS_SINK_QUICKWIT_PLUGIN_CONFIG_URL`.
+
+### HTTP Configuration Provider
+
+The HTTP configuration provider allows the runtime to fetch connector configurations from a remote HTTP/REST API. The provider fetches active configurations at startup and handles configuration operations requested through the runtime API. It does not periodically poll for remote changes.
+
+```toml
+[connectors]
+config_type = "http"
+base_url = "http://localhost:8080/api"
+timeout = "10s"
+
+[connectors.request_headers]
+api-key = "your-api-key"
+
+[connectors.retry]
+enabled = true
+max_attempts = 3 # Retries after the first request, up to four requests total
+initial_backoff = "1 s"
+max_backoff = "30 s"
+backoff_multiplier = 2
+
+[connectors.url_templates]
+# Optional: Customize URL templates for specific operations
+# If not specified, default RESTful URL patterns are used
+create_sink = "/sinks/{key}/configs"
+create_source = "/sources/{key}/configs"
+get_active_configs = "/configs/active"
+
+[connectors.response]
+# Optional: Extract data from nested response structures
+data_path = "data"        # Path to data in response (e.g., {"data": {...}})
+error_path = "error"      # Path to error in response (e.g., {"error": "..."})
+```
+
+#### Configuration Options
+
+- **base_url** (required): Base URL of the configuration API endpoint
+- **timeout** (optional): HTTP request timeout (default: 10s)
+- **request_headers** (optional): Custom headers to include in all HTTP requests (e.g., authentication headers)
+- **url_templates** (optional): Custom URL templates for API endpoints. Supports variable substitution with `{key}` and `{version}` placeholders.
+- **response.data_path** (optional): Dot-separated object keys or numeric array indexes used to extract data (e.g., `data.config` or `data.0`).
+- **response.error_path** (optional): A path with the same syntax. Any non-null value at this path is treated as an error, including `false` or an empty string.
+
+#### Default URL Templates
+
+If not customized, the HTTP provider uses the following RESTful URL patterns:
+
+- Create sink config: `POST {base_url}/sinks/{key}/configs`
+- Create source config: `POST {base_url}/sources/{key}/configs`
+- Get active configs: `GET {base_url}/configs/active`
+- Get active versions: `GET {base_url}/configs/active/versions`
+- Set active sink version: `PUT {base_url}/sinks/{key}/configs/active`
+- Set active source version: `PUT {base_url}/sources/{key}/configs/active`
+- Get sink configs: `GET {base_url}/sinks/{key}/configs`
+- Get sink config by version: `GET {base_url}/sinks/{key}/configs/{version}`
+- Get active sink config: `GET {base_url}/sinks/{key}/configs/active`
+- Get source configs: `GET {base_url}/sources/{key}/configs`
+- Get source config by version: `GET {base_url}/sources/{key}/configs/{version}`
+- Get active source config: `GET {base_url}/sources/{key}/configs/active`
+- Delete sink config: `DELETE {base_url}/sinks/{key}/configs`
+- Delete source config: `DELETE {base_url}/sources/{key}/configs`
+
+The HTTP provider expects the remote API to implement these endpoints and return connector configuration data in the same format as used by the local provider.
+
+## HTTP API
+
+Connector runtime has an HTTP API which is **enabled by default** at `127.0.0.1:8081`. It can be disabled by setting the `enabled` flag to `false` in the `[http]` section.
+
+When `api_key` is set, every request must carry it in the `api-key` header - except `GET /` and `GET /health`, which stay public. An empty key disables authentication. Configuration endpoints return plugin credentials and accept configuration changes, so set an API key before exposing this API to other hosts. Enable TLS or use a trusted TLS proxy for remote access.
+
+```toml
+[http] # Optional HTTP API configuration
+enabled = true
+address = "127.0.0.1:8081"
+api_key = "" # Optional API key for authentication to be passed as `api-key` header
+
+[http.cors] # Optional CORS configuration for HTTP API
+enabled = false
+allowed_methods = ["GET", "POST", "PUT", "DELETE"]
+allowed_origins = ["*"]
+allowed_headers = ["content-type"]
+exposed_headers = [""]
+allow_credentials = false
+allow_private_network = false
+
+[http.metrics] # Optional Prometheus metrics endpoint (see the Observability page)
+enabled = false
+endpoint = "/metrics"
+
+[http.tls] # Optional TLS configuration for HTTP API
+enabled = false
+cert_file = "core/certs/iggy_cert.pem"
+key_file = "core/certs/iggy_key.pem"
+```
+
+Currently, it does expose the following endpoints:
+
+- `GET /`: welcome message.
+- `GET /health`: process liveness response. It does not check connector health; inspect `/stats`, `/sources` or `/sinks` for connector status.
+- `GET /stats`: runtime statistics (process info plus per-connector status and message counters).
+- `GET /metrics`: Prometheus metrics, available when `[http.metrics]` is enabled (path configurable via its `endpoint` key).
+- `GET /sinks`: list of sinks.
+- `GET /sinks/{key}`: sink details.
+- `GET /sinks/{key}/configs`: list of configuration versions for the sink.
+- `POST /sinks/{key}/configs`: add a new configuration version for the sink.
+- `DELETE /sinks/{key}/configs`: delete one configuration version, chosen by the `version` query parameter or the locally saved active selection.
+- `GET /sinks/{key}/configs/{version}`: configuration details for a specific version.
+- `GET /sinks/{key}/configs/active`: active configuration details.
+- `PUT /sinks/{key}/configs/active`: activate a specific configuration version for the sink.
+- `GET /sinks/{key}/configs/plugin`: sink plugin config, including the optional `format` query parameter to specify the config format.
+- `GET /sinks/{key}/transforms`: sink transforms to be applied to the fields.
+- `POST /sinks/{key}/restart`: restart the sink connector.
+- `GET /sources`: list of sources.
+- `GET /sources/{key}`: source details.
+- `GET /sources/{key}/configs`: list of configuration versions for the source.
+- `POST /sources/{key}/configs`: add a new configuration version for the source.
+- `DELETE /sources/{key}/configs`: delete one configuration version, chosen by the `version` query parameter or the locally saved active selection.
+- `GET /sources/{key}/configs/{version}`: configuration details for a specific version.
+- `GET /sources/{key}/configs/active`: active configuration details.
+- `PUT /sources/{key}/configs/active`: activate a specific configuration version for the source.
+- `GET /sources/{key}/configs/plugin`: source plugin config, including the optional `format` query parameter to specify the config format.
+- `GET /sources/{key}/transforms`: source transforms to be applied to the fields.
+- `POST /sources/{key}/restart`: restart the source connector.

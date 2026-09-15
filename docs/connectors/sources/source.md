@@ -1,0 +1,421 @@
+# Source
+
+> What source connectors do, and the Source trait every one of them implements.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sources/source/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sources/source.mdx
+
+## Overview
+
+Source connectors are responsible for ingesting data from external sources into Apache Iggy. They provide a way to integrate Apache Iggy with various data sources, such as databases, message queues, or file systems.
+
+The source is represented by the single `Source` trait, which defines the basic interface for all source connectors. It provides methods for initializing the source, reading data from it, and closing the source.
+
+```rust
+use async_trait::async_trait;
+use iggy_connector_sdk::{Error, ProducedMessages, source::SourceBatchResult};
+
+#[async_trait]
+pub trait Source: Send + Sync {
+    /// Invoked when the source is initialized, allowing it to perform any necessary setup.
+    async fn open(&mut self) -> Result<(), Error>;
+
+    /// Retrieves the next batch for the runtime to process and deliver.
+    async fn poll(&self) -> Result<ProducedMessages, Error>;
+
+    /// Override to apply staged progress on Ack or discard it on Nack.
+    async fn on_batch_result(&self, _result: SourceBatchResult) -> Result<(), Error> {
+        Ok(())
+    }
+
+    /// Invoked when the source is closed, allowing it to perform any necessary cleanup.
+    async fn close(&mut self) -> Result<(), Error>;
+}
+```
+
+## Configuration
+
+With the local configuration provider, each source connector has a TOML file in the directory specified by the main runtime config. The [runtime](/docs/connectors/runtime#configuration-providers) also supports an HTTP configuration provider.
+
+| Field | Meaning |
+|-------|---------|
+| `key` | Connector key (`String`), separate from the numeric plugin instance ID. |
+| `enabled` | Whether to start the connector (`bool`). |
+| `version` | Configuration version (`u64`). |
+| `name` | Display name (`String`). |
+| `path` | Shared-library path (`String`). |
+| `streams` | Stream configuration entries. |
+| `transforms` | Optional transform configuration. |
+| `plugin_config` | Optional custom configuration object deserialized by the plugin. |
+| `plugin_config_format` | Optional default format for the HTTP API's plugin-config response. The FFI always receives JSON. |
+| `verbose`, `benchmark` | Optional logging flags (`bool`). |
+
+`verbose` and `benchmark` are optional and default to `false`. `verbose` switches the connector's per-batch logging to info level, and `benchmark` emits per-batch timing events for performance measurement.
+
+**Main runtime config (connectors.toml, in the repository root):**
+
+Use the matching 0.9.0/edge checkout and broker from the [quick start](/docs/connectors/introduction#quick-start). Its broker must use the credentials below. Create the `connectors` directory, then save these two configuration files there and in the repository root as labeled.
+
+```toml
+[iggy]
+address = "localhost:8090"
+username = "iggy"
+password = "iggy"
+
+[connectors]
+config_type = "local"
+config_dir = "connectors"
+```
+
+**Source connector config (connectors/random.toml):**
+
+```toml
+# Type of connector (sink or source)
+type = "source"
+key = "random" # Unique source key
+
+# Required configuration for a source connector
+enabled = true # Toggle source on/off
+version = 0
+name = "Random source" # Name of the source
+path = "target/release/libiggy_connector_random_source" # Path to the source connector
+plugin_config_format = "toml"
+
+# Destination for the produced messages
+[[streams]]
+stream = "example_stream"
+topic = "example_topic"
+schema = "json"
+batch_length = 100
+linger_time = "5ms"
+# batch_length and linger_time are optional; the runtime defaults are 1000 and "5ms".
+
+# Custom configuration for the source connector, deserialized to type T from `plugin_config` field
+[plugin_config]
+interval = "100ms"
+messages_range = [1, 5]
+payload_size = 200
+max_count = 100
+
+# Optional data transformation(s) to be applied before sending messages to the stream
+[transforms.add_fields]
+enabled = true
+
+# Collection of the fields transforms to be applied before sending messages to the stream
+[[transforms.add_fields.fields]]
+key = "message"
+value.static = "hello"
+```
+
+Configure one `[[streams]]` destination per source instance. The runtime currently retains only the last producer when multiple entries are supplied.
+
+### Environment Variable Overrides
+
+Configuration properties can be overridden using environment variables. Supported scalar fields and indexed stream entries use the pattern: `IGGY_CONNECTORS_SOURCE_[KEY]_[PROPERTY]`
+
+For example, to disable the source with key `random` at the next runtime start:
+
+```bash
+export IGGY_CONNECTORS_SOURCE_RANDOM_ENABLED=false
+```
+
+Top-level fields of `plugin_config` can be overridden (or injected) the same way with the `IGGY_CONNECTORS_SOURCE_[KEY]_PLUGIN_CONFIG_[FIELD]` pattern. This lets you supply credentials without writing them into the TOML file:
+
+```bash
+export IGGY_CONNECTORS_SOURCE_RANDOM_PLUGIN_CONFIG_PAYLOAD_SIZE=200
+```
+
+## Sample implementation
+
+Let's implement the example source connector, which generates a random batch of messages at the configured interval and optionally stops after a total message limit.
+
+Additionally, our source connector will have its own state, which can be used e.g. to track the overall progress or store some relevant information when producing the data from the actual external sources or tooling.
+
+Keep in mind, that the produced messages will be sent further to the specified stream, however it's already the responsibility of the runtime to handle the delivery.
+
+Also, when implementing the source connector, make sure to use the `source_connector!` macro to expose the FFI interface and allow the connector runtime to register the source with the runtime.
+
+And finally, each source should have its own, custom configuration, which is passed along with the unique plugin ID and optional state via expected `new()` method.
+
+The reference crate is [core/connectors/sources/random_source](https://github.com/apache/iggy/tree/master/core/connectors/sources/random_source). Use its `Cargo.toml` from the matching checkout, including `[lib] crate-type = ["cdylib", "lib"]` and its workspace dependency features. The Rust blocks in this sample implementation section combine into `src/lib.rs`; the trait above is an API reference and is not part of that file.
+
+Start with the imports, then define the internal state and the public source connector along with its configuration.
+
+```rust
+use async_trait::async_trait;
+use iggy_connector_sdk::{
+    ConnectorState, Error, ProducedMessage, ProducedMessages, Schema, Source,
+    source::SourceBatchResult, source_connector,
+};
+use rand::{
+    RngExt,
+    distr::{Alphanumeric, Uniform},
+};
+use serde::{Deserialize, Serialize};
+use std::{str::FromStr, time::Duration};
+use tokio::{sync::Mutex, time::sleep};
+use tracing::{error, info};
+use uuid::Uuid;
+```
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct State {
+    messages_produced: usize,
+}
+```
+
+```rust
+#[derive(Debug)]
+pub struct RandomSource {
+    id: u32,
+    max_count: Option<usize>,
+    interval: Duration,
+    messages_range: (u32, u32),
+    payload_size: u32,
+    state: Mutex<State>,
+    pending_state: Mutex<Option<State>>,
+}
+```
+
+```rust
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RandomSourceConfig {
+    interval: Option<String>,
+    max_count: Option<usize>,
+    messages_range: Option<(u32, u32)>,
+    payload_size: Option<u32>,
+}
+```
+
+At this point, we can expose the required `new()` method, which will be used by the runtime to create a new instance of the source connector. The `id` is assigned by the runtime, and represents the unique identifier of the source connector. The `state` is an optional connector state (e.g. persisted by the file or HTTP state backend), which will be provided by the runtime, given that the connector has persisted its own state before the runtime was restarted. The `ConnectorState::deserialize()` helper decodes the MessagePack bytes back into our `State` struct, falling back to a fresh state when nothing was persisted or decoding fails.
+
+```rust
+const CONNECTOR_NAME: &str = "Random source";
+
+impl RandomSource {
+    pub fn new(id: u32, config: RandomSourceConfig, state: Option<ConnectorState>) -> Self {
+        let interval = config.interval.unwrap_or("1s".to_string());
+        let interval = humantime::Duration::from_str(&interval)
+            .unwrap_or(humantime::Duration::from_str("1s").expect("Failed to parse interval"));
+
+        let restored_state = state
+            .and_then(|s| s.deserialize::<State>(CONNECTOR_NAME, id))
+            .inspect(|s| {
+                info!(
+                    "Restored state for {CONNECTOR_NAME} connector with ID: {id}. \
+                     Messages produced: {}",
+                    s.messages_produced
+                );
+            });
+
+        RandomSource {
+            id,
+            max_count: config.max_count,
+            interval: *interval,
+            messages_range: config.messages_range.unwrap_or((10, 50)),
+            payload_size: config.payload_size.unwrap_or(100),
+            state: Mutex::new(restored_state.unwrap_or(State {
+                messages_produced: 0,
+            })),
+            pending_state: Mutex::new(None),
+        }
+    }
+}
+```
+
+We can invoke the expected macro to expose the FFI interface and allow the connector runtime to register the source within the runtime.
+
+```rust
+source_connector!(RandomSource);
+```
+
+The reference manifest supplies these dependencies:
+
+- async-trait
+- dashmap
+- iggy_connector_sdk
+- serde
+- tokio
+- tracing
+
+The implementation also uses `humantime`, `rand`, `simd-json`, and `uuid`. The reference crate uses `rmp-serde` directly in its tests; the production state helpers come from the SDK.
+
+Before we make use of the `Source` trait, let's define the internal payload of the message that will be produced (e.g. as if it was pulled from some external database or so).
+
+```rust
+#[derive(Debug, Serialize, Deserialize)]
+struct Record {
+    id: Uuid,
+    title: String,
+    name: String,
+    text: String,
+}
+```
+
+`serialize_state()` encodes the state to MessagePack via `ConnectorState::serialize()`. `generate_messages()` samples the half-open `messages_range` (lower bound included, upper bound excluded), capped by the remaining `max_count`. Each message carries a JSON-serialized `Record` with `payload_size` random alphanumeric characters of text. A non-increasing range returns `Error::InvalidConfigValue` from `poll()` without advancing state.
+
+```rust
+impl RandomSource {
+    fn serialize_state(&self, state: &State) -> Option<ConnectorState> {
+        ConnectorState::serialize(state, CONNECTOR_NAME, self.id)
+    }
+
+    fn generate_messages(&self, remaining: Option<usize>) -> Result<Vec<ProducedMessage>, Error> {
+        let mut messages = Vec::new();
+        let mut rng = rand::rng();
+        let distribution = Uniform::new(self.messages_range.0, self.messages_range.1)
+            .map_err(|error| Error::InvalidConfigValue(format!("messages_range: {error}")))?;
+        let messages_count = rng.sample(distribution) as usize;
+        let messages_count =
+            remaining.map_or(messages_count, |remaining| messages_count.min(remaining));
+        for _ in 0..messages_count {
+            let record = Record {
+                id: Uuid::new_v4(),
+                title: "Hello".to_string(),
+                name: "World".to_string(),
+                text: self.generate_random_text(),
+            };
+            let Ok(payload) = simd_json::to_vec(&record) else {
+                error!(
+                    "Failed to serialize record by random source connector with ID: {}",
+                    self.id
+                );
+                continue;
+            };
+
+            let message = ProducedMessage {
+                id: None,
+                headers: None,
+                checksum: None,
+                timestamp: None,
+                origin_timestamp: None,
+                payload,
+            };
+            messages.push(message);
+        }
+        Ok(messages)
+    }
+
+    fn generate_random_text(&self) -> String {
+        let mut rng = rand::rng();
+        let text: String = (0..self.payload_size)
+            .map(|_| rng.sample(Alphanumeric) as char)
+            .collect();
+        text
+    }
+}
+```
+
+Now implement `Source` for `RandomSource`. Each `poll()` waits for `interval`, builds a batch without exceeding `max_count`, and stages a candidate checkpoint. The runtime sends the batch, saves its optional checkpoint, and calls `on_batch_result()`. Only `Ack` commits the in-memory count; `Nack` discards the candidate. After restart, `new()` receives the last persisted checkpoint. Once the limit is reached, polls return empty messages and no new state.
+
+The SDK permits only one batch in flight. Returning an error from `on_batch_result()` stops polling; returning an error from `poll()` logs the error and continues the polling loop. A source that tracks a cursor or performs destructive upstream work must implement the callback instead of relying on its default no-op.
+
+```rust
+#[async_trait]
+impl Source for RandomSource {
+    async fn open(&mut self) -> Result<(), iggy_connector_sdk::Error> {
+        info!(
+            "Opened random source connector with ID: {}. Interval: {:#?}, max offset: {:#?}, messages range: {} - {}, payload size: {}",
+            self.id,
+            self.interval,
+            self.max_count,
+            self.messages_range.0,
+            self.messages_range.1,
+            self.payload_size
+        );
+        Ok(())
+    }
+
+    async fn poll(&self) -> Result<ProducedMessages, iggy_connector_sdk::Error> {
+        sleep(self.interval).await;
+        let messages_produced = self.state.lock().await.messages_produced;
+        if let Some(max_count) = self.max_count
+            && messages_produced >= max_count
+        {
+            info!(
+                "Reached max number of {max_count} messages for {CONNECTOR_NAME} connector with ID: {}",
+                self.id
+            );
+            return Ok(ProducedMessages {
+                schema: Schema::Json,
+                messages: vec![],
+                state: None,
+            });
+        }
+
+        let remaining = self
+            .max_count
+            .map(|max_count| max_count.saturating_sub(messages_produced));
+        let messages = self.generate_messages(remaining)?;
+        let candidate_state = State {
+            messages_produced: messages_produced + messages.len(),
+        };
+        let persisted_state = self.serialize_state(&candidate_state).ok_or_else(|| {
+            Error::Serialization("failed to serialize random source state".to_string())
+        })?;
+        *self.pending_state.lock().await = Some(candidate_state.clone());
+        info!(
+            "{CONNECTOR_NAME} connector with ID: {} generated {} messages. Total produced: {}",
+            self.id,
+            messages.len(),
+            candidate_state.messages_produced
+        );
+
+        Ok(ProducedMessages {
+            schema: Schema::Json,
+            messages,
+            state: Some(persisted_state),
+        })
+    }
+
+    async fn on_batch_result(&self, result: SourceBatchResult) -> Result<(), Error> {
+        let candidate_state = self.pending_state.lock().await.take();
+        if result == SourceBatchResult::Ack
+            && let Some(candidate_state) = candidate_state
+        {
+            *self.state.lock().await = candidate_state;
+        }
+        Ok(())
+    }
+
+    async fn close(&mut self) -> Result<(), Error> {
+        let state = self.state.lock().await;
+        info!(
+            "{CONNECTOR_NAME} connector with ID: {} closed. Total messages produced: {}",
+            self.id, state.messages_produced
+        );
+        Ok(())
+    }
+}
+```
+
+The runtime forwards the encoded payload, optional message ID and headers. Although `ProducedMessage` also accepts `checksum`, `timestamp` and `origin_timestamp`, the current forwarding path does not copy those three fields into the Iggy message.
+
+It's also important to note, that the supported format(s) might vary depending on the connector implementation. For example, you might use `JSON` as the payload format, which can be then easily parsed and processed by downstream components such as data transforms, but at the same time, you could support the other formats and let the user decide which one to use.
+
+The destination `schema` selects the `StreamEncoder`. A decode, transform or encoding error rejects the entire source batch, leaves its checkpoint uncommitted and produces `Nack`; the runtime logs and counts the error. An intentional filter result (`Ok(None)`) may drop selected messages without rejecting the batch.
+
+Build the matching plugin, runtime and CLI from the repository root:
+
+```bash
+cargo build --release -p iggy_connector_random_source -p iggy-connectors -p iggy-cli
+```
+
+On an empty broker, create the destination using the credentials from the quick start:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create example_stream
+./target/release/iggy --username iggy --password iggy topic create example_stream example_topic 1 none 1d
+```
+
+After saving the configuration files above, start the runtime. This explicitly enables the source if you tried the optional disabling override:
+
+```bash
+IGGY_CONNECTORS_SOURCE_RANDOM_ENABLED=true IGGY_CONNECTORS_CONFIG_PATH=connectors.toml cargo run --release --bin iggy-connectors
+```
+
+And that's all, enjoy using the source connector!
+
+On a side note, if you'd like to process the messages consumed from the Iggy stream instead, you can implement your own **[Sink connector](https://github.com/apache/iggy/tree/master/core/connectors/sinks)** too :)

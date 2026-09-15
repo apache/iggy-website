@@ -1,0 +1,173 @@
+# Server-to-server
+
+> The replica-to-replica plane: its dedicated TCP port, command discriminants, and traffic that never reaches a client.
+
+Rendered page: https://iggy.apache.org/docs/binary-protocol/cluster/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/binary-protocol/cluster.mdx
+
+Replicas talk to each other with the same 256-byte [framing](/docs/binary-protocol/framing) the client protocol uses, on a **dedicated TCP port**, with their own set of `command` discriminants. Client listeners reject replica control commands. The replica listener requires a handshake; peer authentication is optional and must be configured separately.
+
+This page documents the replica plane used with binary protocol 0.11.0. These internal frames do not negotiate a replica protocol version. Use compatible server builds and follow the [cluster upgrade requirements](/docs/clustering/configuration).
+
+## Transport
+
+- Every node in `[[cluster.nodes]]` exposes a `tcp_replica` port next to the client ports: `ports = { tcp = 8090, quic = 8080, http = 3000, websocket = 8092, tcp_replica = 9090 }`. The node's `ip` is the roster address for the replica plane (clients fall back to it when `advertised_address` is unset).
+- The replica plane is **TCP only**, by design: the prepare hash chain, cross-shard fd delegation, and view-change timing all assume an ordered byte stream.
+- **Directional dialing:** a replica dials only peers with a strictly greater `replica_id` and accepts inbound connections only from strictly lower ids. This gives each connected pair one dialing direction, avoiding simultaneous dial races.
+- Frames are the standard `[256-byte header][optional body]` with `size` at offset 48. The maximum frame is **64 MiB** by default (`message_bus.max_message_size`). Headers are `#[repr(C)]`, decoded zero-copy, and require 16-byte alignment.
+- Nothing inside a frame marks it as replica traffic. The separation is structural: client listeners parse every inbound frame as a `RequestHeader` (command `5` only), the replica listener requires the first frame to be `ReplicaHello`, and the client-bound commands `Reply` (8) and `Eviction` (13) are rejected if they arrive on the replica plane.
+
+## Command discriminants
+
+The full `command` byte registry, client values included. Values above 29 are rejected.
+
+| Value | Command | Direction | Purpose |
+|-------|---------|-----------|---------|
+| 0 | `Reserved` | - | Invalid sentinel |
+| 1-4 | `Ping`, `Pong`, `PingClient`, `PongClient` | - | Reserved; no production traffic today |
+| 5 | `Request` | client to server; accepted on replica ingress too | Client command; replica ingress decodes the internal routed-request shape |
+| 6 | `Prepare` | primary to backup, backup to next backup | Replicate one operation |
+| 7 | `PrepareOk` | backup to primary | Acknowledge a prepare |
+| 8 | `Reply` | server to client | Client reply; rejected on the replica plane |
+| 9 | `Commit` | primary to all | Commit-point broadcast, doubles as heartbeat |
+| 10 | `StartViewChange` | any to all | View-change proposal |
+| 11 | `DoViewChange` | any to all | View-change vote with log suffix |
+| 12 | `StartView` | new primary to all | Install the new view |
+| 13 | `Eviction` | server to client | Client eviction; rejected on the replica plane |
+| 14 | `ReplicaHello` | dialer to acceptor | Handshake step 1 |
+| 15 | `ReplicaChallenge` | acceptor to dialer | Handshake step 2 |
+| 16 | `ReplicaFinish` | dialer to acceptor | Handshake step 3 |
+| 17 | `RequestStartView` | recovering replica to all | Ask the current primary for a targeted `StartView` |
+| 18 | `RequestPrepares` | lagging replica to peer | Journal repair: request an op range |
+| 19 | `RepairPrepare` | serving peer to requester | One journaled prepare, verbatim |
+| 20 | `RepairDone` | serving peer to requester | Repair stream terminator |
+| 21 | `RangeEvicted` | serving peer to requester | Range no longer retained |
+| 22 | `RequestStateTransfer` | requester to primary | Bulk catch-up: ask for the target |
+| 23 | `StateTransferTarget` | primary to requester | Offer + state manifest |
+| 24 | `RequestStateChunk` | requester to primary | Fetch one artifact chunk |
+| 25 | `StateChunk` | primary to requester | Artifact bytes |
+| 26 | `ForwardRegister` | backup to primary | Forward a verified login |
+| 27 | `ForwardRegisterResult` | primary to backup | Login outcome |
+| 28 | `ForwardLogout` | backup to primary | Forward a logout |
+| 29 | `ForwardLogoutResult` | primary to backup | Logout outcome |
+
+There is no dedicated replica heartbeat: liveness is the `Commit` broadcast, sent on `cluster.commit_broadcast_interval`.
+
+## Frame integrity
+
+The `checksum` and `checksum_body` fields that client frames leave zero are live on the replica plane:
+
+- **Frame seal** (`checksum`, bytes 0..16): XxHash3-64 over header bytes 16..256, widened to u128. Sealed on replica control messages. `Request` is unsealed; `Prepare` and `RepairPrepare` use an identity hash instead. Handshake frames use a keyed MAC when authentication is enabled. Verified at typed decode before field validation; a mismatch drops the frame.
+- **Prepare identity** (`Prepare` / `RepairPrepare` only): those two spend `checksum` on an identity hash instead - XxHash3-64 over the whole 256-byte header computed with `checksum = 0` and `view = 0`, so a retransmit that re-stamps `view` keeps the same identity. `RepairPrepare` retains the original identity; the receiver restores command `Prepare` before integrity validation. `PrepareOk` echoes it in `prepare_checksum`, and each prepare's `parent` field carries the previous prepare's identity, forming a hash chain.
+- **Body seal** (`checksum_body`, bytes 16..32): three regimes. Metadata-plane prepares seal their body with XxHash3-64. Partition-plane prepares leave it zero. `SendMessages` carries its own `batch_checksum`, verified at network ingress; consumer-offset writes have no message batch checksum. `DoViewChange` and `StartView` seal their suffix bodies. Every other message leaves it zero (state-transfer bodies are verified per artifact, not per frame).
+- The seals are **unkeyed integrity checks, not authentication**. Peer authentication comes from the handshake below; without `cluster.auth` and TLS enabled, the replica port trusts any peer that can reach it. Do not expose `tcp_replica` beyond the cluster network.
+
+`Prepare` and `RepairPrepare` validate their common and per-command reserved regions as zero. Session-forwarding headers validate their per-command reserved tails. Other reserved bytes in sealed control headers are covered by the frame seal.
+
+## Handshake
+
+With `cluster.auth.enabled = true`, commands 14-16 are exchanged before any consensus traffic. With authentication disabled, the dialer sends only `ReplicaHello`. These are raw `GenericHeader` frames (`size = 256`) using the per-command area at bytes 128..256:
+
+| Offset | Size | Content |
+|--------|------|---------|
+| 128 | 32 | Nonce (dialer's in `Hello`, acceptor's in `Challenge`) |
+| 160 | 32 | BLAKE3 keyed MAC (acceptor's in `Challenge`, dialer's in `Finish`) |
+| 192 | 1 | `Challenge` only: handshake status |
+
+Statuses: `0` Ok, `1` UnknownCommand, `2` ClusterMismatch, `3` DirectionalRule; `4` AuthRequired and `5` MacMismatch are log-only labels (never sent), and a dialer treats any unknown status byte as a rejection. The MAC key derives from `cluster.auth.shared_secret` (32+ bytes; `previous_shared_secret` gives a rotation window), and with cluster TLS enabled (TLS 1.3 only, ALPN `iggy-replica`) the TLS exporter is folded into every MAC as channel binding. The handshake authenticates **cluster membership**, not per-replica identity: one shared secret for the whole cluster.
+
+The `cluster` header field (bytes 32..48) is the first 16 bytes of `blake3(cluster_name)` as a little-endian u128 on every replica frame, checked during the handshake, so nodes from a differently named cluster cannot connect even with auth disabled.
+
+## Replication
+
+### Prepare (6)
+
+Per-command fields (bytes 128..256):
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 128 | 16 | `client` | Originating client id |
+| 144 | 16 | `parent` | Previous prepare's identity checksum (hash chain) |
+| 160 | 16 | `request_checksum` | Verbatim from the admitted request |
+| 176 | 8 | `op` | Log position |
+| 184 | 8 | `commit` | Primary's commit point when the prepare was built |
+| 192 | 8 | `timestamp` | Primary-assigned monotonic timestamp |
+| 200 | 8 | `request` | Client request number |
+| 208 | 1 | `operation` | Operation discriminant (+7 padding) |
+| 216 | 8 | `group` | Consensus group (see [planes](#consensus-planes)) |
+| 224 | 4 | `user_id` | Authenticated user |
+| 228 | 28 | reserved | Zero |
+
+Metadata bodies contain the server-prepared payload, which may differ from the client request. For example, topic creation adds partition assignments before replication. For `SendMessages` it is the [message batch](/docs/binary-protocol/messages) as stamped by the primary at journal append (`base_offset`, `base_timestamp`, and the recomputed `batch_checksum` are final); each backup re-derives the expected stamp from its own position and refuses a mismatch. Replication is **chain-form**: the primary sends to `(replica + 1) % replica_count`, each backup forwards to its own successor, and disconnected peers are skipped. The chain stops before returning to the primary. `RepairPrepare` (19) is byte-identical to a journaled prepare with only the command byte rewritten.
+
+### PrepareOk (7)
+
+Header-only. `parent` (echo) at 128, `prepare_checksum` (echo of the prepare's identity) at 144, then `op` 160, `commit` 168, `timestamp` 176, `request` 184, `operation` 192, `group` 200. Two fields are the acker's own, not echoes: header `view` is the acking replica's view, and `commit` is its own commit point. Sent to the view's primary.
+
+### Commit (9)
+
+Header-only broadcast; validation rejects `size != 256`. `timestamp_monotonic` at 144 is the liveness token (a receiver resets its heartbeat timer only on a strictly newer value), `commit` at 152 is the commit point, `group` at 168. Bytes 128..144 and 160..168 are declared (`commit_checksum`, `checkpoint_op`) but currently unused.
+
+## View changes
+
+- **StartViewChange (10):** header-only, just `group` at 128. Broadcast when a replica suspects the primary.
+- **DoViewChange (11):** `op` (highest op) 128, `commit` 136, `group` 144, `log_view` 152 (view when the sender was last in Normal status), `nack_bitset` 224 (bit i = "I never prepared suffix entry i"; truncation authority), `present_bitset` 240 (bit i = "I can serve entry i's body"). Body = the log suffix as up to **128 packed 256-byte `PrepareHeader`s**, headers only. Broadcast.
+- **StartView (12):** `op` 128, `commit` 136 (max over the DVC quorum), `group` 144, `incarnation` 240 (echo of a `RequestStartView` incarnation, zero when unsolicited). Body = the view's suffix as packed `PrepareHeader`s, highest op first; empty is legal. Unicast when answering a probe, broadcast otherwise.
+- **RequestStartView (17):** header-only recovery probe with `group` 128 and `incarnation` 240. A restarted replica broadcasts it instead of trusting stale local state; only the current view's primary answers, with a targeted `StartView`.
+
+## Journal repair
+
+A replica missing committed prepares (rejoin window or interior hole) pulls them from a Normal-status peer (the metadata plane also serves repair during a view change, so a forming primary cannot deadlock):
+
+- **RequestPrepares (18):** `nonce` 128, `from_op` 144, `to_op` 152, `group` 160. `from_op = 0` or `from_op > to_op` is rejected.
+- **RepairPrepare (19):** the journaled prepares, streamed in op order.
+- **RepairDone (20)** / **RangeEvicted (21):** one shared layout (`nonce` 128, `op` 144, `group` 152) under two command bytes. `RepairDone.op` = last op served; `RangeEvicted.op` = oldest op the peer still retains, the honest answer when the front of the range is gone.
+
+Pacing is bounded by `cluster.repair_chunk_max`, which must stay below `message_bus.peer_queue_capacity`: per-peer send queues drop overruns silently.
+
+## State transfer
+
+Bulk catch-up for a replica too far behind for journal repair. **Pull-based and lockstep** (at most one chunk in flight per artifact), because per-peer queues drop overruns:
+
+1. **RequestStateTransfer (22):** `nonce` 128, `group` 144.
+2. **StateTransferTarget (23):** `nonce` 128, `commit_op` 144, `group` 152, `available` 160, `unavailable_transient` 161, `commit_max` 168. `available = 0` is a header-only refusal. Body = the **state manifest**.
+3. **RequestStateChunk (24):** `nonce` 128, `offset` 144, `group` 152, `len` 160, `artifact` 164. `len` describes the reply and is clamped by the server.
+4. **StateChunk (25):** `nonce` 128, `offset` 144, `group` 152, `artifact` 160. Body = raw artifact bytes. Chunks carry no per-chunk integrity; each artifact is verified whole, by length and XxHash3-64, against its manifest entry.
+
+The manifest (little-endian):
+
+```text
+[magic: "ISM1"][count: u32][entry_len: u8]
+count x { kind: u8, frontier: u64, len: u64, checksum: u64 }   # entry_len = 25
+[trailer: XxHash3-64 over everything above]
+```
+
+At most 65536 entries. Entries longer than 25 bytes decode with the tail skipped (forward compatibility); shorter entries are rejected.
+
+Artifact kinds:
+
+| Kind | Artifact | Plane | Content |
+|------|----------|-------|---------|
+| 0 | `METADATA_SNAPSHOT` | metadata | `snapshot.bin` verbatim (MessagePack, snapshot format version 5; readers accept versions 3 through 5); `frontier` = sequence number |
+| 1 | `CLIENT_TABLE` | metadata | Client table encoding (magic `ICT3`, including dedup fences); readers also accept `ICT2` without fences; `frontier` = mutation frontier |
+| 2 | `SEGMENT_LOG` | partition | One retained segment's `.log` verbatim; `frontier` = segment base offset |
+| 3 | `CONSUMER_OFFSETS` | partition | `ICO1` version 1: consumer/group offsets, purge generation, next message offset, dedup window, prepare-chain checksum and checkpoint prepare; `frontier` = offer's `commit_op` |
+
+## Session forwarding
+
+A client may dial a backup; authentication happens there, and only the verified identity travels to the primary (login credentials never cross the replica plane):
+
+- **ForwardRegister (26):** `client` 128, `nonce` 144, `user_id` 160.
+- **ForwardRegisterResult (27):** `nonce` 128, `client` 144, `epoch` 160, `watermark` 168, outcome byte at **255**: `0` Ok, `1` NotPrimary, `2` NotCaughtUp (reserved), `3` PipelineFull, `4` InProgress, `5` Canceled, `6` ClientIdOwnedByAnotherUser. `epoch` and `watermark` must be zero on any non-Ok outcome.
+- **ForwardLogout (28):** `client` 128, `nonce` 144, `session` 160, `request` 168.
+- **ForwardLogoutResult (29):** `nonce` 128, `client` 144, `commit` 160, outcome at 255: `0` Ok, `1` NotPrimary, `2` PipelineFull, `3` InProgress, `4` Canceled.
+
+## Consensus planes
+
+Two consensus planes share this one message set; there are no plane-specific commands. Routing is by the `group: u64` field carried on every consensus header except the handshake and session-forwarding frames (those are implicitly metadata-plane):
+
+- `group = 1 << 63` is the **metadata plane** (streams, topics, users, consumer groups; durable on-disk journal).
+- Any other value is a packed stream/topic/partition key: a **partition plane** group (message batches, consumer offsets). Completion and recovery depend on the independent message and offset [durability policies](/docs/server/durability).
+
+Same wire, a few divergent semantics: partition-plane prepares leave `checksum_body` zero, with message integrity supplied by the batch's own checksums; their prepare identity covers the header alone, and `StateTransferTarget.unavailable_transient` / `commit_max` are read only by the partition arm.

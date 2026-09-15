@@ -1,0 +1,201 @@
+# Framing
+
+> The fixed 256-byte header every binary-transport message rides in, and the request, reply and eviction shapes it carries.
+
+Rendered page: https://iggy.apache.org/docs/binary-protocol/framing/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/binary-protocol/framing.mdx
+
+Every message on a binary transport is a fixed **256-byte header** followed by an optional body. The header is a `#[repr(C)]` struct decoded by pointer cast (zero-copy), so field offsets are fixed and enforced at compile time in the server. Three header shapes cross the client boundary:
+
+- `RequestHeader`: client to server.
+- `ReplyHeader`: server to client, answers one request.
+- `EvictionHeader`: server to client, session-terminal rejection with no body.
+
+The header shape is identified by the `command` byte at offset 60. Values a client sends or receives:
+
+| `command` | Value | Direction | Meaning |
+|-----------|-------|-----------|---------|
+| `Request` | 5 | client to server | A command request |
+| `Reply` | 8 | server to client | Answer to one request |
+| `Eviction` | 13 | server to client | Session is dead, no per-request correlation |
+
+Other `command` values (Prepare, PrepareOk, view-change traffic, and so on) are replica-to-replica consensus messages and never appear on a client connection. They are documented on the [Server-to-server](/docs/binary-protocol/cluster) page.
+
+The `size` field at offset 48 is the total frame length in bytes, header included. A body, when present, immediately follows the 256 header bytes and has length `size - 256`. Readers can decode `size` before typing the header. That offset is a protocol constant.
+
+## RequestHeader
+
+Client to server. 256 bytes.
+
+| Offset | Size | Field | Type | Description |
+|--------|------|-------|------|-------------|
+| 0 | 16 | `checksum` | u128 | Frame seal. Not used on client-facing frames; send zero. |
+| 16 | 16 | `checksum_body` | u128 | Body seal. Not used on client-facing frames; send zero. |
+| 32 | 16 | `cluster` | u128 | Cluster id. Send zero. |
+| 48 | 4 | `size` | u32 | Total frame length: 256 + body length. |
+| 52 | 4 | `view` | u32 | Consensus view. Send zero. |
+| 56 | 4 | `release` | u32 | Must be zero. |
+| 60 | 1 | `command` | u8 | `5` (`Request`). |
+| 61 | 1 | `replica` | u8 | Send zero. |
+| 62 | 66 | reserved | bytes | Zero. |
+| 128 | 16 | `client` | u128 | Client-chosen identity, non-zero. Mint a fresh id for a new logical client; retain it when resuming that client. |
+| 144 | 16 | `request_checksum` | u128 | Optional integrity stamp over the request body (the Rust SDK uses XxHash3-64 widened to u128). Lets the server's client table catch a `request` number reused for different arguments. Zero disables the comparison. The Rust SDK stamps metadata/session operations and `DeleteSegments`; it sends zero for partition operations and non-replicated ones. |
+| 160 | 8 | `timestamp` | u64 | May be zero. Direct replies can echo it, but committed prepares use a server-assigned timestamp. |
+| 168 | 8 | `request` | u64 | Request number, per client. See [request numbering](#request-numbering). |
+| 176 | 1 | `operation` | u8 | The [`Operation`](#operation-discriminants) discriminant. |
+| 177 | 7 | padding | bytes | Zero. |
+| 184 | 8 | `session` | u64 | Session fence epoch from the login reply. Zero on the login-register request itself and on non-replicated operations sent before login (only `PING` is accepted unauthenticated). |
+| 192 | 4 | `user_id` | u32 | Ignored on the wire; the server stamps the authenticated user itself. Send zero. |
+| 196 | 60 | reserved | bytes | Zero, except: for `operation = 2` (`NonReplicated`) bytes 196..200 carry the u32 command code, little-endian. |
+
+## Operation discriminants
+
+The `operation` byte tells the server which state-machine operation the request carries. Replicated operations are identified by `operation` alone. Non-replicated operations (reads, ping) all use `operation = 2` and carry their concrete u32 command code in header bytes 196..200.
+
+Values a client may send:
+
+| Value | Operation | Plane |
+|-------|-----------|-------|
+| 1 | `Register` | session (login handshake, codes 40 and 45) |
+| 2 | `NonReplicated` | reads and ping; the u32 code rides bytes 196..200 |
+| 3 | `Logout` | session (code 39) |
+| 128 | `CreateStream` | metadata |
+| 129 | `UpdateStream` | metadata |
+| 130 | `DeleteStream` | metadata |
+| 131 | `PurgeStream` | metadata |
+| 132 | `CreateTopic` | metadata |
+| 133 | `UpdateTopic` | metadata |
+| 134 | `DeleteTopic` | metadata |
+| 135 | `PurgeTopic` | metadata |
+| 136 | `CreatePartitions` | metadata |
+| 137 | `DeletePartitions` | metadata |
+| 138 | `DeleteSegments` | metadata (resolved to an internal partition truncation) |
+| 139 | `CreateConsumerGroup` | metadata |
+| 140 | `DeleteConsumerGroup` | metadata |
+| 141 | `CreateUser` | metadata |
+| 142 | `UpdateUser` | metadata |
+| 143 | `DeleteUser` | metadata |
+| 144 | `ChangePassword` | metadata |
+| 145 | `UpdatePermissions` | metadata |
+| 146 | `CreatePersonalAccessToken` | metadata |
+| 147 | `DeletePersonalAccessToken` | metadata |
+| 148 | `JoinConsumerGroup` | metadata |
+| 149 | `LeaveConsumerGroup` | metadata |
+| 160 | `SendMessages` | partition |
+| 161 | `StoreConsumerOffset` | partition |
+| 162 | `DeleteConsumerOffset` | partition |
+
+Value 0 is reserved and rejected. The 64..127 range is reserved for server-internal operations (currently 64 through 68 are assigned) and every value in it is refused from clients.
+
+The planes matter for delivery semantics:
+
+- **Metadata operations** replicate through the metadata consensus group. The server deduplicates them by `(client, request)` within its retained client history. Recent replies are cached and replayed; an older request can remain recognized as already applied after its reply has left the cache. This is not an unlimited exactly-once guarantee.
+- **Partition operations** normally replicate through their partition's consensus group. Each partition retains client request watermarks and a 128-id committed window to suppress duplicates. There is no reply cache: a recognized duplicate gets an empty success, including no offset confirmations for a retried send. Capacity eviction or a new client identity loses this coverage. Single-replica consumer-offset writes with `ack = 0` bypass consensus and this deduplication.
+- **Non-replicated operations** bypass consensus and deduplication. A poll can still submit a separate consumer-offset write when auto-commit is enabled.
+
+## Request numbering
+
+`request` is a per-client counter the server's client table tracks for metadata-plane operations:
+
+- New metadata operations must use a `request` above the retained watermark; a retry reuses its original number and arguments.
+- The Rust SDK advances one shared counter for metadata operations, partition operations, logout, and `DeleteSegments`. Non-replicated operations use the current value without advancing it.
+- Register uses `request = 0`; other operations except `NonReplicated` require a non-zero request number.
+- The counter is a watermark, not a contiguous sequence: any value above the last accepted one is admissible.
+
+`session` is the fence epoch handed back by the login reply, derived from the committed Register log position. Echo it after login. Registering the same `client` again mints a higher epoch; the metadata client table rejects an older epoch. Partition dispatch uses the identity bound to the authenticated connection.
+
+The partition window is measured in the shared client request-id space. An unseen request arriving 128 or more ids below that partition's watermark is treated as already committed and receives success without executing. Avoid allowing an unresolved write to fall outside that window; the protocol does not provide an unlimited reordered-retry guarantee.
+
+## ReplyHeader
+
+Server to client. 256 bytes, followed by `size - 256` bytes of body.
+
+| Offset | Size | Field | Type | Description |
+|--------|------|-------|------|-------------|
+| 0 | 16 | `checksum` | u128 | Zero on client-facing frames. |
+| 16 | 16 | `checksum_body` | u128 | Zero on client-facing frames. |
+| 32 | 16 | `cluster` | u128 | Cluster id. |
+| 48 | 4 | `size` | u32 | Total frame length: 256 + body length. |
+| 52 | 4 | `view` | u32 | View associated with the reply. A cached committed reply retains its original view; direct replies can echo the request value. |
+| 56 | 4 | `release` | u32 | Zero. |
+| 60 | 1 | `command` | u8 | `8` (`Reply`). |
+| 61 | 1 | `replica` | u8 | Replica index stamped by the reply builder. Cached committed replies retain the original primary index. |
+| 62 | 66 | reserved | bytes | Zero. |
+| 128 | 16 | `request_checksum` | u128 | Echoed from the request. |
+| 144 | 16 | `context` | u128 | Server context. |
+| 160 | 16 | `client` | u128 | Echoed client id. |
+| 176 | 8 | `op` | u64 | Committed log position on consensus replies. Direct replies can instead carry the session epoch or zero; this field alone does not prove a commit. |
+| 184 | 8 | `commit` | u64 | Commit position associated with the reply. A cached committed reply retains its original position. |
+| 192 | 8 | `timestamp` | u64 | Server-assigned prepare timestamp on committed replies, or the request timestamp on direct replies. |
+| 200 | 8 | `request` | u64 | Echoed request number. Non-replicated requests can reuse a number, so it is not a unique correlation id for concurrent reads. |
+| 208 | 1 | `operation` | u8 | Reply operation. Server rewrites can return `64` for CreateTopic, `65` for CreatePartitions, or `68` for DeleteSegments instead of the original client operation. |
+| 209 | 7 | padding | bytes | Zero. |
+| 216 | 4 | `status` | u32 | `0` = no header-level failure. Nonzero = an `IggyError` code for a failure decided **before** commit (authorization denial, admission reject). A nonzero status always comes with an empty body. |
+| 220 | 36 | reserved | bytes | Zero. |
+
+Decode order for a client:
+
+1. Read 256 bytes, check `command`. `13` (`Eviction`) means the session is dead: map the eviction reason to an error and stop. `8` (`Reply`) continues.
+2. Read the remaining `size - 256` body bytes.
+3. If `status` is nonzero, the request failed pre-commit. The status value is the `IggyError` code and the body is empty.
+4. Otherwise decode the body. For result-framed operations, strip the [result section](#result-section) first.
+
+## Result section
+
+Replies for all metadata operations, including their server-internal rewrites, and for the partition-plane consumer-offset writes (`StoreConsumerOffset`, `DeleteConsumerOffset`) are **result-framed**. Non-empty Register replies use the same framing. The body starts with a result section ahead of the typed payload.
+
+```text
+[count: u32]
+count x { index: u32, result: u32 }
+```
+
+- Success: `count = 0`, and the typed response payload (if any) follows the 4 count bytes.
+- Business or transient rejection: one entry `{ index: 0, result: error_code }` and no payload.
+
+A nonzero header `status` has an empty body. With `status = 0`, decode the result section for the operations above: it can report either a committed outcome or a pre-commit transient rejection. Its presence alone does not prove commitment. A successful login-register reply starts with `count = 0`, followed by the [login response payload](/docs/binary-protocol/connection-lifecycle#login-register). An empty Register body is a terminal failure, not a successful login.
+
+Replies to non-replicated commands aren't result-framed: after `status = 0` the body is the response payload directly.
+
+## EvictionHeader
+
+Server to client. 256 bytes, never a body. An eviction is session-terminal: it says "this session is dead", carries no per-request correlation, and a client should deinitialize and re-login.
+
+| Offset | Size | Field | Type | Description |
+|--------|------|-------|------|-------------|
+| 0 | 16 | `checksum` | u128 | Zero on client-facing frames. |
+| 16 | 16 | `checksum_body` | u128 | Zero on client-facing frames. |
+| 32 | 16 | `cluster` | u128 | Cluster id. |
+| 48 | 4 | `size` | u32 | Always 256: an eviction has no body. |
+| 52 | 4 | `view` | u32 | |
+| 56 | 4 | `release` | u32 | Zero. |
+| 60 | 1 | `command` | u8 | `13` (`Eviction`). |
+| 61 | 1 | `replica` | u8 | |
+| 62 | 66 | reserved | bytes | Zero. |
+| 128 | 16 | `client` | u128 | The evicted client id. |
+| 144 | 4 | `server_protocol_version` | u32 | Accepted protocol window (max), packed semver. Set only for reason 14, zero otherwise. |
+| 148 | 4 | `server_protocol_version_min` | u32 | Accepted protocol window (min). Set only for reason 14, zero otherwise. |
+| 152 | 103 | reserved | bytes | Zero. |
+| 255 | 1 | `reason` | u8 | Eviction reason, see below. |
+
+Eviction reasons:
+
+| Value | Reason | Meaning |
+|-------|--------|---------|
+| 1 | `NoSession` | No session exists for this client id |
+| 2 | `ClientReleaseTooLow` | Client release below cluster minimum |
+| 3 | `ClientReleaseTooHigh` | Client release above cluster maximum |
+| 4 | `InvalidRequestOperation` | Unknown `operation` discriminant |
+| 5 | `InvalidRequestBody` | Body failed validation |
+| 6 | `InvalidRequestBodySize` | Body size mismatch |
+| 7 | `SessionTooLow` | Session epoch below the cluster's retained minimum |
+| 8 | `SessionReleaseMismatch` | Session bound to a different release |
+| 9 | `InvalidCredentials` | Login refused: bad username or password |
+| 10 | `InvalidToken` | Login refused: bad personal access token |
+| 11 | `UserInactive` | Login refused: user inactive |
+| 12 | `SessionError` | Session-level failure |
+| 13 | `StaleClient` | Missed heartbeats; server evicted the session |
+| 14 | `IncompatibleProtocol` | Client protocol version outside the accepted window (see bytes 144..152) |
+| 15 | `MalformedLogin` | Login body without a decodable version prefix, or a legacy login code |
+
+Value 0 is reserved and never sent.

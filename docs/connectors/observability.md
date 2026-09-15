@@ -1,0 +1,100 @@
+# Observability
+
+> Logs, Prometheus metrics, the stats endpoint, OpenTelemetry export and per-source state files for the connector runtime.
+
+Rendered page: https://iggy.apache.org/docs/connectors/observability/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/observability.mdx
+
+The connector runtime exposes its health through logs, Prometheus metrics, a stats endpoint, OpenTelemetry export, and per-source state files.
+
+## Logging
+
+The runtime logs via the [tracing](https://docs.rs/tracing/latest/tracing/) crate. Merge the runtime configuration snippets on this page into the [minimal runtime configuration](/docs/connectors/runtime#minimal-configuration). The output format is configured in the `[logging]` section:
+
+```toml
+[logging]
+format = "text" # "text" (default) or "json"
+```
+
+Two per-connector flags, both disabled by default, add more detail. Set them at the top level of an existing connector configuration file, before any TOML section headers:
+
+- **`verbose`**: logs additional per-batch details for the connector.
+- **`benchmark`**: emits per-batch timing events on the `iggy_connectors::benchmark` tracing target.
+
+```toml
+verbose = false
+benchmark = true
+```
+
+## Prometheus metrics
+
+Metrics are served by the runtime HTTP API when the `[http.metrics]` section is enabled (the HTTP API itself is on by default at `127.0.0.1:8081`). Metrics are disabled by default; change `enabled` to `true` to expose them:
+
+```toml
+[http.metrics]
+enabled = false
+endpoint = "/metrics"
+```
+
+Runtime-level gauges:
+
+- `iggy_connectors_sources_total` - configured source connectors.
+- `iggy_connectors_sources_running` - sources in the `Running` status.
+- `iggy_connectors_sinks_total` - configured sink connectors.
+- `iggy_connectors_sinks_running` - sinks in the `Running` status.
+
+Per-connector counters, labeled with `connector_key` and `connector_type` (`source` or `sink`):
+
+- `iggy_connector_messages_produced_total` - messages received from a source plugin's poll.
+- `iggy_connector_messages_sent_total` - messages sent to Iggy (source).
+- `iggy_connector_messages_consumed_total` - messages consumed from Iggy (sink).
+- `iggy_connector_messages_processed_total` - messages passed to the sink plugin in batches that returned success. A failed batch adds an error and no processed messages; the runtime cannot infer partial delivery inside the plugin.
+- `iggy_connector_messages_filtered_total` - messages intentionally dropped by transforms returning `Ok(None)`, excluding transform errors.
+- `iggy_connector_errors_total` - errors encountered.
+
+Per-batch stage timings are recorded in the `iggy_connector_stage_duration_seconds` histogram independently of the `benchmark` flag, labeled with `connector_key`, `connector_type`, and `stage`. Both connector types record `decode`, `prepare`, and `total`; sinks also record `ffi`, while sources record `iggy_send` and successful checkpoint writes record `state_save`. Finite buckets range from 50 microseconds to 5 seconds.
+
+## Runtime stats
+
+`GET /stats` on the HTTP API returns a JSON snapshot of the runtime: version, process ID, CPU and memory usage (cgroup-aware in containers), uptime, the source/sink totals, and a `connectors` array with per-connector details - key, name, type, plugin version, `enabled`, message counters, error count, and the current status.
+
+Memory values are in bytes. `run_time` is elapsed microseconds, and `start_time` is microseconds since the Unix epoch.
+
+The JSON status values are `starting`, `running`, `stopping`, `stopped`, and `error`. A connector whose plugin fails to load (for example, a missing library) is reported with `error` without blocking the remaining connectors. Retrieve its `last_error` from `GET /sources/{key}` or `GET /sinks/{key}`; `/stats` does not include the failure message.
+
+## OpenTelemetry
+
+The `[telemetry]` section configures OTLP export of logs and traces. Set `enabled = true` to export to a running collector:
+
+```toml
+[telemetry]
+enabled = false
+service_name = "iggy-connectors"
+
+[telemetry.logs]
+transport = "grpc" # "grpc" or "http"
+endpoint = "http://localhost:4317"
+
+[telemetry.traces]
+transport = "grpc" # "grpc" or "http"
+endpoint = "http://localhost:4317"
+```
+
+For `transport = "http"`, use complete signal URLs, for example `http://localhost:4318/v1/logs` for logs and `http://localhost:4318/v1/traces` for traces. The runtime does not append those paths.
+
+## State files
+
+With the default `file` state backend, source plugins can supply checkpoints (see the [SDK documentation](/docs/connectors/sdk)) for the directory configured in the `[state]` section. An [HTTP state backend](/docs/connectors/runtime#state-storage) is also available:
+
+```toml
+[state]
+storage = "file"
+path = "local_state"
+```
+
+A source that supplies checkpoint bytes gets a file named `source_{key}.state` (e.g. `local_state/source_random.state`) holding the raw state bytes - by convention MessagePack produced by the SDK helpers. Sinks have no state files. Their progress lives in Iggy consumer groups.
+
+On Unix, the file backend writes and synchronizes a `.tmp` file, atomically renames it over the previous checkpoint, and synchronizes the parent directory. Newly created files have owner-only permissions (`0600`), since state may carry cursors or tokens.
+
+An empty or missing state file supplies no previous checkpoint when the connector starts. Loading fails if the file cannot be read or its parent directory is unavailable at load time. Stop the runtime before deleting a checkpoint to reset that source on its next start; deleting it while the connector runs does not reset its in-memory position.

@@ -1,0 +1,574 @@
+# Getting started
+
+> A first program with the low-level Rust SDK: create a stream and topic, send messages, then poll them back.
+
+Rendered page: https://iggy.apache.org/docs/introduction/getting-started/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/introduction/getting-started.mdx
+
+## Before we start
+
+This tutorial uses the **low-level Rust SDK** to show how things work under the hood - creating streams, topics, sending and polling messages step by step. This is great for understanding the fundamentals.
+
+For real-world applications, you might typically prefer the **[high-level SDK](/docs/sdk/rust/high-level-sdk)**, which provides `IggyProducer` and `IggyConsumer` builders with auto-batching, consumer groups, offset management, reconnection, and retry logic out of the box. Check the [Stream Builder](/docs/sdk/rust/stream-builder) docs for the most ergonomic API.
+
+For examples in other programming languages, see the [SDK section](/docs/sdk/introduction).
+
+## What we will build
+
+We will build a **producer** (publishing messages to a stream) and a **consumer** (reading those messages back). In a real system, a service can be both at the same time - publishing its own events while consuming events from other services.
+
+The completed sample can be found in the [repository](https://github.com/apache/iggy/tree/master/examples/rust/src/getting-started). We will go through the implementation step by step so you get a clear understanding of how it all fits together.
+
+## Starting the Iggy server
+
+For our purpose, we will focus on the basic scenario in order to keep things simple. Before we begin implementing the consumer and producer apps, we need to start the Iggy streaming server.
+
+This guide targets server **0.9.0**. Once that release is published, you can use its [official Docker image](https://hub.docker.com/r/apache/iggy). During release preparation, use a matching `edge` build or the source build below:
+
+```bash
+docker run --rm \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -p 8090:8090 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  apache/iggy:0.9.0
+```
+
+The capabilities, seccomp setting, and memlock limit form a permissive development setup. Production deployments can use narrower syscall permissions and a finite memory budget; see [Docker & Helm](/docs/server/docker#why-these-capabilities) for the details. `IGGY_TCP_ADDRESS` is needed because the server binds to `127.0.0.1` inside the container by default, which a published port cannot reach. `IGGY_NODE_ADVERTISED_ADDRESS` is needed because that wildcard leaves the server with no address to give clients, and it refuses to start rather than publish one nobody can dial. Here the port is published to the host, so `localhost` is that address. Setting the root credentials explicitly means the username and password used later in this guide will work.
+
+Alternatively, build from source by cloning the [repository](https://github.com/apache/iggy) and running:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+A bare `iggy-server` boot does **not** create the root user with the well-known `iggy`/`iggy` pair. It generates a random password and prints it **exactly once** to the logs. The `--with-default-root-credentials` flag switches to the development credentials (username: `iggy`, password: `iggy`), and `--fresh` wipes the data directory first, so the root user is created anew with them. You can also set `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` yourself. The environment **takes precedence** over the flag. The credentials initialize the stored root account **only on first creation**; changing them on a later boot does not reset its password. Supplied environment credentials are still validated on restarts.
+
+All the data used by the server will be persisted under the `local_data` directory, unless specified differently in the configuration.
+
+As long as the Iggy server is running, we're good to go. If you'd like to play with the configuration (e.g. change the addresses, ports, caching or so) you will find `config.toml` under `core/server` in the repository.
+
+## Setting up the project
+
+Let's start by creating a new project - simply type `cargo new iggy-sample` and open your newly created project with the favorite code editor.
+
+At the very beginning, we will organize the files a little bit differently - create a new `consumer` directory under `src` and move the `main.rs` file here. You should have the following project structure:
+
+```
+├── Cargo.lock
+├── Cargo.toml
+├── src
+    └── consumer
+        └── main.rs
+```
+
+Then, open `Cargo.toml` and add the following code before the `[dependencies]`
+
+```
+[[bin]]
+name = "consumer"
+path = "src/consumer/main.rs"
+```
+
+Just to make sure that everything is set correctly, try to run the app with `cargo r --bin consumer`.
+
+Now, let's do the same for the `producer` part. Create a new `producer` directory, copy & paste the existing `main.rs`, and update the `Cargo.toml` with the following code:
+
+```
+[[bin]]
+name = "producer"
+path = "src/producer/main.rs"
+```
+
+You should have the project structure as shown below:
+
+```
+├── Cargo.lock
+├── Cargo.toml
+├── src
+    ├── consumer
+    │   └── main.rs
+    └── producer
+        └── main.rs
+```
+
+From that point on, we will focus on implementing the message streaming between our applications, starting with the producer.
+
+## Building the producer
+
+We will begin with installing the Iggy client crate - use the SDK from the same source checkout as your server. With `iggy-sample` beside the `iggy` repository, execute `cargo add iggy --path ../iggy/core/sdk` in your terminal. Published SDK releases can expose different APIs. Next, install [tokio.rs](https://tokio.rs) dependency with `cargo add tokio --features macros,rt-multi-thread,time` as we will use the asynchronous runtime. Eventually, modify your `main.rs`, so it looks like this:
+
+```rust
+use std::error::Error;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    Ok(())
+}
+```
+
+Let's instantiate a new connection to the server. As the description states, Iggy does support different transport protocols such as TCP, QUIC, WebSocket and HTTP, which is entirely true. Yet remember, we want to keep things as simple as possible here, thus, we will make use of the default implementation of `IggyClient` struct, which wraps the underlying raw client for one of the selected transports (in our scenario, this will be `TcpClient`).
+
+```rust
+let client = IggyClient::default();
+client.connect().await?;
+```
+
+Both the default TCP client and the server use `127.0.0.1:8090`. If you change the server address in `core/server/config.toml`, configure the client to connect to that address too.
+
+We could make use of more advanced components such as [`ClientProvider`](https://github.com/apache/iggy/blob/master/core/sdk/src/client_provider.rs), pass the custom configuration built via console args to choose between the different protocols as all the available clients implement the same [Client](https://github.com/apache/iggy/blob/master/core/common/src/traits/client.rs) trait and so on.
+
+If you're eager to find out how to build more advanced (and configurable) applications, check the Rust [examples](/docs/sdk/rust/examples). Nevertheless, let's focus on implementing our producer side :)
+
+Next, we need to authenticate the user, as all the available actions (except the `ping` and `login`) require the user to be authenticated and have the appropriate permissions e.g. you might be able to send or poll the messages, but you won't be able to create the stream or topic. For the sake of simplicity, we will use the development credentials for the root user (username: `iggy`, password: `iggy`), that can do anything and cannot be deleted. These credentials exist only because we started the server with them (the Docker env vars or the `--with-default-root-credentials` flag above). A server booted without them generates a random root password and prints it once to the logs. You can easily create more users and assign the specific permissions to them, however, this is out of scope for this tutorial.
+
+```rust
+client
+    .login_user(DEFAULT_ROOT_USERNAME, DEFAULT_ROOT_PASSWORD)
+    .await?;
+```
+
+When you start the application now, by running `cargo r --bin producer` it will execute immediately, however, you should be able to see the logs on Iggy server - connection should be accepted, user logged in, and then connection should be closed right away, meaning that we've just established our very first communication with the streaming server.
+
+Before we will move on with the code, let's include some logging in our apps as well (Iggy client already has some logging in place on different levels). Let's make use of the [tracing.rs](https://tracing.rs) crates: `cargo add tracing` and `cargo add tracing-subscriber --features env-filter`.
+
+Initialize the tracing subscriber at the beginning of `main()`, using `RUST_LOG` when set and `info` otherwise:
+
+```rust
+use std::error::Error;
+use iggy::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+    let client = IggyClient::default();
+    client.connect().await?;
+    client
+        .login_user(DEFAULT_ROOT_USERNAME, DEFAULT_ROOT_PASSWORD)
+        .await?;
+    Ok(())
+}
+```
+
+From that point on, when starting the application, you should be able to see at least the basic logs, for example regarding the connection status. Keep in mind, that you can change the default log level by setting `RUST_LOG` environment variable, e.g. `export RUST_LOG=trace` (or other command depending on OS).
+
+So far, so good, however, before we will be able to publish any messages to our streaming server, at first, we need to create the stream, topic and partition(s) - if you're unfamiliar with these concepts, please refer to [concepts](/docs/introduction/concepts) where all of them are described in-depth.
+
+Since our `IggyClient` implements the common [Client](https://github.com/apache/iggy/blob/master/core/common/src/traits/client.rs) trait, you can find lots of the different methods to interact with the server, also from the administrative point of view, e.g. creating the streams, topics etc.
+
+These methods are **not idempotent** - for example, if you were to try creating the stream with the same name which already exists on the server, you would receive the specific error. In such a case, handle the specific already-exists error and propagate other failures. When creating a stream, we only provide its name - the server assigns the numeric ID automatically. Stream, topic and partition IDs are all assigned **starting from 0**. Let's do this then :)
+
+```rust
+use iggy::prelude::*;
+use std::error::Error;
+use tracing::{info, warn};
+
+const STREAM_NAME: &str = "sample-stream";
+const TOPIC_NAME: &str = "sample-topic";
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+    let client = IggyClient::default();
+    client.connect().await?;
+    client
+        .login_user(DEFAULT_ROOT_USERNAME, DEFAULT_ROOT_PASSWORD)
+        .await?;
+    init_system(&client).await?;
+    Ok(())
+}
+
+async fn init_system(client: &IggyClient) -> Result<(), IggyError> {
+    match client.create_stream(STREAM_NAME).await {
+        Ok(_) => info!("Stream was created."),
+        Err(IggyError::StreamNameAlreadyExists(_)) => {
+            warn!("Stream already exists and will not be created again.");
+        }
+        Err(error) => return Err(error),
+    }
+
+    match client
+        .create_topic(
+            &Identifier::named(STREAM_NAME).unwrap(),
+            TOPIC_NAME,
+            &TopicCreateOptions {
+                partitions_count: Some(1),
+                message_expiry: Some(IggyExpiry::NeverExpire),
+                ..TopicCreateOptions::default()
+            },
+        )
+        .await
+    {
+        Ok(_) => info!("Topic was created."),
+        Err(IggyError::TopicNameAlreadyExists(..)) => {
+            warn!("Topic already exists and will not be created again.");
+        }
+        Err(error) => return Err(error),
+    }
+    Ok(())
+}
+```
+
+Optional fields of `TopicCreateOptions` left as `None` resolve to the **server defaults**. The `durability` and `consumer_offset_durability` fields use `Durability::Replicated` or `Durability::Persisted` and default independently to `Replicated`. They select the completion guarantee for messages and explicit offset changes. Segment size and the flush thresholds (`messages_required_to_save`, `size_of_messages_required_to_save`) are separate creation options. See [Durability](/docs/server/durability).
+
+Finally, let's send some messages into our stream. We will implement the basic loop with an interval between each iteration to simulate publishing the batch of messages. Since the streaming server works directly with the binary data, and couldn't care less about the (de)serialization format for the message payload, it's really up to you, how to efficiently stream the messages for your use case.
+
+In our example, we will simply use the string payload, and pass it via `from_str` trait to construct the [IggyMessage](https://github.com/apache/iggy/blob/master/core/common/src/types/message/iggy_message.rs).
+
+```rust
+let payload = "hello world";
+let message = IggyMessage::from_str(&payload)?;
+```
+
+Next, we need to call the appropriate method to send the messages to the server:
+
+```rust
+let payload = "hello world";
+let message = IggyMessage::from_str(&payload)?;
+let mut messages = vec![message];
+let partitioning = Partitioning::partition_id(PARTITION_ID);
+
+client
+    .send_messages(
+        &STREAM_NAME.try_into().unwrap(),
+        &TOPIC_NAME.try_into().unwrap(),
+        &partitioning,
+        &mut messages,
+    )
+    .await?;
+```
+
+As you might've already noticed, there are quite a few fields to be assigned. While some of them should be rather self-descriptive, let's discuss the `identifier` (created implicitly by using `TryFrom` on top of `STREAM_NAME` and `TOPIC_NAME`) and the `partitioning` which might be a little bit confusing at first, starting with the former.
+
+```rust
+pub struct Identifier {
+    pub kind: IdKind,
+    pub length: u8,
+    pub value: Vec<u8>,
+}
+```
+
+Whenever we interact with the streaming server in terms of e.g. sending or polling the messages, managing the streams, topics etc. we need to provide the unique identifier of the stream and the topic that we want to use. Since each stream and topic have a unique numeric ID, as well as a unique name, we can use either of them. Use `Identifier::named()` to force a name, or `Identifier::numeric()` for a numeric ID. `TryFrom<&str>` interprets a string that parses as a `u32` as a numeric ID; other strings, including the names in this sample, become named identifiers. It's up to your preference if you'd rather work with the identifier being a number or string when building your applications.
+
+Next, let's move onto the `partitioning` field:
+
+
+```rust
+pub struct Partitioning {
+    pub kind: PartitioningKind,
+    pub length: u8,
+    pub value: Vec<u8>,
+}
+```
+
+In our scenario, we simply make use of `PartitioningKind::PartitionId` (by invoking the helper method `partition_id()`) meaning that we want to send the messages to the specified partition ID - in that case, the length will be 4 bytes (as the partition ID is of type `u32`), and the value will be the actual partition ID encoded as the bytes array.
+
+However, once your system grows, you might want to parallelize the messages across the independent consumers, in order to achieve the horizontal scaling, higher resiliency etc. In that case, you might consider using either `PartitioningKind::Balanced` (the SDK picks the next partition using a client-local round-robin e.g. 0->1->2->0->1->2 etc.) or `PartitioningKind::MessagesKey` instead (e.g. by invoking one of the helper methods `messages_key()`), where the value wouldn't be a partition ID anymore (the SDK hashes the provided value with xxHash32 modulo the partition count), but, as the name states, some kind of identifier, which is unique for all the messages that should have **guaranteed ordering**. The HTTP API instead sends the chosen strategy to the server, which resolves it at admission.
+
+For example, given that you process the set of messages related to the specific order ID (e.g. created, confirmed, paid, delivered etc.), you could use that as a key value to ensure that all the messages which are part of the specific workflow, will be put onto the same partition while the partition count and partitioning strategy stay unchanged. The value of the key can be anything (e.g. string, number) with the **maximum length of 255 bytes**.
+
+Anyway, let's get back to our scenario, and consider the following code responsible for publishing the messages:
+
+```rust
+async fn produce_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
+    let interval = Duration::from_millis(500);
+    info!(
+        "Messages will be sent to stream: {}, topic: {}, partition: {} with interval {} ms.",
+        STREAM_NAME,
+        TOPIC_NAME,
+        PARTITION_ID,
+        interval.as_millis()
+    );
+
+    let mut current_id = 0;
+    let messages_per_batch = 10;
+    let partitioning = Partitioning::partition_id(PARTITION_ID);
+    loop {
+        let mut messages = Vec::new();
+        for _ in 0..messages_per_batch {
+            current_id += 1;
+            let payload = format!("message-{current_id}");
+            let message = IggyMessage::from_str(&payload)?;
+            messages.push(message);
+        }
+        client
+            .send_messages(
+                &STREAM_NAME.try_into().unwrap(),
+                &TOPIC_NAME.try_into().unwrap(),
+                &partitioning,
+                &mut messages,
+            )
+            .await?;
+        info!("Sent {messages_per_batch} message(s).");
+        sleep(interval).await;
+    }
+}
+```
+
+The mutable slice lets `IggyClient` encrypt message payloads and user headers in place when client-side encryption is enabled.
+
+Finally, let's complete the implementation of the producer - once you start the application after the latest changes, you shall see the messages being sent to the newly created stream.
+
+```rust
+use iggy::prelude::*;
+use std::error::Error;
+use std::str::FromStr;
+use std::time::Duration;
+use tokio::time::sleep;
+use tracing::{info, warn};
+
+const STREAM_NAME: &str = "sample-stream";
+const TOPIC_NAME: &str = "sample-topic";
+const PARTITION_ID: u32 = 0;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+    let client = IggyClient::default();
+    client.connect().await?;
+    client
+        .login_user(DEFAULT_ROOT_USERNAME, DEFAULT_ROOT_PASSWORD)
+        .await?;
+    init_system(&client).await?;
+    produce_messages(&client).await?;
+    Ok(())
+}
+
+async fn init_system(client: &IggyClient) -> Result<(), IggyError> {
+    match client.create_stream(STREAM_NAME).await {
+        Ok(_) => info!("Stream was created."),
+        Err(IggyError::StreamNameAlreadyExists(_)) => {
+            warn!("Stream already exists and will not be created again.");
+        }
+        Err(error) => return Err(error),
+    }
+
+    match client
+        .create_topic(
+            &Identifier::named(STREAM_NAME).unwrap(),
+            TOPIC_NAME,
+            &TopicCreateOptions {
+                partitions_count: Some(1),
+                message_expiry: Some(IggyExpiry::NeverExpire),
+                ..TopicCreateOptions::default()
+            },
+        )
+        .await
+    {
+        Ok(_) => info!("Topic was created."),
+        Err(IggyError::TopicNameAlreadyExists(..)) => {
+            warn!("Topic already exists and will not be created again.");
+        }
+        Err(error) => return Err(error),
+    }
+    Ok(())
+}
+
+async fn produce_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
+    let interval = Duration::from_millis(500);
+    info!(
+        "Messages will be sent to stream: {}, topic: {}, partition: {} with interval {} ms.",
+        STREAM_NAME,
+        TOPIC_NAME,
+        PARTITION_ID,
+        interval.as_millis()
+    );
+
+    let mut current_id = 0;
+    let messages_per_batch = 10;
+    let partitioning = Partitioning::partition_id(PARTITION_ID);
+    loop {
+        let mut messages = Vec::new();
+        for _ in 0..messages_per_batch {
+            current_id += 1;
+            let payload = format!("message-{current_id}");
+            let message = IggyMessage::from_str(&payload)?;
+            messages.push(message);
+        }
+        client
+            .send_messages(
+                &STREAM_NAME.try_into().unwrap(),
+                &TOPIC_NAME.try_into().unwrap(),
+                &partitioning,
+                &mut messages,
+            )
+            .await?;
+        info!("Sent {messages_per_batch} message(s).");
+        sleep(interval).await;
+    }
+}
+```
+
+## Building the consumer
+
+The consumer part will be rather easy to implement. Just like on the producer side, we want to make use of the asynchronous runtime, logging and last but not least, the same `Client` trait. Let's find out, how we can make use of the `poll_messages` method, to fetch the messages from the stream. Consider the following code:
+
+```rust
+let polled_messages = client
+    .poll_messages(
+        &STREAM_NAME.try_into()?,
+        &TOPIC_NAME.try_into()?,
+        Some(PARTITION_ID),
+        &Consumer::default(),
+        &PollingStrategy::offset(offset),
+        messages_per_batch,
+        false,
+    )
+    .await?;
+```
+
+At the first glance, it might look a bit more complicated than `send_messages` function, so let's discuss the fields one by one:
+
+- `stream_id` - the ID of the stream (numeric or string) from which we want to poll the messages.
+
+- `topic_id` - the ID of the topic (numeric or string) from which we want to poll the messages.
+
+- `partition_id` - the ID of the partition from which we want to poll the messages. Specify the partition for a regular `Consumer`. For a joined `ConsumerGroup`, pass `None` to let the SDK select a partition from the assignments it synchronizes with the server. An explicit partition is also accepted, but the server checks that the member owns it.
+
+- `consumer` - the type of the consumer (kind + ID), either the default `Consumer` means the standalone client which does the message polling on its own, independently of the other consumers (unless they would use the same ID), or the `ConsumerGroup` which might be used to create the group of consumers sharing the common identifier - this is especially useful in the case of the horizontal scaling, where we want to ensure, that the same (and only one) consumer, will poll the messages from the specific partition, and there will be no overlap with the other consumers from the same group. For example, when scaling out (by adding more instances) the group of payment processing microservices, we probably don't want the multiple instances to process the same payment. Group assignment coordinates polling, but application side effects still need idempotency across retries and rebalances.
+
+- `strategy` - the way in which we want to poll the messages. The default one being `Offset` (underlying `PollingKind` enum) means that we will start polling the messages from the particular offset provided in the `value` field - it's on the client, to keep track of the most recent offset. On the other hand, we could also use the different kind, for example `Next`, which means, that the next messages will be returned to the client, depending on the so-called `consumer offset` value stored on the server side. The client may not need to track the offset on its own anymore, but instead, call `store_consumer_offset()` to save it on the server (e.g. after each processed message or the whole batch), or use `auto_commit: true` for server-managed offset advancement. Auto-commit is best-effort: a poll does not wait for the offset to commit, and a follower-served poll does not replicate it. Messages can be replayed after failure. The offset can also advance before the application processes the response, so use an explicit offset store after processing when that distinction matters.
+
+- `count` - amount of the messages that the consumer would like to receive in the single response from the server.
+
+- `auto_commit` - whether to request server-managed offset advancement when messages are fetched, with the best-effort behavior described above.
+
+Next, let's take a look at the following method responsible for polling the messages based on the specified interval.
+
+```rust
+async fn consume_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
+    let interval = Duration::from_millis(500);
+    let mut offset = 0;
+    let messages_per_batch = 10;
+    let consumer = Consumer::default();
+    loop {
+        let polled_messages = client
+            .poll_messages(
+                &STREAM_NAME.try_into()?,
+                &TOPIC_NAME.try_into()?,
+                Some(PARTITION_ID),
+                &consumer,
+                &PollingStrategy::offset(offset),
+                messages_per_batch,
+                false,
+            )
+            .await?;
+
+        if polled_messages.messages.is_empty() {
+            info!("No messages found.");
+            sleep(interval).await;
+            continue;
+        }
+
+        for message in polled_messages.messages {
+            handle_message(&message)?;
+            offset = message.header.offset + 1;
+        }
+        sleep(interval).await;
+    }
+}
+```
+
+And here's the final code for our consumer application:
+
+```rust
+use iggy::prelude::*;
+use std::error::Error;
+use std::time::Duration;
+use tokio::time::sleep;
+use tracing::info;
+
+const STREAM_NAME: &str = "sample-stream";
+const TOPIC_NAME: &str = "sample-topic";
+const PARTITION_ID: u32 = 0;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+    let client = IggyClient::default();
+    client.connect().await?;
+    client
+        .login_user(DEFAULT_ROOT_USERNAME, DEFAULT_ROOT_PASSWORD)
+        .await?;
+    consume_messages(&client).await
+}
+
+async fn consume_messages(client: &IggyClient) -> Result<(), Box<dyn Error>> {
+    let interval = Duration::from_millis(500);
+    info!(
+        "Messages will be consumed from stream: {}, topic: {}, partition: {} with interval {} ms.",
+        STREAM_NAME,
+        TOPIC_NAME,
+        PARTITION_ID,
+        interval.as_millis()
+    );
+
+    let mut offset = 0;
+    let messages_per_batch = 10;
+    let consumer = Consumer::default();
+    loop {
+        let polled_messages = client
+            .poll_messages(
+                &STREAM_NAME.try_into()?,
+                &TOPIC_NAME.try_into()?,
+                Some(PARTITION_ID),
+                &consumer,
+                &PollingStrategy::offset(offset),
+                messages_per_batch,
+                false,
+            )
+            .await?;
+
+        if polled_messages.messages.is_empty() {
+            info!("No messages found.");
+            sleep(interval).await;
+            continue;
+        }
+
+        for message in polled_messages.messages {
+            handle_message(&message)?;
+            offset = message.header.offset + 1;
+        }
+        sleep(interval).await;
+    }
+}
+
+fn handle_message(message: &IggyMessage) -> Result<(), Box<dyn Error>> {
+    // The payload can be of any type as it is a raw byte array. In this case it's a simple string.
+    let payload = std::str::from_utf8(&message.payload)?;
+    info!(
+        "Handling message at offset: {}, payload: {}...",
+        message.header.offset, payload
+    );
+    Ok(())
+}
+```
+
+Start the Iggy server, and then producer and consumer applications respectively - you should observe your messages being streamed flawlessly :)
+
+
+## Summary
+
+What we've just achieved is merely the tip of an iceberg, however, it should give you a good understanding of what Iggy is all about, and hopefully, it wasn't too difficult to follow and get things up and running for the first time. Feel free to take a look at the more advanced [examples](https://github.com/apache/iggy/tree/master/examples/rust), how to make use of `IggyClient` wrapper on top of the existing implementations of the `Client` trait, what happens when you start multiple producers and consumers and so on. Happy tweaking! :)

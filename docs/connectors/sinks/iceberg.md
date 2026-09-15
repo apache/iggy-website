@@ -1,0 +1,171 @@
+# Iceberg Sink
+
+> Consume messages from Iggy topics and store them in Iceberg tables, with REST catalogs and S3-compatible storage.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sinks/iceberg/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sinks/iceberg.mdx
+
+The Iceberg Sink Connector allows you to consume messages from Iggy topics and store them in Iceberg tables.
+
+## Features
+
+- **Support for S3-compatible storage**
+- **Support for REST catalogs**
+- **Single destination table**
+- **Multiple-table fan-out static routing**
+- **Multiple-table fan-out dynamic routing**
+
+## Configuration example
+
+Use the broker credentials and runtime setup from the [sink guide](/docs/connectors/sinks/sink#configuration). From the matching 0.9.0/edge repository root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_iceberg_sink
+```
+
+The example requires a REST catalog at `http://localhost:8181` and S3-compatible storage at `http://localhost:9000`, configured with the credentials below. Create the storage bucket, namespace and target table before starting the connector. The sink does not create them.
+
+For a local catalog without authentication, create `nyc.users` with `id` (long) and `name` (string):
+
+```bash
+curl --fail-with-body --request POST http://localhost:8181/v1/namespaces \
+  --header 'Content-Type: application/json' \
+  --data '{"namespace":["nyc"]}'
+curl --fail-with-body --request POST http://localhost:8181/v1/namespaces/nyc/tables \
+  --header 'Content-Type: application/json' \
+  --data '{"name":"users","schema":{"type":"struct","fields":[{"id":1,"name":"id","type":"long","required":true},{"id":2,"name":"name","type":"string","required":true}]}}'
+```
+
+Save this complete connector file in the runtime's connector directory:
+
+```toml
+type = "sink"
+key = "iceberg"
+enabled = true
+version = 0
+name = "Iceberg sink"
+path = "target/release/libiggy_connector_iceberg_sink"
+
+[[streams]]
+stream = "events"
+topics = ["users"]
+schema = "json"
+batch_length = 100
+poll_interval = "5ms"
+consumer_group = "iceberg_sink_connector"
+
+[plugin_config]
+tables = ["nyc.users"]
+catalog_type = "rest"
+warehouse = "warehouse"
+uri = "http://localhost:8181"
+dynamic_routing = false
+dynamic_route_field = "db_table"
+store_url = "http://localhost:9000"
+store_access_key_id = "admin"
+store_secret_access_key = "password"
+store_region = "us-east-1"
+store_class = "s3"
+store_path_style_access = true
+```
+
+Create the Iggy resources and send a row:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create events
+./target/release/iggy --username iggy --password iggy topic create events users 1 none 1d
+./target/release/iggy --username iggy --password iggy message send --partition-id 0 events users '{"id":1,"name":"hello"}'
+```
+
+## Configuration Options
+
+All options below are required except the credential pair and `store_path_style_access`. `tables` and `dynamic_route_field` must be present even when the selected routing mode does not use them.
+
+- **tables**: The names of the Iceberg tables you want to statically route Iggy messages to. The name should include the table’s namespace, separated by a dot (`.`). Ignored when `dynamic_routing = true`.
+- **catalog_type**: The type of catalog you are routing data to. **Currently, only REST catalogs are fully supported.**
+- **warehouse**: The warehouse value sent to the REST catalog. Its meaning depends on the catalog service; data file destinations come from each table’s metadata.
+- **uri**: The URI of the Iceberg catalog.
+- **dynamic_routing**: Enables dynamic routing. See more details later in this document.
+- **dynamic_route_field**: The top-level message field that specifies the Iceberg table to route data to. Ignored in static mode. See more details below.
+- **store_url**: The URL of the object storage for data uploads.
+- **store_access_key_id**: The optional access key ID of the object storage.
+- **store_secret_access_key**: The optional secret key used to upload data to the object storage. Supply both credential fields or omit both to use the default AWS credential provider chain.
+- **store_region**: The region of the object storage. Required. For S3-compatible stores that ignore it, supply any placeholder value.
+- **store_class**: The storage class to use. **Currently, only S3-compatible storage is supported.**
+
+- **store_path_style_access**: Use path-style S3 URLs (`http://host/bucket/key`). Defaults to `true`; set to `false` for stores that require virtual-hosted-style URLs.
+
+## Static Routing
+
+With `dynamic_routing = false`, every batch is copied to every successfully loaded table in `tables`. Invalid names and tables that cannot be loaded are skipped at startup. Startup fails if no table can be loaded. The writer uses each table's schema and default partition spec captured at startup, so restart the connector after changing them.
+
+## Dynamic Routing
+
+If you don't know the names of the Iceberg tables you want to route data to in advance, you can use the dynamic routing feature.
+Insert a top-level field in your JSON messages with the name of the Iceberg table the message should be routed to. The Iggy connector will parse this field at runtime and route the message to the correct table.
+
+The Iggy Iceberg Connector will skip messages in the following cases:
+
+- The table declared in the message field cannot be loaded, including missing tables and catalog lookup failures.
+- The table name has no namespace or contains an empty name component.
+- The message does not contain the field specified in the `dynamic_route_field` configuration option, or is not a JSON object.
+
+A lookup failure skips the affected message; it does not fail the batch. Each batch loads its destination tables again. The route field is included in the JSON row, but is ignored by the writer if the target schema has no matching column.
+
+### Dynamic routing configuration example
+
+Replace `[plugin_config]` in the complete connector file above and append the transform below. `tables = []` is intentional: the route field chooses the destination in this mode.
+
+```toml
+[plugin_config]
+tables = []
+catalog_type = "rest"
+warehouse = "warehouse"
+uri = "http://localhost:8181"
+dynamic_routing = true
+dynamic_route_field = "db_table"
+store_url = "http://localhost:9000"
+store_access_key_id = "admin"
+store_secret_access_key = "password"
+store_region = "us-east-1"
+store_class = "s3"
+store_path_style_access = true
+
+[transforms.add_fields]
+enabled = true
+
+[[transforms.add_fields.fields]]
+key = "db_table"
+value.static = "nyc.users"
+```
+
+Transforms are declared at the top level of the connector file, next to `[plugin_config]`, and every `[transforms.*]` section requires `enabled = true`. See the [transforms documentation](/docs/connectors/transforms) for details.
+
+**Note:** The value in the message field **must** contain both the namespace and the table name, separated by a dot (`.`).
+Example:
+
+- Namespace: `nyc`
+- Table name: `users`
+
+## Batches and table commits
+
+Rows are converted to Arrow using the target table schema, written to Parquet, then appended in an Iceberg transaction per destination table. Partitioned tables split a batch by the default partition spec. Writers can roll over into multiple files, so there is no fixed one-file-per-batch guarantee for either partitioned or unpartitioned tables.
+
+Fan-out is not atomic across tables. A write or commit error stops work on the remaining tables in that batch; an earlier table may already be committed. The Iceberg library refreshes metadata before committing and retries eligible commit errors according to the table's retry properties. The plugin does not replay a failed batch. The runtime records a plugin error and continues polling with consumer auto-commit, so messages can be lost after a failed or skipped write. Replaying an already committed batch can create duplicates.
+
+## Source Compatibility
+
+Use `schema = "json"` on the stream. Each JSON object represents a table row; nested objects and arrays are supported when they match the table schema. Unknown fields are ignored. Missing nullable fields become null; missing required fields or incompatible values fail the table write.
+
+Sources that wrap row data in an envelope need a transform when the table schema describes the inner row. Otherwise, the Arrow JSON reader maps envelope keys to table columns, producing nulls or schema errors.
+
+If your source emits envelope-wrapped JSON, use the `unwrap_envelope` transform to extract the inner data field before it reaches the sink:
+
+```toml
+[transforms.unwrap_envelope]
+enabled = true
+field = "data"
+```
+
+Set `field` to the envelope key that holds the row data. See the [transforms documentation](/docs/connectors/transforms) and your source connector's documentation for details on the envelope shape.
