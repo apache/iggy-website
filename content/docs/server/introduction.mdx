@@ -11,6 +11,18 @@ The releases are published to GitHub and can be found [here](https://github.com/
 
 If you compile the source code in release mode, linking takes longer because [LTO](https://doc.rust-lang.org/cargo/reference/profiles.html#lto) is enabled in the `[profile.release]` section of the workspace [Cargo.toml](https://github.com/apache/iggy/blob/master/Cargo.toml).
 
+## System requirements
+
+The server uses `io_uring` on Linux, which sets a minimum kernel version.
+
+- **Linux kernel 5.19 or newer is required.** The shard executors create their rings with `IORING_SETUP_COOP_TASKRUN` and `IORING_SETUP_TASKRUN_FLAG`, which older kernels reject, and the server refuses to start rather than run without them. Check yours with `uname -r`.
+- **Kernel 6.1 or newer is worth having.** It is the first version with the `kernel.io_uring_disabled` sysctl, so the startup diagnostics can tell you io_uring was disabled by policy instead of failing obscurely. See [Linux tuning](/docs/server/linux-tuning#runtime-access-and-process-limits).
+- **Ubuntu 22.04 LTS ships 5.15 and will not run the server.** Its hardware enablement kernel is new enough, and so are Ubuntu 24.04 LTS and Debian 12 as they ship.
+- **WSL2 often ships incomplete `io_uring`**, missing setup flags or operations even on a kernel that reports 5.19 or newer. Run `wsl --update` first.
+- **macOS uses a polling backend** rather than `io_uring`, so this requirement does not apply there.
+
+Containers use the host's kernel, so it is the host that has to meet this requirement. See [Docker & Helm](/docs/server/docker#why-these-capabilities).
+
 ## Running the server
 
 One `iggy-server` binary serves both the single-node and the clustered deployment. The loaded configuration decides which one you get. The server accepts these startup flags, plus `--help` and `--version`:
