@@ -566,6 +566,17 @@ fn handle_message(message: &IggyMessage) -> Result<(), Box<dyn Error>> {
 Start the Iggy server, and then producer and consumer applications respectively - you should observe your messages being streamed flawlessly :)
 
 
+## Running it again, and cleaning up
+
+Both applications are safe to run a second time, but the result may surprise you.
+
+The producer finds the stream and topic already there, says so, and appends another set of messages rather than failing. The consumer starts from offset 0 every time, so a second run replays the messages from the first one as well as the new ones.
+
+To start over with an empty server, stop it and clear its data:
+
+- **Docker**: the `--rm` in the command above removes the container when you stop it with Ctrl-C, so the next `docker run` starts empty.
+- **From source**: stop the server with Ctrl-C, then start it again with `--fresh`, which wipes the data directory first. To remove that data without starting the server, delete the `local_data` directory in the working directory you ran it from.
+
 ## Summary
 
 What we've just achieved is merely the tip of an iceberg, however, it should give you a good understanding of what Iggy is all about, and hopefully, it wasn't too difficult to follow and get things up and running for the first time. Feel free to take a look at the more advanced [examples](https://github.com/apache/iggy/tree/master/examples/rust), how to make use of `IggyClient` wrapper on top of the existing implementations of the `Client` trait, what happens when you start multiple producers and consumers and so on. Happy tweaking! :)
