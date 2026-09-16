@@ -613,7 +613,7 @@ export default function HomePage() {
               Foundation, Licensed under the Apache License, Version 2.0.
             </p>
             <p className="mt-4">
-              Apache&reg;, the names of Apache projects, and the feather logo are either registered trademarks or trademarks of the Apache Software Foundation in the United States and/or other countries. All other marks mentioned may be trademarks or registered trademarks of their respective owners.
+              Apache Iggy, Iggy, Apache, and the Apache Iggy logo are trademarks or registered trademarks of The Apache Software Foundation. All other marks mentioned may be trademarks or registered trademarks of their respective owners.
             </p>
           </div>
         </div>
