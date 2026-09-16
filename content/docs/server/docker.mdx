@@ -67,6 +67,7 @@ docker run -d --name iggy \
 - **`SYS_NICE`** broadens scheduling and NUMA permissions. Pinning a thread owned by the process with `sched_setaffinity` does not by itself require this capability; container policies can impose additional restrictions. See [Linux affinity permissions](https://man7.org/linux/man-pages/man2/sched_setaffinity.2.html).
 - **`seccomp:unconfined`** permits `io_uring` calls blocked by Docker's default seccomp profile. A custom profile allowing the required syscalls is an alternative to disabling filtering. See [Docker seccomp profiles](https://docs.docker.com/engine/security/seccomp/).
 - **`memlock: -1`** removes the process's locked-memory limit. A finite limit is valid if it covers the runtime's requirements; neither setting overrides the container's memory limit.
+- **Host kernel 5.19 or newer** is required. Containers use the host's kernel, so these settings alone are not enough. See [System requirements](/docs/server/introduction#system-requirements).
 
 ### Available images
 
