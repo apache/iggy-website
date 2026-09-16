@@ -490,7 +490,7 @@ export default function HomePage() {
                 </li>
                 <li>
                   <Link
-                    href="https://bsky.app/profile/iggy.rs"
+                    href="https://bsky.app/profile/apache-iggy.bsky.social"
                     className="text-[#aeb5bd] transition-colors hover:text-[#fffaeb]"
                   >
                     Bluesky
