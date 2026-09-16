@@ -53,7 +53,7 @@ Historical startup screenshot from server 0.5.0. See [configuration](/docs/serve
 - Prometheus metrics and **OpenTelemetry** logs & traces in the [connector runtime](/docs/connectors/observability). Server export has [known limitations](/docs/server/configuration#telemetry).
 - Built-in **[CLI](/docs/cli/start)** to manage the streaming server installable via `cargo install iggy-cli --version 0.14.0-edge.7 --locked`
 - Built-in **[Web UI](/docs/web_ui/start)** dashboard (Svelte) that can be embedded directly in the server binary or run as a standalone container
-- Built-in **benchmarking app** to test the performance
+- Built-in **[benchmarking app](/docs/server/benchmarking)** to test the performance, with published results on the [benchmarks dashboard](https://benchmarks.iggy.apache.org)
 - **Single binary deployment** without an external broker or database; operating-system libraries are still required by dynamically linked builds
 - **Accept-time connection distribution** for plaintext TCP and WebSocket across shards via file descriptor transfer
 - Built on **Viewstamped Replication (VSR)** consensus: runs as a single node by default, with multi-node [clustering](/docs/clustering/vsr) available via the `[cluster]` configuration
