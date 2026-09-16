@@ -27,7 +27,7 @@ import {
 export const metadata: Metadata = {
   title: "Graduation Checklist",
   description:
-    "Apache Iggy maturity assessment and graduation checklist for the Apache Incubator.",
+    "The maturity assessment and graduation checklist Apache Iggy used before graduating from the Apache Incubator.",
 };
 
 const checklist = [
@@ -336,20 +336,12 @@ const checklist = [
   },
 ];
 
-const nextSteps = [
-  "Create or link an umbrella graduation issue for open checklist items.",
-  "Confirm podling status-file tasks are complete and signed off.",
-  "Refresh dependency, license, security and release-process checks.",
-  "Document community diversity and recent committer or PPMC growth.",
-  "Review branding, trademark attribution and website readiness.",
-];
-
 export default function GraduationChecklistPage() {
   return (
     <CommunityLayout>
       <CommunityHeader
         title="Graduation Checklist"
-        description="A working maturity assessment for Apache Iggy as it prepares for eventual graduation from the Apache Incubator."
+        description="The maturity assessment Apache Iggy used to prepare for graduation from the Apache Incubator, kept as a record."
       />
       <section className="mb-10 rounded-xl border border-fd-border bg-fd-card p-5">
         <p className="text-base leading-relaxed text-fd-muted-foreground">
@@ -370,20 +362,10 @@ export default function GraduationChecklistPage() {
           <ExternalLink href="https://incubator.apache.org/guides/graduation.html">
             Apache Incubator graduation guide
           </ExternalLink>
-          . It is intended to help mentors, the PPMC and the community track the
-          remaining work before proposing graduation.
+          . Mentors, the PPMC and the community used it to track the remaining
+          work before proposing graduation. The assessment below is as it stood
+          before graduation.
         </p>
-      </section>
-
-      <section className="mb-12">
-        <h2 className="mb-4 text-2xl font-bold text-fd-foreground">
-          Next Steps
-        </h2>
-        <ul className="list-disc space-y-2 pl-6 text-base leading-relaxed text-fd-muted-foreground">
-          {nextSteps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ul>
       </section>
 
       <section>
