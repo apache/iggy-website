@@ -198,7 +198,7 @@ export default function DownloadsPage() {
           <li>
             The{" "}
             <Link
-              href="https://downloads.apache.org/incubator/iggy/KEYS"
+              href="https://downloads.apache.org/iggy/KEYS"
               className="text-fd-primary hover:underline"
             >
               KEYS
@@ -223,7 +223,7 @@ export default function DownloadsPage() {
         </h2>
         <pre className="overflow-x-auto rounded-xl border border-fd-border bg-fd-card p-5 text-sm leading-relaxed text-fd-foreground/85">
           <code>{`# Download artifact, matching .asc file and KEYS
-curl -O https://downloads.apache.org/incubator/iggy/KEYS
+curl -O https://downloads.apache.org/iggy/KEYS
 curl -O https://downloads.apache.org/incubator/iggy/0.8.0/iggy-0.8.0-incubating-src.tar.gz
 curl -O https://downloads.apache.org/incubator/iggy/0.8.0/iggy-0.8.0-incubating-src.tar.gz.asc
 
