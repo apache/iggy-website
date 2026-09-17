@@ -5,6 +5,8 @@ description: "A first program with the low-level Rust SDK: create a stream and t
 
 ## Before we start
 
+On Linux the server needs kernel 5.19 or newer. macOS has no kernel requirement. Under WSL2, run `wsl --update` first. See [System requirements](/docs/server/introduction#system-requirements) for the details.
+
 This tutorial uses the **low-level Rust SDK** to show how things work under the hood - creating streams, topics, sending and polling messages step by step. This is great for understanding the fundamentals.
 
 For real-world applications, you might typically prefer the **[high-level SDK](/docs/sdk/rust/high-level-sdk)**, which provides `IggyProducer` and `IggyConsumer` builders with auto-batching, consumer groups, offset management, reconnection, and retry logic out of the box. Check the [Stream Builder](/docs/sdk/rust/stream-builder) docs for the most ergonomic API.
@@ -21,7 +23,7 @@ The completed sample can be found in the [repository](https://github.com/apache/
 
 For our purpose, we will focus on the basic scenario in order to keep things simple. Before we begin implementing the consumer and producer apps, we need to start the Iggy streaming server.
 
-This guide targets server **0.9.0**. Once that release is published, you can use its [official Docker image](https://hub.docker.com/r/apache/iggy). During release preparation, use a matching `edge` build or the source build below:
+This guide targets server **0.9.0**. Use its [official Docker image](https://hub.docker.com/r/apache/iggy):
 
 ```bash
 docker run --rm \
@@ -95,7 +97,7 @@ From that point on, we will focus on implementing the message streaming between 
 
 ## Building the producer
 
-We will begin with installing the Iggy client crate - use the SDK from the same source checkout as your server. With `iggy-sample` beside the `iggy` repository, execute `cargo add iggy --path ../iggy/core/sdk` in your terminal. Published SDK releases can expose different APIs. Next, install [tokio.rs](https://tokio.rs) dependency with `cargo add tokio --features macros,rt-multi-thread,time` as we will use the asynchronous runtime. Eventually, modify your `main.rs`, so it looks like this:
+We will begin with installing the Iggy client crate - execute `cargo add iggy` in your terminal. Next, install [tokio.rs](https://tokio.rs) dependency with `cargo add tokio --features macros,rt-multi-thread,time` as we will use the asynchronous runtime. Eventually, modify your `main.rs`, so it looks like this:
 
 ```rust
 use std::error::Error;

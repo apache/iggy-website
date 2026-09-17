@@ -1128,7 +1128,7 @@ export function DocsHero() {
   ];
 
   const links = [
-    { title: "Getting Started", href: "/docs/introduction/getting-started", desc: "Install, configure, send your first messages", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
+    { title: "Getting Started", href: "/docs/introduction/quickstart", desc: "Run the server and send your first message", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
     { title: "Architecture", href: "/docs/introduction/architecture", desc: "Thread-per-core, io_uring, partition ownership", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1v-2z" },
     { title: "Connectors", href: "/docs/connectors/introduction", desc: "Source & sink plugins for data integration", icon: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" },
     { title: "SDKs", href: "/docs/sdk/introduction", desc: "Rust, Python, Java, Go, Node.js, C#, C++, PHP", icon: "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" },

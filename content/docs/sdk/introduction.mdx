@@ -20,6 +20,22 @@ Python, C++, and PHP wrap the Rust SDK, so they inherit all transport protocols 
 
 The Rust SDK is always the first to receive new features.
 
+## Server compatibility
+
+Server 0.9.0 introduced a new binary wire protocol shared by all SDKs, and the SDKs don't fall back to the older one. Use the SDK version that matches your server:
+
+| Component | Server 0.9.0 | Server 0.8.0 |
+|-----------|--------------|--------------|
+| Rust SDK (`iggy`) | `0.11.0` | `0.10.0` |
+| CLI (`iggy-cli`) | `0.14.0` | `0.13.0` |
+| Python SDK (`apache-iggy`) | `0.9.0` | `0.8.0` |
+| Java SDK (`org.apache.iggy:iggy`) | `0.9.0` | `0.8.0` |
+| Node.js SDK (`apache-iggy`) | `0.10.0` | `0.8.0` |
+| Go SDK (`github.com/apache/iggy/foreign/go`) | `v0.9.0` | `v0.8.0` |
+| C# SDK (`Apache.Iggy`) | `0.9.0` | `0.8.0` |
+
+The C++ and PHP SDKs are not published to a registry. Build them from the same source checkout as the server.
+
 ## Prerequisites
 
 The examples below use the `iggy`/`iggy` root credentials. For a new local development instance, with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides, use:

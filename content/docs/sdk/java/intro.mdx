@@ -7,30 +7,22 @@ The Iggy Java SDK is a client library for interacting with the Iggy server from 
 
 ## Server compatibility
 
-This documentation prepares for server **0.9.0**. The TCP transport speaks the VSR (Viewstamped Replication) wire protocol. The released Java artifact `0.8.0` uses the older protocol; use the `0.9.0-SNAPSHOT` build below for the pre-release SDK. When working from source, build the SDK and the server from the same repository checkout.
+This documentation targets server **0.9.0** and SDK **0.9.0**. The TCP transport speaks the VSR (Viewstamped Replication) wire protocol. The Java artifact `0.8.0` uses the older protocol. When working from source, build the SDK and the server from the same repository checkout.
 
 ## Installation
 
-Use Java 17 or newer. These examples use the ASF snapshot repository until the `0.9.0` artifact is published to Maven Central.
+Use Java 17 or newer. The SDK is published to Maven Central.
 
 ### Maven
 
-Add the repository and dependency under the `project` element in `pom.xml`:
+Add the dependency under the `project` element in `pom.xml`:
 
 ```xml
-<repositories>
-    <repository>
-        <id>apache-snapshots</id>
-        <url>https://repository.apache.org/content/repositories/snapshots/</url>
-        <snapshots><enabled>true</enabled></snapshots>
-    </repository>
-</repositories>
-
 <dependencies>
     <dependency>
         <groupId>org.apache.iggy</groupId>
         <artifactId>iggy</artifactId>
-        <version>0.9.0-SNAPSHOT</version>
+        <version>0.9.0</version>
     </dependency>
 </dependencies>
 ```
@@ -40,11 +32,10 @@ Add the repository and dependency under the `project` element in `pom.xml`:
 ```groovy
 repositories {
     mavenCentral()
-    maven { url = uri('https://repository.apache.org/content/repositories/snapshots/') }
 }
 
 dependencies {
-    implementation 'org.apache.iggy:iggy:0.9.0-SNAPSHOT'
+    implementation 'org.apache.iggy:iggy:0.9.0'
 }
 ```
 

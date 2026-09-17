@@ -7,7 +7,7 @@ Iggy Web UI provides a comprehensive dashboard for Iggy server. It allows you to
 
 ![Web UI](/img/iggy_web_ui.png)
 
-These instructions target Iggy server 0.9.0. The container examples use `edge` while the release is being prepared. Use the matching source checkout for local builds.
+These instructions target Iggy server 0.9.0. Use a matching source checkout for local builds.
 
 ## How it connects
 
@@ -47,8 +47,8 @@ If the server is compiled without the `iggy-web` feature and `web_ui = true`, a 
 Start an Iggy server with HTTP enabled, as shown in [Getting started](/docs/introduction/getting-started), then run the Web UI as a separate container:
 
 ```bash
-docker pull apache/iggy-web-ui:edge
-docker run -e PUBLIC_IGGY_API_URL=http://localhost:3000 -p 3050:3050 apache/iggy-web-ui:edge
+docker pull apache/iggy-web-ui:0.4.0
+docker run -e PUBLIC_IGGY_API_URL=http://localhost:3000 -p 3050:3050 apache/iggy-web-ui:0.4.0
 ```
 
 `PUBLIC_IGGY_API_URL` is consumed by the browser: if the Iggy server also runs in Docker, use the host-published HTTP port here, not the container's network alias.
@@ -91,7 +91,7 @@ Here's the full example of the `docker-compose.yml` file that starts the Iggy se
 ```yaml
 services:
   iggy:
-    image: apache/iggy:edge
+    image: apache/iggy:0.9.0
     container_name: iggy
     restart: unless-stopped
     cap_add:
@@ -125,7 +125,7 @@ services:
       - iggy:/app/local_data
 
   init-iggy:
-    image: apache/iggy:edge
+    image: apache/iggy:0.9.0
     container_name: init-iggy
     networks:
       - iggy
@@ -144,7 +144,7 @@ services:
       "
 
   iggy-web-ui:
-    image: apache/iggy-web-ui:edge
+    image: apache/iggy-web-ui:0.4.0
     container_name: iggy-web-ui
     restart: unless-stopped
     environment:
