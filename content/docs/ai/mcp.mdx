@@ -15,7 +15,7 @@ IGGY_MCP_IGGY_USERNAME=iggy IGGY_MCP_IGGY_PASSWORD=iggy cargo run --bin iggy-mcp
 
 These are the development credentials configured in that guide. Use your broker's credentials or a PAT when connecting to an existing installation.
 
-The [docker image](https://hub.docker.com/r/apache/iggy-mcp) is available, and can be fetched via `docker pull apache/iggy-mcp:edge`.
+The [docker image](https://hub.docker.com/r/apache/iggy-mcp) is available, and can be fetched via `docker pull apache/iggy-mcp:0.5.0`.
 
 ## Configuration
 
@@ -215,7 +215,7 @@ docker run -d --name iggy-server --network iggy-mcp \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
   -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
   -e IGGY_NODE_ADVERTISED_ADDRESS=iggy-server \
-  apache/iggy:edge
+  apache/iggy:0.9.0
 ```
 
 After the broker is ready, run the MCP server on the same network:
@@ -227,7 +227,7 @@ docker run --rm --network iggy-mcp -e IGGY_MCP_TRANSPORT=http \
   -e IGGY_MCP_IGGY_USERNAME=iggy \
   -e IGGY_MCP_IGGY_PASSWORD=iggy \
   -p 127.0.0.1:8082:8082 \
-  apache/iggy-mcp:edge
+  apache/iggy-mcp:0.5.0
 ```
 
 The HTTP endpoint uses the configured Iggy account for every MCP client. This example publishes it only on the host loopback interface.

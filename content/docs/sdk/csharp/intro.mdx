@@ -10,10 +10,10 @@ The SDK is built around the `IIggyClient` interface, which aggregates every feat
 ## Installation
 
 ```bash
-dotnet add package Apache.Iggy --version 0.9.0-edge.9
+dotnet add package Apache.Iggy --version 0.9.0
 ```
 
-The SDK targets .NET 8 and .NET 10 (`net8.0` and `net10.0`). Stable `0.8.0` uses TCP framing that predates the server 0.9.0 protocol. These pages prepare for server 0.9.0 and use the `0.9.0-edge.9` prerelease, which includes both topic durability options. When building from source, use the server and SDK from the same checkout.
+The SDK targets .NET 8 and .NET 10 (`net8.0` and `net10.0`). Version `0.9.0` matches the server 0.9.0 protocol and includes both topic durability options. Version `0.8.0` uses the older TCP framing. When building from source, use the server and SDK from the same checkout.
 
 To use the source SDK with these release-preparation examples, run from the Iggy checkout root:
 

@@ -7,7 +7,7 @@ Runnable examples live in the [examples/java](https://github.com/apache/iggy/tre
 
 ## Starting the server
 
-These examples prepare for server **0.9.0** and speak the VSR (Viewstamped Replication) wire protocol. Build the SDK and server from the same checkout for unreleased changes. The examples log in as `iggy`/`iggy`. From the repository root, start a disposable development server with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides:
+These examples target server **0.9.0** and speak the VSR (Viewstamped Replication) wire protocol. Build the SDK and server from the same checkout for unreleased changes. The examples log in as `iggy`/`iggy`. From the repository root, start a disposable development server with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides:
 
 ```bash
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials

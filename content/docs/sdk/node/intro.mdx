@@ -5,12 +5,12 @@ description: "The Node.js and TypeScript SDK, from installation to keeping clien
 
 The Iggy Node.js SDK is a client library that allows you to interact with the Iggy API from your Node.js and TypeScript applications. It communicates with the Iggy server over TCP or TLS using the binary protocol. The package is available on [npm](https://www.npmjs.com/package/apache-iggy) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/master/foreign/node).
 
-These docs target server **0.9.0**. Use the Node SDK's `edge` package with server 0.9.0 or `edge`; the stable Node package 0.8.0 uses the older protocol. The current SDK speaks only the VSR wire protocol and doesn't fall back to older formats.
+These docs target server **0.9.0** and Node SDK **0.10.0**. The Node package 0.8.0 uses the older protocol. The current SDK speaks only the VSR wire protocol and doesn't fall back to older formats.
 
 ## Installation
 
 ```bash
-npm install apache-iggy@edge
+npm install apache-iggy@0.10.0
 ```
 
 ## Quick start
@@ -18,16 +18,15 @@ npm install apache-iggy@edge
 The samples below expect an Iggy server on `127.0.0.1:8090`. See [Getting started](/docs/introduction/getting-started) for the server prerequisites:
 
 ```bash
-# Development image for the 0.9.0 release
 docker run --rm \
   --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
   -p 8090:8090 \
   -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
   -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
-  apache/iggy:edge
+  apache/iggy:0.9.0
 
-# Or from the matching repository root
+# Or from a 0.9.0 source checkout
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 

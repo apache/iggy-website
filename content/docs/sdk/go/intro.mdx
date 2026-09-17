@@ -7,7 +7,7 @@ The Iggy Go SDK is a client library for interacting with the Iggy server from Go
 
 ## Server compatibility
 
-The SDK and the server must speak the same wire protocol. Tagged releases up to `v0.8.0` predate VSR (and the current API) and pair only with servers of the same era. The current SDK speaks VSR only. This page prepares for server `0.9.0`; use a compatible SDK release or edge version. When working from source, build the SDK and the server from the same repository checkout.
+The SDK and the server must speak the same wire protocol. Tagged releases up to `v0.8.0` predate VSR (and the current API) and pair only with servers of the same era. The current SDK speaks VSR only. This page targets server `0.9.0`; use a compatible SDK release or edge version. When working from source, build the SDK and the server from the same repository checkout.
 
 ## Installation
 
@@ -17,10 +17,10 @@ The current source requires Go 1.25 or newer. Run these commands from your appli
 go get github.com/apache/iggy/foreign/go
 ```
 
-`go get` without a version does not automatically select prereleases. For prerelease testing, pin a compatible VSR edge version, for example:
+To pin the release that matches server 0.9.0:
 
 ```bash
-go get github.com/apache/iggy/foreign/go@v0.9.0-edge.6
+go get github.com/apache/iggy/foreign/go@v0.9.0
 ```
 
 For unreleased changes, use the local SDK replacement shown in the [repository examples](/docs/sdk/go/examples). A published edge tag need not contain every change in your checkout.

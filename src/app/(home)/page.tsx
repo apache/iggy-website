@@ -182,7 +182,7 @@ export default function HomePage() {
           {/* CTA Buttons */}
           <div className="mx-auto mt-14 flex max-w-3xl flex-col flex-wrap items-center justify-center gap-5 sm:flex-row">
             <Link
-              href="/docs/introduction/getting-started"
+              href="/docs/introduction/quickstart"
               className="inline-flex items-center rounded-lg bg-[#ff9103] px-8 py-3.5 text-lg font-semibold text-[#0e0f11] transition-colors hover:bg-[#ffa703]"
             >
               Get Started
