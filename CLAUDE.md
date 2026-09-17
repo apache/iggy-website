@@ -52,6 +52,9 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 - Node.js v24+ required (`.nvmrc`).
 - `.npmrc` sets `legacy-peer-deps=true`.
 - Commits follow conventional commits: `type(scope): subject`, e.g. `fix(docs): ...`.
+- `scripts/generate-docs-markdown.mjs` writes a Markdown copy of every docs page and blog post (its URL plus `.md`) before each dev and build run. `src/app/llms.txt/route.ts`, `src/app/llms-full.txt/route.ts` and `src/app/llms-full/[section]/route.ts` (one file per docs section) build on those copies, through `src/lib/llms.ts`. The copies keep code fences as written, so give every fence a language. Site-relative links become absolute.
+- A diagram component used on its own line in MDX is replaced in the Markdown copy by its text in `scripts/diagram-text.mjs`. When you add or change a diagram, add or update its text there. The generator fails if a component has no text.
+- The docs version shown in llms.txt, llms-full.txt and the Markdown copies is set in `src/lib/docs-version.json`. Update it when the docs move to a new release.
 
 ## Deployment
 

@@ -23,7 +23,10 @@ import {
   DocsDescription,
   DocsPage,
   DocsTitle,
+  MarkdownCopyButton,
 } from "fumadocs-ui/layouts/docs/page";
+import { buttonVariants } from "fumadocs-ui/components/ui/button";
+import { FileCode, FileText } from "lucide-react";
 import { notFound } from "next/navigation";
 import { getMDXComponents } from "@/mdx-components";
 import type { Metadata } from "next";
@@ -52,7 +55,40 @@ export default async function Page(props: {
         },
       }}
     >
-      <DocsTitle>{page.data.title}</DocsTitle>
+      <div className="flex items-start gap-3">
+        <DocsTitle className="flex-1">{page.data.title}</DocsTitle>
+        {/* Tool-neutral actions only: any AI tool can use the copied text or the Markdown URL. */}
+        <div className="flex shrink-0 items-center gap-0.5 pt-1">
+          <MarkdownCopyButton
+            markdownUrl={markdownUrl(page.url)}
+            title="Copy page as Markdown"
+            aria-label="Copy page as Markdown"
+            className={pageActionClass}
+          >
+            <ActionTip>Copy page as Markdown</ActionTip>
+          </MarkdownCopyButton>
+          <a
+            href={markdownUrl(page.url)}
+            title="View page as Markdown"
+            aria-label="View page as Markdown"
+            className={pageActionClass}
+          >
+            <FileText />
+            <ActionTip>View page as Markdown</ActionTip>
+          </a>
+          <a
+            href={`https://github.com/apache/iggy-website/blob/main/content/docs/${page.path}`}
+            target="_blank"
+            rel="noreferrer noopener"
+            title="View page source on GitHub"
+            aria-label="View page source on GitHub"
+            className={pageActionClass}
+          >
+            <FileCode />
+            <ActionTip>View page source on GitHub</ActionTip>
+          </a>
+        </div>
+      </div>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
         <MDX
@@ -89,9 +125,33 @@ export async function generateMetadata(props: {
       // Set both: defining alternates here replaces the root's, canonical included.
       canonical: `${page.url}/`,
       // The Markdown copy written by scripts/generate-docs-markdown.mjs.
-      types: { "text/markdown": `${page.url}.md` },
+      types: { "text/markdown": markdownUrl(page.url) },
     },
   };
+}
+
+// Small icon buttons beside the page title. Also applied to fumadocs'
+// MarkdownCopyButton, overriding its text-button styling.
+const pageActionClass = buttonVariants({
+  color: "ghost",
+  size: "icon-sm",
+  className:
+    "group relative size-8 justify-center border-0 bg-transparent p-0 text-fd-muted-foreground [&_svg]:size-4 [&_svg]:text-fd-muted-foreground",
+});
+
+// A label shown under an icon button on hover and keyboard focus. It is also
+// the button's text for screen readers.
+function ActionTip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="pointer-events-none absolute end-0 top-full z-10 mt-1 whitespace-nowrap rounded-md border bg-fd-popover px-2 py-1 text-xs font-normal text-fd-popover-foreground opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+      {children}
+    </span>
+  );
+}
+
+// The Markdown copy of a docs page, written by scripts/generate-docs-markdown.mjs.
+function markdownUrl(url: string) {
+  return `${url}.md`;
 }
 
 // Several chapters have pages with identical titles ("Introduction",

@@ -18,7 +18,7 @@ The Rust snippets assume an async function returning `Result<(), Box<dyn std::er
 
 Instead of providing the configuration for the client, you can use the connection string. It's a string that contains all the necessary information to connect to the Iggy API, and it works with all four transports:
 
-```
+```text
 iggy://iggy:iggy@127.0.0.1:8090             (TCP, default)
 iggy+tcp://iggy:iggy@127.0.0.1:8090         (TCP, explicit)
 iggy+quic://iggy:iggy@127.0.0.1:8080        (QUIC)
@@ -41,7 +41,7 @@ HTTP requires an explicit login after construction. Consumer groups require a bi
 
 Options are appended as query parameters. For TCP:
 
-```
+```text
 iggy://iggy:iggy@127.0.0.1:8090?reconnection_retries=5&reconnection_interval=5s&reestablish_after=10s&heartbeat_interval=3s&nodelay=true
 ```
 

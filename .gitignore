@@ -14,6 +14,7 @@ tsconfig.tsbuildinfo
 src/github-stars.json
 public/docs.md
 public/docs/**/*.md
+public/blogs/**/*.md
 
 # System files
 .DS_Store

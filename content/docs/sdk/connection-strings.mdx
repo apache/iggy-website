@@ -9,7 +9,7 @@ Connection strings are supported by the Rust SDK and the SDKs that wrap it (Pyth
 
 ## Format
 
-```
+```text
 iggy[+transport]://credentials@host:port[?option=value&option=value]
 ```
 
@@ -37,13 +37,13 @@ Two forms are accepted:
 
 **Username and password**, separated by a colon. Both parts must be non-empty:
 
-```
+```text
 iggy://username:password@127.0.0.1:8090
 ```
 
 **Personal Access Token**: any credential without a colon is treated as a PAT. Server-minted tokens are plain base64 strings with no prefix, so paste the token exactly as the server returned it:
 
-```
+```text
 iggy://<personal-access-token>@127.0.0.1:8090
 ```
 
@@ -76,7 +76,7 @@ Options typed as durations take human-readable values such as `5s`, `500ms`, or 
 | `heartbeat_interval` | Duration between heartbeats | `5s` |
 | `nodelay` | Enable `TCP_NODELAY` (`true`/`false`) | `false` |
 
-```
+```text
 iggy://iggy:iggy@127.0.0.1:8090?tls=true&tls_domain=localhost&tls_ca_file=core/certs/iggy_ca_cert.pem&reconnection_retries=5&heartbeat_interval=3s&nodelay=true
 ```
 
@@ -102,7 +102,7 @@ The QUIC reconnection keys **differ from TCP**: `reconnection_max_retries` (not 
 | `reconnection_interval` | Duration between reconnection attempts | `1s` |
 | `reconnection_reestablish_after` | Cooldown measured from the last connection establishment | `5s` |
 
-```
+```text
 iggy+quic://iggy:iggy@127.0.0.1:8080?validate_certificate=false&reconnection_max_retries=5
 ```
 
@@ -127,7 +127,7 @@ QUIC certificate validation is disabled by default. When enabled, it uses the pl
 | `tls_ca_file` | PEM file of trusted CA certificates when validation is enabled | none |
 | `tls_validate_certificate` | Validate the server certificate (`true`/`false`) | `false` |
 
-```
+```text
 iggy+ws://iggy:iggy@127.0.0.1:8092?heartbeat_interval=5s&max_message_size=1048576
 ```
 
@@ -140,7 +140,7 @@ WebSocket TLS does not validate the server certificate unless `tls_validate_cert
 | `heartbeat_interval` | Duration between heartbeats | `5s` |
 | `retries` | Maximum retries for transient request failures | `3` |
 
-```
+```text
 iggy+http://iggy:iggy@127.0.0.1:3000?retries=5
 ```
 
