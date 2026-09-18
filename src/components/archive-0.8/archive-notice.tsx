@@ -17,23 +17,18 @@
  * under the License.
  */
 
-import { docs, docs08, blogPosts, organizations } from "fumadocs-mdx:collections/server";
-import { loader } from "fumadocs-core/source";
+import Link from "next/link";
 
-export const source = loader({
-  baseUrl: "/docs",
-  source: docs.toFumadocsSource(),
-});
-
-// The frozen 0.8 docs. Kept out of search, the sitemap and llms.txt, which all
-// use `source` above.
-export const source08 = loader({
-  baseUrl: "/docs/0.8",
-  source: docs08.toFumadocsSource(),
-});
-
-// Blog posts as raw collection for direct access to custom schema fields
-export { blogPosts };
-
-// Organization entries powering /powered-by
-export { organizations };
+/** Shown on every page of the frozen 0.8 docs. */
+export function ArchiveNotice() {
+  return (
+    <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-fd-foreground">
+      These are the docs for Apache Iggy 0.8, kept for reference and no longer updated. Server 0.9.0
+      changed the wire protocol, so 0.8 clients and servers do not work with 0.9.0.{" "}
+      <Link href="/docs" className="font-medium text-fd-primary underline">
+        Read the current docs
+      </Link>
+      .
+    </div>
+  );
+}

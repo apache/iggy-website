@@ -17,7 +17,8 @@
  * under the License.
  */
 
-import { source } from "@/lib/source";
+import Link from "next/link";
+import { source08 } from "@/lib/source";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { docsOptions } from "@/lib/layout.shared";
 import { SiteFooter } from "@/components/site-footer";
@@ -27,7 +28,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <AnnouncementBar />
-      <DocsLayout tree={source.getPageTree()} {...docsOptions()}>
+      <DocsLayout
+        tree={source08.getPageTree()}
+        {...docsOptions()}
+        sidebar={{
+          banner: (
+            <div key="archive-banner" className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
+              Apache Iggy 0.8 docs (archived).{" "}
+              <Link href="/docs" className="font-medium text-fd-primary underline">
+                Current docs
+              </Link>
+            </div>
+          ),
+        }}
+      >
         {children}
       </DocsLayout>
       <SiteFooter />

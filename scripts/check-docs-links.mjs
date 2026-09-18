@@ -29,7 +29,12 @@
 import { readdirSync, readFileSync, statSync, existsSync } from "fs";
 import { join, relative } from "path";
 
-const ROOT = "content/docs";
+// Each docs tree and the URL it is served under. The archived 0.8 docs are a
+// frozen copy, so their links must stay inside /docs/0.8.
+const TREES = [
+  { root: "content/docs", base: "/docs" },
+  { root: "content/docs-0.8", base: "/docs/0.8" },
+];
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {
@@ -38,25 +43,33 @@ function walk(dir) {
   });
 }
 
-const files = walk(ROOT).filter((f) => f.endsWith(".mdx"));
-
 const routes = new Set();
-for (const f of files) {
-  const rel = relative(ROOT, f).slice(0, -4);
-  routes.add("/docs/" + rel.replace(/\/index$/, ""));
-  if (rel.endsWith("index")) routes.add("/docs/" + rel.slice(0, -6));
-}
+const trees = TREES.map(({ root, base }) => {
+  const files = walk(root).filter((f) => f.endsWith(".mdx"));
+  for (const f of files) {
+    const rel = relative(root, f).slice(0, -4);
+    routes.add(base + "/" + rel.replace(/\/index$/, ""));
+    if (rel.endsWith("index")) routes.add((base + "/" + rel.slice(0, -6)).replace(/\/$/, ""));
+  }
+  return { root, base, files };
+});
+const files = trees.flatMap((tree) => tree.files);
 
 const problems = [];
 
-const linkPattern = /\]\((\/docs\/[^)#\s]*)/g;
+const linkPattern = /\]\((\/docs(?:\/[^)#\s]*)?)/g;
 const links = new Map();
-for (const f of files) {
-  const text = readFileSync(f, "utf8");
-  for (const m of text.matchAll(linkPattern)) {
-    const target = m[1].replace(/\/$/, "");
-    if (!links.has(target)) links.set(target, new Set());
-    links.get(target).add(f);
+for (const { base, files: treeFiles } of trees) {
+  for (const f of treeFiles) {
+    const text = readFileSync(f, "utf8");
+    for (const m of text.matchAll(linkPattern)) {
+      const target = m[1].replace(/\/$/, "");
+      if (base !== "/docs" && target !== base && !target.startsWith(base + "/")) {
+        problems.push(`${f} links to ${target}, outside ${base}`);
+      }
+      if (!links.has(target)) links.set(target, new Set());
+      links.get(target).add(f);
+    }
   }
 }
 for (const [target, sources] of links) {
