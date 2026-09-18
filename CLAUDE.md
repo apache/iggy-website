@@ -56,6 +56,12 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 - A diagram component used on its own line in MDX is replaced in the Markdown copy by its text in `scripts/diagram-text.mjs`. When you add or change a diagram, add or update its text there. The generator fails if a component has no text.
 - The docs version shown in llms.txt, llms-full.txt and the Markdown copies is set in `src/lib/docs-version.json`. Update it when the docs move to a new release.
 
+## Archived 0.8 docs
+
+- `content/docs-0.8/` is a frozen copy of the docs as they stood for Apache Iggy 0.8 (commit `9eece0aa`, before the 0.9.0 update), served at `/docs/0.8` by `src/app/(archive)/docs/0.8/`. The current docs live in `src/app/(current)/docs/`; the route groups keep the two sidebars apart.
+- Do not edit the archive except to fix something broken. Its `/docs` links point at `/docs/0.8`, and `npm run check:links` fails if an archived page links outside it.
+- The archive uses its own copy of the diagrams in `src/components/archive-0.8/`, shows a notice on every page, is marked `noindex`, and is left out of search, the sitemap and llms.txt, which all use `source` rather than `source08`.
+
 ## Deployment
 
 - Default branch is `main` (the code repo uses `master`; this one does not).

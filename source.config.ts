@@ -30,6 +30,12 @@ export const docs = defineDocs({
   dir: "content/docs",
 });
 
+// Frozen copy of the docs as they stood for Apache Iggy 0.8, served at /docs/0.8.
+// Not updated; see "Archived 0.8 docs" in CLAUDE.md.
+export const docs08 = defineDocs({
+  dir: "content/docs-0.8",
+});
+
 export const blogPosts = defineCollections({
   type: "doc",
   dir: "content/blog",
