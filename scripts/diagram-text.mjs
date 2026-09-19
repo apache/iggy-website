@@ -30,6 +30,8 @@
 const SITE = "https://iggy.apache.org";
 
 export const DIAGRAM_TEXT = {
+  Bench090LatencyChart: `**Chart: latency, 0.9.0 to the next version, per iggy-bench workload.** Three headline tiles (3-node cluster, persisted, 20 producers at p999 and p99, and single node, 20 producers at p999), then an interactive chart with one row per workload and two dots per row on a log scale, one for the 0.9.0 release and one for the development branch that follows it. It switches between single node and 3-node cluster, between p50, p99 and p999, and between table order and biggest change. The tables below carry the same numbers.`,
+
   AppendOnlyLogViz: `**Diagram: Append-only log.** Messages are appended in order, each with the next offset (0, 1, 2 and so on). New messages are always written at the end. A consumer tracks its own position in the log with an offset, independently of other consumers.`,
 
   BenchmarkChart: `**Diagram: Latency improvements, Tokio vs thread-per-core.** Selected historical results comparing v0.5.0 (Tokio) with v0.7.0 (thread-per-core) at about 1,000 MB/s per node. Lower latency is better.
