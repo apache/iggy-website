@@ -17,12 +17,22 @@
  * under the License.
  */
 
+import docsVersion from "./docs-version.json";
+
 /** Canonical origin of the published site. Used for canonical URLs, Open Graph, sitemap and llms.txt. */
 export const SITE_URL = "https://iggy.apache.org";
 
 /** Short description reused across metadata, structured data and llms.txt. */
 export const SITE_DESCRIPTION =
   "Apache Iggy is a persistent message streaming platform written in Rust, supporting QUIC, TCP and HTTP transport protocols, capable of processing millions of messages per second.";
+
+/**
+ * The server and SDK versions content/docs describes, used by llms.txt,
+ * llms-full.txt and the Markdown copies. Set in docs-version.json, which
+ * scripts/generate-docs-markdown.mjs also reads. Update it when the docs move
+ * to a new release.
+ */
+export const DOCS_VERSIONS = docsVersion.docsVersions;
 
 /**
  * Pages outside the docs and blog collections.
@@ -65,4 +75,9 @@ export function absoluteUrl(path: string): string {
   const withLeading = path.startsWith("/") ? path : `/${path}`;
   const withTrailing = withLeading.endsWith("/") ? withLeading : `${withLeading}/`;
   return `${SITE_URL}${withTrailing}`;
+}
+
+/** Absolute URL of a file such as /llms.txt or a page's .md copy, with no trailing slash. */
+export function absoluteFileUrl(path: string): string {
+  return `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }

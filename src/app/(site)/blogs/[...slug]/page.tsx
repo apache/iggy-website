@@ -160,6 +160,10 @@ export async function generateMetadata(props: {
     // on this catch-all route, so it would not match the URL actually served.
     alternates: {
       canonical: `/blogs/${year}/${month}/${day}/${getSlug(page.info.path)}/`,
+      // The Markdown copy written by scripts/generate-docs-markdown.mjs.
+      types: {
+        "text/markdown": `/blogs/${year}/${month}/${day}/${getSlug(page.info.path)}.md`,
+      },
     },
   };
 }

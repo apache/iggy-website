@@ -129,7 +129,7 @@ ulimits:
 
 Or when running with `docker run`:
 
-```
+```bash
 docker run --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 -p 8090:8090 -e IGGY_TCP_ADDRESS=0.0.0.0:8090 -e IGGY_NODE_ADVERTISED_ADDRESS=localhost apache/iggy:0.9.0
 ```
 

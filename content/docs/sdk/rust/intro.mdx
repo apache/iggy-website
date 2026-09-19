@@ -53,7 +53,7 @@ The high-level API is built on top of the low-level one, so you can always drop 
 
 The connection string is the simplest way to configure the client. It supports all four transport protocols:
 
-```
+```text
 iggy://user:pass@host:port              (TCP, default)
 iggy+tcp://user:pass@host:port          (TCP, explicit)
 iggy+quic://user:pass@host:port         (QUIC)
@@ -65,14 +65,14 @@ TCP, QUIC, and WebSocket apply connection-string credentials on `connect()`. HTT
 
 Options can be appended as query parameters:
 
-```
+```text
 iggy://iggy:iggy@127.0.0.1:8090?nodelay=true&heartbeat_interval=5s
 iggy://iggy:iggy@127.0.0.1:8090?reconnection_retries=unlimited&heartbeat_interval=5s
 ```
 
 Personal Access Tokens are also supported. Any credential without a colon is treated as a PAT. Paste the token exactly as the server returned it, with **no prefix**:
 
-```
+```text
 iggy://<personal-access-token>@127.0.0.1:8090
 ```
 

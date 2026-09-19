@@ -55,7 +55,7 @@ Let's start by creating a new project - simply type `cargo new iggy-sample` and 
 
 At the very beginning, we will organize the files a little bit differently - create a new `consumer` directory under `src` and move the `main.rs` file here. You should have the following project structure:
 
-```
+```text
 ├── Cargo.lock
 ├── Cargo.toml
 ├── src
@@ -65,7 +65,7 @@ At the very beginning, we will organize the files a little bit differently - cre
 
 Then, open `Cargo.toml` and add the following code before the `[dependencies]`
 
-```
+```toml
 [[bin]]
 name = "consumer"
 path = "src/consumer/main.rs"
@@ -75,7 +75,7 @@ Just to make sure that everything is set correctly, try to run the app with `car
 
 Now, let's do the same for the `producer` part. Create a new `producer` directory, copy & paste the existing `main.rs`, and update the `Cargo.toml` with the following code:
 
-```
+```toml
 [[bin]]
 name = "producer"
 path = "src/producer/main.rs"
@@ -83,7 +83,7 @@ path = "src/producer/main.rs"
 
 You should have the project structure as shown below:
 
-```
+```text
 ├── Cargo.lock
 ├── Cargo.toml
 ├── src
