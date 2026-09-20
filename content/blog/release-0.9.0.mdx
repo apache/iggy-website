@@ -1,6 +1,6 @@
 ---
 title: Apache Iggy 0.9.0 Release
-author: piotr
+author: piotr, hubert
 tags: ["release", "0.9.0", "announcement", "clustering", "vsr", "benchmarks"]
 date: 2026-09-21
 ---
@@ -169,7 +169,7 @@ Efficiency has always been the point of Iggy: thread-per-core, shared-nothing, `
 
 ### Benchmarks: 0.9.0 and what comes next
 
-We're not done. A dedicated performance effort started right after the 0.9.0 code freeze, and the first results are in. The tables below compare **the 0.9.0 release against the current development branch**, both measured with `iggy-bench` on the same host with identical workload parameters. Each cell reads `0.9.0 -> next`. Latencies are in milliseconds.
+We're not done. A dedicated performance effort started right after the 0.9.0 code freeze, and the first results are in. The tables below compare **the 0.9.0 release against the current development branch**, both measured with `iggy-bench` on the same host with identical workload parameters. Each arm ran its own build of `iggy-bench`, because the branch's bench sends the new deferred poll, so no delta here is server-only. Each cell reads `0.9.0 -> next`. Latencies are in milliseconds.
 
 A short legend. *Pinned producer* and *pinned consumer* are the `iggy-bench` kinds where every actor owns its own stream and partition. *Actors* is the number of concurrent producers or consumers. Rate-limited rows hold the aggregate throughput at 800 MB/s or 500 MB/s, so the latency columns compare like with like. *No rate limit* rows push as hard as the client can. *Persisted* rows use topics created with `durability=persisted`, so every acknowledgement waits for stable storage at the quorum. *Cold* consumers read data that is not cached yet, *warm* consumers re-read data that is.
 
@@ -207,10 +207,40 @@ The tails are where the work shows. On a three-node cluster with `persisted` top
 
 Not every row moved in the right direction. The unthrottled rows show higher tails on the development branch, and a few single-actor rows are slightly slower. **These numbers are a snapshot of work in progress, not a final result.** The branch is being profiled and tuned as we write this, and the next version will carry further changes aimed at both the throughput and the tail columns. We're publishing the snapshot anyway, because we'd rather show where the work stands than wait for a perfect table.
 
-What is in the pipeline, in the order we expect it to land:
+### Three changes behind the numbers
 
-- **[Deferred polling](https://github.com/apache/iggy/issues/3470)**: a poll carries a wait timeout, and when a partition has nothing new the server holds the request and completes it as soon as messages arrive or the timeout expires, instead of answering empty and making the consumer ask again. Fewer wasted round trips, less CPU churn on both sides, lower end-to-end latency.
-- **More concurrency in I/O**: one task per read and per write, so disk and network operations overlap instead of waiting on each other within a shard. The first piece is already in review: **[read-ahead on replica sockets](https://github.com/apache/iggy/pull/4224)**, so one socket read serves a whole burst of replication frames instead of two reads per frame.
+Three changes are in flight, and the tables above measure them together against 0.9.0. A fourth is on the drawing board.
+
+#### Consumers stop asking for nothing
+
+A polling consumer pays a round trip for nothing on an idle topic, and on a busy one its interval trades log latency against empty replies.
+
+`pollMessagesDeferred` (commands 105 and 106, tracked in [#3470](https://github.com/apache/iggy/issues/3470)) appends a 24-byte trailer to the poll request: a maximum wait, a minimum message count, a byte cap for the reply, and a total request budget. The server parks the request and answers when the minimum is readable, the cap is reached, or the wait expires. The Rust client speaks it on every transport, the Java client over TCP and HTTP, and the Rust consumer now defaults to bounded long polling with manual commits. It answers a [community request for deferred responses](https://github.com/apache/iggy/discussions/2854).
+
+#### File I/O leaves the shard loop
+
+A shard owns many partitions and used to wait for each one's file writes and durability barriers before serving the next, so one slow disk delayed every partition on the shard.
+
+Now each file job runs as its own task, up to 16 in flight by default, and its result returns to the shard for identity matching and ordered publication. Storage work now overlaps with network work.
+
+#### Replica links read ahead
+
+Every pair of nodes shares one TCP connection for consensus traffic, owned by a single link shard. Reading one frame took two `io_uring` reads, one for the 256-byte header and one for the body, and frames already in the kernel receive queue waited for the next call. Under load that shard bottlenecked the cluster write path.
+
+A 256 KiB read-ahead buffer ([#4224](https://github.com/apache/iggy/pull/4224)) now serves a whole burst with one socket read. A frame at least as large as the buffer skips it and lands in its own allocation, so large messages pay no extra copy.
+
+#### The next one: more replica links
+
+The read-ahead makes each read cheaper, but every partition group a pair of nodes replicates still goes through one link shard.
+
+The next change gives a peer several links, spread over shards. An operator picks the link count per peer, each link carries a contiguous range of shards, and the default stays at today's one. The upgrade rolls, but changing the link count takes a coordinated restart, and nodes that disagree on it refuse each other.
+
+This one is a design, not code, and the read-ahead has to justify it first. If the link shard stays saturated behind the buffer, more links are the answer. If not, the cheaper fix already won.
+
+All three measured changes are still in development, and every number above will move before they ship. A driver for the OpenMessaging Benchmark is in progress as well, and its results will follow.
+
+Beyond these, in the order we expect it to land:
+
 - **Explicit group commit**: several acknowledgements share one disk barrier by design, rather than by whatever happened to queue up during the previous one
 - **Direct I/O** for the storage engine, writing past the page cache instead of paying for `fsync` barriers
 - **Multi-leader clusters**, further out: a leader per partition, with leaders spread across all nodes of the cluster, so write traffic and replication work are shared by every machine instead of concentrating on one
@@ -451,7 +481,7 @@ To be clear about the current state: **in 0.9.0 this is the foundation layer, no
 
 Clustering is in. The next releases are about making it faster and complete:
 
-- **Performance**: the effort behind the benchmark tables above continues. Deferred polling so consumers stop paying for empty round trips, a task per read and write for more I/O concurrency, explicit group commit, Direct I/O instead of `fsync`, and more copy-free paths of the kind 0.9.0 started. Further out, multi-leader clusters with a leader per partition spread across all nodes. A full 0.8.0 vs 0.9.0 vs next comparison is planned for the benchmarking platform.
+- **Performance**: the effort behind the benchmark tables above continues. Deferred polling so consumers stop paying for empty round trips, a task per read and write for more I/O concurrency, more replica links per node pair, explicit group commit, Direct I/O instead of `fsync`, and more copy-free paths of the kind 0.9.0 started. Further out, multi-leader clusters with a leader per partition spread across all nodes. A full 0.8.0 vs 0.9.0 vs next comparison is planned for the benchmarking platform.
 - **Kafka gateway**: the bridge from the protocol listener into Iggy streams, so Kafka producers and consumers can talk to Iggy through the gateway. Consumer groups follow, as laid out in the [rollout discussion](https://github.com/apache/iggy/discussions/3253).
 - **SDK parity**: leader redirection coverage for Python, Node.js and C++, and the PHP SDK on its way to a published package
 - **Connectors**: more sources, bounded backpressure end to end, and runtime hardening
