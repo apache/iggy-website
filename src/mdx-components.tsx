@@ -36,7 +36,7 @@ import {
   QuickStartSnippet,
   DocsHero,
 } from "@/components/architecture-diagrams";
-import { Bench090LatencyChart } from "@/components/bench-0-9-0";
+import { Bench090DurabilityChart, Bench090LatencyChart } from "@/components/bench-0-9-0";
 import type { MDXComponents } from "mdx/types";
 
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
@@ -58,6 +58,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     WhyIggy,
     QuickStartSnippet,
     DocsHero,
+    Bench090DurabilityChart,
     Bench090LatencyChart,
     ...components,
   };
