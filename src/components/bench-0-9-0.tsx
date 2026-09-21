@@ -199,7 +199,7 @@ export function Bench090DurabilityChart() {
   const titleId = useId();
   const setup = findSetup(setupKey);
   const policies = [
-    { label: "Replicated", workload: "pinned producer, 20 actors, 800 MB/s", color: "#38bdf8" },
+    { label: "Replicated", workload: "pinned producer, 20 actors, 800 MB/s", color: "#3987e5" },
     { label: "Persisted", workload: "pinned producer, 20 actors, persisted, 800 MB/s", color: "#fb4800" },
   ].map((policy) => ({
     ...policy,

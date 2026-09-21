@@ -7,7 +7,9 @@ date: 2026-09-21
 ---
 ## Release 0.9.0
 
-Five months after [0.8.0](https://iggy.apache.org/blogs/2026/04/22/release-0.8.0/), we're proud to release **[Apache Iggy 0.9.0](https://github.com/apache/iggy/releases/tag/server-0.9.0)**. It is our first release as an **Apache Top-Level Project**, following the [graduation from the Incubator](https://iggy.apache.org/blogs/2026/08/24/apache-iggy-top-level-project-tlp-graduation/) on August 19, 2026, and the first one without the `-incubating` suffix. It is also the release we have been working towards for the past year.
+Five months after [0.8.0](https://iggy.apache.org/blogs/2026/04/22/release-0.8.0/), we're proud to release **[Apache Iggy 0.9.0](/downloads/)**. It is our first release as an **Apache Top-Level Project**, following the [graduation from the Incubator](https://iggy.apache.org/blogs/2026/08/24/apache-iggy-top-level-project-tlp-graduation/) on August 19, 2026, and the first one without the `-incubating` suffix. It is also the release we have been working towards for the past year.
+
+The official release is the **[source archive](https://www.apache.org/dyn/closer.lua/iggy/0.9.0/iggy-0.9.0-src.tar.gz)** distributed by the Apache Software Foundation, with its [PGP signature](https://downloads.apache.org/iggy/0.9.0/iggy-0.9.0-src.tar.gz.asc), [SHA-512 checksum](https://downloads.apache.org/iggy/0.9.0/iggy-0.9.0-src.tar.gz.sha512) and the project [KEYS](https://downloads.apache.org/iggy/KEYS). The [downloads page](/downloads/) explains how to verify it. The [GitHub release](https://github.com/apache/iggy/releases/tag/server-0.9.0) carries the full list of merged pull requests.
 
 **Iggy now runs as a cluster.** 0.9.0 ships **Viewstamped Replication Revisited (VSR)** consensus in the standard `iggy-server` binary. Start three nodes, lose one, and the cluster keeps serving reads and writes. There is no separate build, feature flag, or clustered edition. The same server runs single-node or replicated, and `cluster.enabled` in the configuration decides which one you get.
 
@@ -56,7 +58,19 @@ The consensus work spans well over a hundred pull requests. The milestones, in r
 - **[Inbox split into consensus and client-reply lanes](https://github.com/apache/iggy/pull/3915)**, so a burst of client traffic cannot starve replication
 - **[Metadata reads served at or above the client's own writes](https://github.com/apache/iggy/pull/4024)**
 
-Then came the correctness fixes found by the simulator, the crash tests and real cluster runs: **[view change no longer discards committed ops](https://github.com/apache/iggy/pull/3824)**, **[a replica is kept off a hole in its committed prefix](https://github.com/apache/iggy/pull/4073)**, **[repaired prepares can't rewind the WAL parent](https://github.com/apache/iggy/pull/3978)**, **[the dedup fence survives capacity eviction](https://github.com/apache/iggy/pull/3934)**, **[writes recover after a fast primary rejoin](https://github.com/apache/iggy/pull/3987)**, **[a late partition materialiser can't wedge its group](https://github.com/apache/iggy/pull/4007)**, **[partition and metadata repair are driven from the tick](https://github.com/apache/iggy/pull/4006)**, **[an unservable header counts as a nack](https://github.com/apache/iggy/pull/4109)**, **[frames no plane claims are refused](https://github.com/apache/iggy/pull/4103)**, **[torn segment tails are truncated instead of resurrected](https://github.com/apache/iggy/pull/3946)**, and, as the last change before the tag, **[spurious heartbeat elections are prevented](https://github.com/apache/iggy/pull/4194)**.
+Then came the correctness fixes found by the simulator, the crash tests and real cluster runs:
+
+- **[View change no longer discards committed ops](https://github.com/apache/iggy/pull/3824)**
+- **[A replica is kept off a hole in its committed prefix](https://github.com/apache/iggy/pull/4073)**
+- **[Repaired prepares can't rewind the WAL parent](https://github.com/apache/iggy/pull/3978)**
+- **[The dedup fence survives capacity eviction](https://github.com/apache/iggy/pull/3934)**
+- **[Writes recover after a fast primary rejoin](https://github.com/apache/iggy/pull/3987)**
+- **[A late partition materialiser can't wedge its group](https://github.com/apache/iggy/pull/4007)**
+- **[Partition and metadata repair are driven from the tick](https://github.com/apache/iggy/pull/4006)**
+- **[An unservable header counts as a nack](https://github.com/apache/iggy/pull/4109)**
+- **[Frames no plane claims are refused](https://github.com/apache/iggy/pull/4103)**
+- **[Torn segment tails are truncated instead of resurrected](https://github.com/apache/iggy/pull/3946)**
+- **[Spurious heartbeat elections are prevented](https://github.com/apache/iggy/pull/4194)**, the last change before the tag
 
 ### Durability you choose per topic
 
@@ -204,7 +218,7 @@ The comparisons below cover rate-limited workloads.
 
 <details className="my-6 rounded-xl border border-fd-border px-4 sm:px-6">
 <summary className="cursor-pointer py-4 font-semibold text-fd-foreground">Full benchmark results: 0.9.0 → next version</summary>
-<div className="min-w-0 pb-4">
+<div className="min-w-0 overflow-x-auto pb-4 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
 
 #### Single node: 0.9.0 → next version
 
@@ -269,7 +283,7 @@ The read-ahead makes each read cheaper, but every partition group a pair of node
 
 The next change gives a peer several links, spread over shards. An operator picks the link count per peer, each link carries a contiguous range of shards, and the default stays at today's one. The upgrade rolls, but changing the link count takes a coordinated restart, and nodes that disagree on it refuse each other.
 
-This one is a design, not code, and the read-ahead has to justify it first. If the link shard stays saturated behind the buffer, more links are the answer. If not, the cheaper fix already won.
+This one is a design, not code, and the read-ahead has to justify it first. More links only make sense when the link shard stays saturated behind the buffer. Otherwise the cheaper fix has already won.
 
 All three measured changes are still in development, and every number above will move before they ship. A driver for the OpenMessaging Benchmark is in progress as well, and its results will follow.
 
@@ -338,7 +352,7 @@ This is a major upgrade. Read this list before moving an existing deployment:
 - **[Wildcard bind requires an advertised address](https://github.com/apache/iggy/pull/3923)**, and `cluster.nodes[*].ip` must be a literal IP
 - **[Connector SDK `ConnectivityConfig` replaced by `RetryPolicy`](https://github.com/apache/iggy/pull/4104)** (Rust API only, built plugins are unaffected)
 
-Docker images are available on **[Docker Hub](https://hub.docker.com/u/apache?page=1&search=iggy)**: `apache/iggy:0.9.0` for the server and `apache/iggy-connect:0.5.0` for the connectors runtime.
+The release is available as a [signed source archive](/downloads/) from the Apache Software Foundation. Docker images are available on **[Docker Hub](https://hub.docker.com/u/apache?page=1&search=iggy)**: `apache/iggy:0.9.0` for the server and `apache/iggy-connect:0.5.0` for the connectors runtime.
 
 ---
 
