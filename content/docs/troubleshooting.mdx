@@ -1,0 +1,107 @@
+---
+title: Troubleshooting
+description: "What the most common first-run failures look like, what causes them, and how to fix them."
+---
+
+This page covers the problems people most often hit the first time they run Apache Iggy. Each entry shows what you see, what causes it, and how to fix it.
+
+To collect diagnostic data for a bug report instead, see the `snapshot` command in [CLI commands](/docs/cli/commands).
+
+## Client hangs with no output
+
+**What you see:** the client starts and then prints nothing. It doesn't fail and it doesn't exit.
+
+**Cause:** nothing is listening on the address the client connects to, usually `127.0.0.1:8090`. The server isn't running, is bound to a different address, or hasn't finished starting. By default the SDKs retry the connection forever, and the retries are only logged if your application has logging set up, so all you see is silence.
+
+**Fix:** check the server has started before starting the client. It logs a `server client listeners started` line that includes the address, for example `tcp=127.0.0.1:8090`. You can also check the port directly:
+
+```bash
+nc -zv 127.0.0.1 8090
+```
+
+To make the client fail with an error instead of retrying forever, set `reconnection_retries=0` on the connection string, or call `.with_reconnection_max_retries(Some(0))` on the Rust client builder. Turning on logging in your application also shows each reconnect attempt.
+
+## Docker container can't be reached
+
+**What you see:** the server is running in Docker with `-p 8090:8090`, but clients on the host can't connect. On Docker Desktop the connection may be accepted and then reset straight away.
+
+**Cause:** the image doesn't override the server's addresses, so it binds `127.0.0.1` inside the container, where the published port can't reach it.
+
+**Fix:** set `IGGY_TCP_ADDRESS=0.0.0.0:8090`, and the equivalent for any other transport you expose, along with `IGGY_NODE_ADVERTISED_ADDRESS`. See the `docker run` and Compose examples in [Docker & Helm](/docs/server/docker).
+
+## Server exits with an io_uring error in a container
+
+**What you see:** the server exits at startup with one of these:
+
+```text
+Cannot create server bootstrap executor: Operation not permitted (os error 1): io_uring syscalls are blocked, typically by a container seccomp profile
+```
+
+```text
+Cannot create server bootstrap executor: Out of memory (os error 12): io_uring was denied locked memory for its rings
+```
+
+On a machine with more cores, the same problems can show up as `failed to create io_uring runtime for shard N` instead.
+
+**Cause:** Docker's default seccomp profile blocks the `io_uring` system calls the server needs, or the container's locked-memory limit is too small for the server's io_uring rings.
+
+**Fix:** run the container with `--security-opt seccomp=unconfined` and `--ulimit memlock=-1:-1`, or with a custom seccomp profile and a locked-memory limit big enough for the server. See [Why these capabilities?](/docs/server/docker#why-these-capabilities) and [Linux tuning](/docs/server/linux-tuning#runtime-access-and-process-limits).
+
+## Kernel too old
+
+**What you see:** the server exits with an `io_uring Invalid Argument (EINVAL)` report that includes a line like:
+
+```text
+Kernel 5.15 is too old (need >= 5.19)
+```
+
+**Cause:** on Linux the server needs kernel 5.19 or newer for the io_uring features it uses. WSL2 kernels can be missing io_uring features even on a newer version.
+
+**Fix:** upgrade the host kernel to 5.19 or newer. Under WSL2, run `wsl --update`. Containers use the host's kernel, so it's the host that needs upgrading. See [System requirements](/docs/server/introduction#system-requirements).
+
+## Lost the root password
+
+**What you see:** you started the server without setting credentials, and you don't know the root password.
+
+**Cause:** if `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` aren't set and `--with-default-root-credentials` isn't used, the server generates a random root password on first start and logs it once:
+
+```text
+WARN shard-0 server::boot::credentials: Generated root user password: <password>
+```
+
+It isn't logged again on later starts, because the credentials are only created when the data directory is new.
+
+**Fix:** set `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` before the first start, or use `--with-default-root-credentials` for development. If the password is already lost, deleting the data directory resets it, but that also deletes all data, so only do it on a development instance.
+
+## "Already exists" error when running the CLI again
+
+**What you see:** running `iggy stream create dev` a second time fails:
+
+```text
+Error: CommandError(Problem creating stream (name: dev and ID auto incremented)
+
+Caused by:
+    Stream with name:  already exists.)
+```
+
+The name is missing from the message because of a known bug where error details are lost between the server and the client ([#3735](https://github.com/apache/iggy/issues/3735)).
+
+**Cause:** the stream was created the first time. The CLI reports the server's error rather than skipping streams that already exist.
+
+**Fix:** nothing needs fixing. The stream exists and can be used as it is. Check with `iggy stream list` before creating it if you're running a setup script more than once.
+
+## Client connects, then hangs at login
+
+**What you see:** the client connects, then hangs with no error, while the server logs the connection being accepted and then dropped.
+
+**Cause:** the SDK and the server are from different releases. Clients from before 0.9.0 can't talk to a 0.9.0 server, and the login waits forever instead of failing ([#4262](https://github.com/apache/iggy/issues/4262)).
+
+**Fix:** use the SDK version that matches your server. For the 0.9.0 server that's the `iggy` crate 0.11.0 for Rust and `apache-iggy` 0.9.0 for Python. See [Server compatibility](/docs/sdk/introduction#server-compatibility) for every SDK.
+
+## Server won't start on Docker Desktop
+
+**What you see:** with 0.9.0 on Docker Desktop, every shard logs `Failed to bind memory` and the server exits with `failed to bind shard 0 memory to its NUMA node`.
+
+**Cause:** the server binds each shard's memory to a NUMA node, and Docker Desktop's Linux VM rejects that. The same happens on WSL2 and other hosts with a single NUMA node.
+
+**Fix:** add `-e IGGY_SHARDING_CPU_ALLOCATION=all` to the `docker run` command. Each shard is still pinned to its own core; only the memory binding is skipped, and on a single NUMA node it does nothing useful. This is fixed in the next release.
