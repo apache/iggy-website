@@ -1,0 +1,33 @@
+---
+title: Upgrading from 0.8 to 0.9
+description: "What you need to change when moving from Apache Iggy 0.8 to 0.9: a fresh data directory, matching SDKs, and config changes."
+---
+
+0.9.0 is a major upgrade with breaking changes to the data format, the wire protocol and the server configuration. Work through this list before moving an existing deployment. The [0.9.0 release post](/blogs/2026/09/21/release-0.9.0/) has the full list of changes.
+
+## Start from a fresh data directory
+
+The on-disk format changed, and 0.9.0 can't read a data directory written by 0.8. There is no migration. Copy out anything you need to keep before switching over, then start 0.9.0 with an empty data directory.
+
+## Upgrade the server and every SDK together
+
+0.8 clients can't talk to a 0.9.0 server, and 0.9 clients can't talk to a 0.8 server. There is no fallback between the two protocols, so plan a cutover where the server and all your clients change at the same time, rather than a rolling upgrade.
+
+Check [Server compatibility](/docs/sdk/introduction#server-compatibility) for the SDK version that goes with the 0.9.0 server in each language.
+
+## Review your configuration
+
+Don't carry the old `config.toml` or `IGGY_*` environment variables across unchanged. The server refuses to start if it finds a setting that has moved or been removed.
+
+- **The `[system]` table is gone.** Its `path` key and the tables under it (`runtime`, `logging`, `encryption`, `partition`, `sharding` and `memory_pool`) move to the top level of the config. Environment variables lose `SYSTEM_`, so `IGGY_SYSTEM_PATH` becomes `IGGY_PATH`.
+- **The `[stream]` and `[topic]` tables are gone.** Settings like `segment_size`, `messages_required_to_save` and `size_of_messages_required_to_save` are now set per topic when the topic is created. See [Topic options](/docs/server/topic-options).
+- **`enforce_fsync` and `consumer_offset_enforce_fsync` are gone.** Durability is now chosen per topic, with `durability` and `consumer_offset_durability`. See [Durability](/docs/server/durability).
+- **The `[cluster]` and sharding sections were reworked.** Compare yours with [Configuration](/docs/server/configuration).
+
+## Set an advertised address when listening on all interfaces
+
+If a listener binds to a wildcard address such as `0.0.0.0`, the server now needs an advertised address too, set with `IGGY_NODE_ADVERTISED_ADDRESS` or `node.advertised_address`. 0.8 allowed a wildcard bind without one; 0.9.0 won't start. This affects most Docker deployments. See [Docker & Helm](/docs/server/docker).
+
+## If you build connectors in Rust
+
+In the connector SDK, `ConnectivityConfig` is replaced by `RetryPolicy`. This only affects Rust code written against the SDK. Connector plugins that are already built are unaffected.
