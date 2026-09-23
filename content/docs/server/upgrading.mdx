@@ -28,11 +28,6 @@ Don't carry the old `config.toml` or `IGGY_*` environment variables across uncha
 
 If a listener binds to a wildcard address such as `0.0.0.0`, the server now needs an advertised address too, set with `IGGY_NODE_ADVERTISED_ADDRESS` or `node.advertised_address`. 0.8 allowed a wildcard bind without one; 0.9.0 won't start. This affects most Docker deployments. See [Docker & Helm](/docs/server/docker).
 
-## If you run a cluster
-
-- Each node's `cluster.nodes[*].ip` must be a literal IP address, not a hostname.
-- Clients have to log in before they can read cluster metadata. `PING` is the only command accepted before login. See [Cluster security](/docs/clustering/security).
-
 ## If you build connectors in Rust
 
 In the connector SDK, `ConnectivityConfig` is replaced by `RetryPolicy`. This only affects Rust code written against the SDK. Connector plugins that are already built are unaffected.
