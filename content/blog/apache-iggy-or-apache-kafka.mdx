@@ -1,0 +1,47 @@
+---
+title: "Apache Iggy or Apache Kafka: which problems each one is actually for"
+description: Where Apache Iggy fits against Apache Kafka, when to reach for each one, and what to expect if you already run Kafka.
+author: Justin Mclean
+tags: ["kafka", "comparison", "architecture"]
+date: 2026-09-23
+---
+
+The question I get asked most about Iggy is whether it replaces Kafka. For some things it does and for plenty of others it doesn't, so the useful part is knowing which is which.
+
+## What each one is built for
+
+Kafka is built for scale, and for everything that has grown up around it. The broker runs on the JVM and stores each topic as a partitioned append-only log, replicated to a set of in-sync replicas. KRaft replaced ZooKeeper in 4.0, so a quorum of brokers holds metadata rather than a separate service. Share groups went production-ready in 4.2, so it provides queue semantics as well as log semantics. But what you're really choosing is the ecosystem: Connect, Streams, Schema Registry, every CDC tool and every observability vendor already speak Kafka.
+
+Iggy handles the same streaming work, with lower tail latency and less to run. It's written in Rust and runs thread-per-core on io_uring, with nothing shared between cores, so each partition is owned by a single CPU-pinned shard. It speaks its own binary protocol over TCP, QUIC and WebSocket, with a REST API alongside. Running it means one binary and one config file, with no JVM and nothing else to install. There are SDKs for Rust, Python, Go, Java, C#, Node, C++ and PHP, and it has consumer groups and stores consumer offsets on the server, so consumers work much as they do in Kafka. It's younger than Kafka by a decade, and the current release is 0.9.0.
+
+## Reach for Iggy when
+
+**Operational weight is your main cost.** You're running a single node or a small deployment, and you don't want to operate a JVM cluster: tuning heap and GC, planning partition counts up front, running a rebalancer. Iggy is one binary and one TOML file, with the CLI, Prometheus metrics and OpenTelemetry traces built in. If you want the Web UI, that's a separate app with its own Docker image.
+
+**Tail latency matters more than ecosystem breadth.** There's no garbage collector, so no GC pauses, and thread-per-core with CPU pinning keeps the tail tight. You'll see the difference in your slowest requests, not in messages per second. Iggy publishes its benchmarks at [benchmarks.iggy.apache.org](https://benchmarks.iggy.apache.org) and ships iggy-bench, so you can run the same tests on your own hardware rather than taking anyone's number.
+
+**The deployment target is constrained.** You're deploying to the edge, to a customer's own hardware, or to a single box where a JVM cluster is the wrong shape. Thread-per-core runs on io_uring, so it needs Linux.
+
+**The network is unfriendly.** QUIC and WebSocket are first-class transports here, with TLS on all three. Kafka has nothing equivalent, and that matters when producers sit on links that drop out or behind proxies that only pass HTTP.
+
+**You're starting fresh and Iggy has the connectors you need.** There are 15 sinks and 4 sources, covering Postgres, S3, Iceberg, ClickHouse, Elasticsearch and InfluxDB among others.
+
+## Reach for Kafka when
+
+**You need multi-node durability with a long production record.** Kafka's replication has a decade of production behind it and every failure mode is written up somewhere. Iggy's clustering shipped in 0.9.0. It's based on Viewstamped Replication and tested with deterministic simulation, but that still isn't the same as years of real incidents.
+
+**Your architecture depends on the ecosystem.** You need three connectors and a stream processor, or a schema registry, or an integration a vendor already ships.
+
+**You're running at a scale nobody has run Iggy at.** Someone has to be first, but unless you're willing to do that proving yourself, Kafka is the known quantity.
+
+## If you're already on Kafka
+
+Iggy has a Kafka wire protocol gateway, but it's a work in progress. The plan is to bridge existing Kafka producers and consumers so you can move across gradually without much change on the client side. Until it ships, moving means changing clients.
+
+The realistic pattern is not migration but placement: Kafka where the ecosystem and the scale are, Iggy for the latency-sensitive or footprint-constrained piece that Kafka is awkward for.
+
+## What would change this
+
+This changes as more people run Iggy's clustering in production, when there are more connectors, and when the Kafka gateway is finished.
+
+Until then, Iggy is a good fit for a real and growing set of problems, and Kafka is still the answer for most of the rest. Anyone who tells you it's a straight swap either hasn't run Kafka or hasn't looked at what Iggy ships today.
