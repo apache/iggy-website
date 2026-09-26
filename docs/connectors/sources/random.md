@@ -1,0 +1,59 @@
+# Random Source
+
+> Generate random messages into Iggy streams for testing, benchmarking and verifying a connector pipeline.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sources/random/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sources/random.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+The random source connector generates random messages and sends them to Iggy streams. This is useful for testing, benchmarking, and verifying that your connector pipeline is working correctly without needing an external data source.
+
+## Configuration
+
+Use the broker credentials and runtime setup from the [source guide](https://iggy.apache.org/docs/connectors/sources/source#configuration). Save the configuration below in that runtime's connector directory. From the matching 0.9.0/edge repository root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_random_source
+```
+
+```toml
+type = "source"
+key = "random-source"
+enabled = true
+version = 1
+name = "Random Source"
+path = "target/release/libiggy_connector_random_source"
+verbose = false
+
+[[streams]]
+stream = "my-stream"
+topic = "my-topic"
+schema = "json"
+batch_length = 100
+linger_time = "100ms"
+
+[plugin_config]
+interval = "100ms"
+max_count = 1_000_000
+messages_range = [1, 10]
+payload_size = 256
+```
+
+## Plugin config options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `interval` | string | `"1s"` | Delay before each message generation cycle; invalid duration strings fall back to `"1s"` |
+| `max_count` | usize | unlimited | Stop producing after this many messages in total; omit for unlimited |
+| `messages_range` | [u32, u32] | `[10, 50]` | Min (inclusive) / max (exclusive) messages per batch, capped by the remaining `max_count`; the lower bound must be smaller |
+| `payload_size` | u32 | `100` | Number of random characters in the `text` field of each message |
+
+Setting `max_count = 0` stops production immediately (the connector produces zero messages). To generate messages without a limit, leave the key out.
+
+The connector stages its count for each batch and commits it only after the runtime acknowledges delivery and saves the checkpoint. Restoring that checkpoint enforces `max_count` across restarts; missing or undecodable state starts the count at zero. After reaching the limit, polling continues but returns no messages or new checkpoint.
+
+A non-increasing `messages_range` returns a configuration error when message generation is attempted. The SDK logs poll errors and continues polling. Each generated JSON record contains a random UUID `id`, fixed `title = "Hello"` and `name = "World"`, and random alphanumeric `text`. `payload_size` controls only that text, not the total serialized record size.
+
+Create `my-stream` and `my-topic` before starting the runtime, or change the sample to use an existing destination. Configure one destination per source instance.

@@ -1,0 +1,175 @@
+# Postgres Source
+
+> Stream rows from PostgreSQL into Iggy topics by incremental table polling or change data capture over logical replication.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sources/postgres/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sources/postgres.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+The PostgreSQL source connector fetches data from PostgreSQL databases and streams it to Iggy topics. It supports incremental table polling and Change Data Capture (CDC) via logical replication.
+
+This page is a curated subset of the documentation. The canonical reference, including payload extraction recipes, custom query parameters, and sink round-trip examples, is the upstream [postgres_source README](https://github.com/apache/iggy/tree/master/core/connectors/sources/postgres_source) in the `apache/iggy` repository.
+
+## Features
+
+- **Table Polling**: Incrementally fetch rows using a tracking column
+- **Change Data Capture**: Monitor database changes using PostgreSQL logical replication (`test_decoding` plugin)
+- **Payload Column Extraction**: Emit a single column directly as the message payload (raw bytes, text, or JSONB)
+- **Custom Queries**: Use custom SQL with parameter substitution instead of simple table polling
+- **Delete / Mark Processed**: Optionally delete rows or flag them in a boolean column after acknowledgement
+- **Offset Tracking**: Per-table tracking offsets are persisted as connector state and survive restarts
+- **Automatic Retries**: Transient polling-query errors are retried with a configurable delay
+
+## Configuration
+
+Use the broker credentials and main runtime configuration from the [source guide](https://iggy.apache.org/docs/connectors/sources/source#configuration). Build the plugin from the matching 0.9.0/edge checkout root:
+
+```bash
+cargo build --release -p iggy_connector_postgres_source
+```
+
+The example uses an existing PostgreSQL database named `iggy`, with an `iggy` user and password. Run this SQL in that database:
+
+```sql
+CREATE TABLE users (
+    id BIGINT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    description TEXT NOT NULL
+);
+INSERT INTO users VALUES
+    (123, 'John Doe', 'john@example.com', '2024-01-15T10:29:50Z');
+INSERT INTO orders VALUES (1, 123, 'Example order');
+```
+
+Save this entry in the runtime's connector directory and start the runtime from the checkout root:
+
+```toml
+type = "source"
+key = "postgres-source"
+enabled = true
+version = 1
+name = "Postgres Source"
+path = "target/release/libiggy_connector_postgres_source"
+plugin_config_format = "toml"
+
+[[streams]]
+stream = "database_changes"
+topic = "table_events"
+schema = "json"
+batch_length = 100
+linger_time = "5ms"
+
+[plugin_config]
+connection_string = "postgresql://iggy:iggy@localhost:5432/iggy"
+mode = "polling"
+tables = ["users", "orders"]
+poll_interval = "30s"
+batch_size = 1000
+tracking_column = "id"
+```
+
+Create the destination before starting the runtime:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create database_changes
+./target/release/iggy --username iggy --password iggy topic create database_changes table_events 1 none 1d
+```
+
+After a polling cycle, read the produced records:
+
+```bash
+./target/release/iggy --username iggy --password iggy message poll --offset 0 database_changes table_events 0
+```
+
+### Plugin config options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `connection_string` | string | required | PostgreSQL connection string |
+| `mode` | string | required | `polling` or `cdc` |
+| `tables` | array | required | Polling tables; an empty list polls none. In CDC, an empty list captures all tables |
+| `poll_interval` | string | `"10s"` | Delay before each cycle (e.g. `1s`, `5m`); invalid values fall back to `10s` |
+| `batch_size` | u32 | `1000` | Polling: limit per table, with `0` returning no rows. CDC: a transaction-boundary limit that a transaction can exceed |
+| `tracking_column` | string | `"id"` | Column used by the strict `>` polling watermark |
+| `initial_offset` | string | none | Exclusive starting value when a table has no saved offset |
+| `max_connections` | u32 | `10` | Max database connections |
+| `snake_case_columns` | bool | `false` | Convert column names to snake_case |
+| `include_metadata` | bool | `true` | Polling envelope layout; `false` currently nests the row under `data.data` and retains metadata |
+| `payload_column` | string | none | Column to extract directly as the message payload |
+| `payload_format` | string | none | Defaults to `json`; selected-column formats are described below |
+| `delete_after_read` | bool | `false` | Delete selected rows after Ack; takes precedence over marking |
+| `processed_column` | string | none | Adds a `FALSE` filter to the default query and marks selected rows after Ack |
+| `primary_key_column` | string | `tracking_column` | Primary key used for delete/mark operations |
+| `custom_query` | string | none | Custom SQL with parameter substitution |
+| `replication_slot` | string | `"iggy_slot"` | Replication slot name (CDC mode only) |
+| `capture_operations` | array | `["INSERT","UPDATE","DELETE"]` | CDC operations to capture |
+| `cdc_backend` | string | `"builtin"` | CDC backend; only `builtin` is implemented |
+| `verbose_logging` | bool | `false` | Log at info level instead of debug |
+| `max_retries` | u32 | `3` | Total polling-query attempts, including the first; `0` still makes one attempt |
+| `retry_delay` | string | `"1s"` | Linear delay: this duration times the failed attempt number; invalid values fall back to `1s` |
+
+## Polling and Delivery
+
+The default query selects rows with `tracking_column > last_offset`, orders that column ascending, and applies `batch_size` separately to each table. Use a non-null, unique tracking value that increases in the database's sort order. A timestamp with ties can skip rows at a batch boundary, and inserts or updates at or below the watermark are not revisited. Polling does not capture deletions.
+
+A `custom_query` replaces the entire default query, including its ordering, limit and processed-row filter. Its placeholders are `$table`, `$offset`, `$limit`, `$now` (RFC3339 UTC) and `$now_unix` (integer seconds). Substitution is textual, with no automatic quoting or escaping; `$offset` is empty if neither saved state nor `initial_offset` supplies it. Keep queries trusted and explicitly preserve ascending tracking-column order. The offset comes from the last returned row with a usable tracking value.
+
+Polling stages its cursor and processed-row count until the runtime forwards the batch, saves its checkpoint and sends `Ack`. `Nack` discards that candidate so the next poll can read the rows again. A failure after forwarding can therefore duplicate messages. IDs are random UUIDs for each poll, so replayed rows do not retain a stable message ID.
+
+`delete_after_read` and `processed_column` stage cleanup keys during polling and modify PostgreSQL only after `Ack`. A Nack or failed poll leaves the rows available for replay. Cleanup is separate from delivery and checkpointing: a cleanup error stops the source, and a crash after checkpointing but before cleanup can leave already-delivered rows unmodified in PostgreSQL. Cleanup across tables is not atomic.
+
+The file state backend stores `source_postgres-source.state` under the runtime's state path (default `local_state`). Its MessagePack state contains per-table offsets, a last-poll time and a processed-row count. The HTTP state backend is also available. Missing or undecodable plugin state starts fresh; file access errors prevent startup. Stop the runtime before resetting its checkpoint. `initial_offset` is used only where saved offsets are absent.
+
+The plugin's retries cover transient polling `SELECT` failures, including connection I/O, pool timeouts, serialization failures and deadlocks. Connection setup, CDC fetches and delete/mark statements do not use that retry loop. A poll error is logged and polling continues without incrementing the runtime's forwarding-error counter. Repeated delivery or checkpoint failures instead receive `Nack`; the SDK stops after five consecutive Nacks.
+
+## Output Format
+
+By default (no `payload_column`), each row is wrapped in a JSON envelope:
+
+```json
+{
+  "table_name": "users",
+  "operation_type": "SELECT",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "id": 123,
+    "name": "John Doe",
+    "email": "john@example.com",
+    "updated_at": "2024-01-15T10:29:50Z"
+  },
+  "old_data": null
+}
+```
+
+The stream config should use `schema = "json"`. Flat-schema sinks such as Iceberg need the `unwrap_envelope` transform to extract the `data` field. See the [transforms documentation](https://iggy.apache.org/docs/connectors/transforms).
+
+### Payload Column Extraction
+
+In polling mode, an existing `payload_column` bypasses the envelope. Use `bytea` or `raw` for a BYTEA column with `schema = "raw"`, `text` for a text column with `schema = "text"`, and `json_direct`, `jsonb` or `jsonb_direct` for JSON/JSONB with `schema = "json"`. A null BYTEA/text payload becomes empty bytes, which the Iggy message builder rejects; the entire batch is Nacked. Use non-null, non-empty BYTEA/text payloads. A null JSON/JSONB payload becomes JSON `null` and can be delivered.
+
+The default `payload_format = "json"` reads a selected column as BYTEA but reports JSON to the runtime, so those bytes must contain valid JSON. Without a selected column, the connector always emits a JSON envelope. If the selected column is absent, it falls back to the envelope while retaining the selected format's schema; use a column present in every configured table. Type mismatches reject the poll. See the upstream README for sink round-trip recipes.
+
+With no selected column, `include_metadata = false` currently retains the envelope and adds an extra `data` level. Whole-row BYTEA fields are base64 strings. Keep database timestamps in the payload when needed; the runtime does not copy the plugin's timestamp fields into broker message metadata.
+
+## CDC Mode
+
+With `mode = "cdc"` the connector reads changes from a logical replication slot instead of polling tables:
+
+- The builtin backend creates (or reuses) a logical replication slot using the `test_decoding` output plugin. The default slot name is `iggy_slot`. No publication is created or required, since `test_decoding` ignores publications entirely.
+- PostgreSQL must run with `wal_level = logical` and have `test_decoding` installed and allowed. The login needs access to the logical-decoding SQL functions. This backend uses ordinary SQL connections, not a replication-protocol connection; any proxy must support its SQL and slot operations.
+- `capture_operations` accepts uppercase `INSERT`, `UPDATE` and `DELETE`; an empty array emits none. Filtering happens after reading the slot. Qualified table names match the schema and table; unqualified names match that table name in any schema. An empty `tables` array captures all tables.
+- The `pg_replicate` backend (based on Supabase's ETL framework) is **not implemented**: selecting `cdc_backend = "pg_replicate"` fails at startup unless the `cdc_pg_replicate` build feature is enabled, and the backend returns an error even when it is.
+
+Each connector needs its own slot. Reusing one slot across connectors divides its changes between them. `pg_logical_slot_get_changes` consumes slot progress before delivery, including changes excluded by the filters. A later failure cannot replay those changes from the slot, and the plugin checkpoint does not contain a recovery LSN.
+
+CDC always builds a JSON envelope with the operation and parsed columns. Do not combine it with polling payload extraction options. Deletes contain replica-identity columns; updates may also supply `old_data` from an `old-key` tuple. Quoted `test_decoding` values, including JSONB and arrays, remain strings. Unchanged TOAST values are represented as null, which does not establish that the database value is null. Envelope timestamps are generated while polling, not PostgreSQL transaction commit times.
+
+When decommissioning a CDC connector, stop it and drop its replication slot to stop WAL retention. With PostgreSQL's default `max_slot_wal_keep_size = -1`, an unused slot can retain unbounded WAL. See the upstream README for details.

@@ -1,0 +1,95 @@
+# Delta Lake Sink
+
+> Write messages from Iggy streams into Delta Lake tables on local disk, S3, Azure Blob Storage or Google Cloud Storage.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sinks/delta/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sinks/delta.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+The Delta Lake sink connector consumes messages from Iggy streams and writes them to Delta Lake tables on the local filesystem, AWS S3, Azure Blob Storage, or Google Cloud Storage. Each successful nonempty batch is flushed and appended in one Delta transaction.
+
+This page is a curated subset of the documentation. The canonical reference is the upstream [delta_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/delta_sink) in the `apache/iggy` repository.
+
+## Configuration
+
+Use the broker credentials and runtime setup from the [sink guide](https://iggy.apache.org/docs/connectors/sinks/sink#configuration). Save the configuration below in the runtime's connector directory. From the matching 0.9.0/edge repository root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_delta_sink
+```
+
+```toml
+type = "sink"
+key = "delta"
+enabled = true
+version = 0
+name = "Delta Lake sink"
+path = "target/release/libiggy_connector_delta_sink"
+
+[[streams]]
+stream = "events"
+topics = ["user_events"]
+schema = "json"
+batch_length = 100
+poll_interval = "5ms"
+consumer_group = "delta_sink_connector"
+
+[plugin_config]
+table_uri = "file:///tmp/iggy_delta_table"
+```
+
+Create the target table with your [Delta Lake tools](https://delta-io.github.io/delta-rs/usage/writing/) before starting the connector. The table must already exist at `table_uri`: the connector opens it at startup and fails if it's missing. It doesn't create tables. Only JSON payloads are supported (`schema = "json"` on the stream). A batch containing another payload type fails.
+
+For a table with columns `id` (long) and `name` (string), create the Iggy resources and send a row:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create events
+./target/release/iggy --username iggy --password iggy topic create events user_events 1 none 1d
+./target/release/iggy --username iggy --password iggy message send --partition-id 0 events user_events '{"id":1,"name":"hello"}'
+```
+
+Use a `file:///...` URI for an absolute local path; bare filesystem paths are not accepted.
+
+### Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `table_uri` | string | **required** | Absolute URI of the Delta table: `file://`, `s3://`, `az://`, or `gs://` |
+| `storage_backend_type` | string | none | `s3`, `azure`, or `gcs`. Omit for local filesystem tables |
+
+When `storage_backend_type` selects a backend, the connector validates these credential options:
+
+- **S3**: `aws_s3_access_key`, `aws_s3_secret_key`, and `aws_s3_region` are required. `aws_s3_endpoint_url` is optional, for S3-compatible stores like MinIO. `aws_s3_allow_http` is optional and defaults to `false`.
+- **Azure**: `azure_storage_account_name`, `azure_container_name`, and either `azure_storage_account_key` or `azure_storage_sas_token` (not both).
+- **GCS**: `gcs_service_account_key` (the service account JSON as a string, with the bucket taken from the `gs://` URI).
+
+### S3 example
+
+```toml
+[plugin_config]
+table_uri = "s3://my-bucket/delta-tables/users"
+storage_backend_type = "s3"
+aws_s3_access_key = "your-access-key"
+aws_s3_secret_key = "your-secret-key"
+aws_s3_region = "us-east-1"
+```
+
+## Type Coercion
+
+JSON values are coerced to the Delta table schema before writing:
+
+- **Timestamp columns**: ISO 8601 / RFC 3339 strings (e.g. `"2021-11-11T22:11:58Z"`) are converted to microsecond timestamps. Integer timestamps pass through as epoch microseconds. Space-separated timestamps such as `"2021-11-11 22:11:58"` are interpreted as UTC. Invalid timestamp strings fail the batch.
+- **String columns**: non-null, non-string values are converted to their JSON string representation. Nulls remain null.
+- Coercions cover nested structs, arrays of strings or timestamps, and arrays of structs. Nested arrays, maps, and variant columns pass through without these coercions.
+
+The table schema is captured once at startup and not refreshed, so restart the connector after changing it.
+
+## Batching & Transactions
+
+Each nonempty batch passed to the plugin is written to Parquet buffers and appended in a single Delta log transaction. Empty batches create no transaction in `consume()`. The stream's `batch_length` is a polling limit, so it influences Delta commit granularity: small batches produce many small files and table versions, so prefer larger batches for production tables (and compact periodically). The plugin has no retry loop for failed batches, though the Delta library retries eligible commit conflicts and storage requests. A write or commit failure clears the writer buffers and returns a connector error. The runtime uses consumer auto-commit and does not replay that failed batch, so the Delta transaction does not provide an end-to-end at-least-once guarantee.
+
+## Transforms
+
+Transforms can be applied before writing to Delta Lake. See the [transforms documentation](https://iggy.apache.org/docs/connectors/transforms) for the available types and their configuration.

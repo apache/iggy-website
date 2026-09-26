@@ -1,0 +1,230 @@
+# Transforms
+
+> Mutate, filter and convert messages as they pass through the connector runtime, and how each transform is configured.
+
+Rendered page: https://iggy.apache.org/docs/connectors/transforms/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/transforms.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Transforms mutate, filter, or convert messages as they flow through the connector runtime. They run inside the runtime process, not inside the plugins. For source connectors they're applied after the plugin's messages are decoded and before producing to Iggy. For sink connectors, after consuming from Iggy and before handing the messages to the plugin.
+
+A transform receives each decoded message and returns either the (possibly modified) message, or nothing - in which case the message is dropped from the batch. A transform can also return an error. A source rejects the whole batch and its checkpoint on a transform error; a sink drops the affected message and continues processing the batch.
+
+## Configuration
+
+Transforms are configured per connector in the `transforms` section of the connector configuration file. Each transform type is a table keyed by its name, so a connector can have at most one instance of each type:
+
+```toml
+[transforms.add_fields]
+enabled = true
+
+[[transforms.add_fields.fields]]
+key = "message"
+value.static = "hello"
+
+[transforms.delete_fields]
+enabled = true
+fields = ["internal_id"]
+```
+
+Two rules apply to every transform:
+
+- The `enabled` key is required. A transform section without it fails to load, and a transform with `enabled = false` is skipped.
+- The order of the sections in the file doesn't determine the execution order, so don't rely on one transform seeing the output of another.
+
+The field-level transforms (`add_fields`, `delete_fields`, `filter_fields`, `update_fields`, `unwrap_envelope`) operate on JSON objects only. Other JSON values and other payload formats pass through them unchanged.
+
+## add_fields
+
+Adds top-level fields to the message payload, replacing any existing value with the same key. Each field has a `key` and a `value`, which is either static or computed at runtime:
+
+```toml
+[transforms.add_fields]
+enabled = true
+
+[[transforms.add_fields.fields]]
+key = "source"
+value.static = "orders-service"
+
+[[transforms.add_fields.fields]]
+key = "ingested_at"
+value.computed = "timestamp_millis"
+```
+
+The available computed values are:
+
+| Value                | Result                                    |
+|----------------------|-------------------------------------------|
+| `date_time`          | Current date and time as an RFC 3339 string |
+| `timestamp_nanos`    | Current Unix timestamp in nanoseconds     |
+| `timestamp_micros`   | Current Unix timestamp in microseconds    |
+| `timestamp_millis`   | Current Unix timestamp in milliseconds    |
+| `timestamp_seconds`  | Current Unix timestamp in seconds         |
+| `uuid_v4`            | Random UUID (version 4)                   |
+| `uuid_v7`            | Time-ordered UUID (version 7)             |
+
+## delete_fields
+
+Removes the listed top-level fields from the message payload:
+
+```toml
+[transforms.delete_fields]
+enabled = true
+fields = ["debug_info", "internal_id"]
+```
+
+## update_fields
+
+Sets fields to static or computed values, optionally guarded by a condition:
+
+```toml
+[transforms.update_fields]
+enabled = true
+
+[[transforms.update_fields.fields]]
+key = "updated_at"
+value.computed = "date_time"
+
+[[transforms.update_fields.fields]]
+key = "id"
+value.computed = "uuid_v7"
+condition = "key_not_exists"
+```
+
+The `condition` values are `always` (the default when omitted - sets the field whether or not it exists), `key_exists` (update only when the field is already present), and `key_not_exists` (add only when the field is absent).
+
+## filter_fields
+
+Keeps or drops fields of the payload based on key and value patterns:
+
+```toml
+[transforms.filter_fields]
+enabled = true
+keep_fields = ["id"]
+include_matching = true
+
+[[transforms.filter_fields.patterns]]
+key_pattern = { starts_with = "user_" }
+
+[[transforms.filter_fields.patterns]]
+key_pattern = { regex = "^order_[0-9]+$" }
+value_pattern = "is_not_null"
+```
+
+- **`keep_fields`**: fields that are always kept, regardless of the patterns.
+- **`patterns`**: a list of patterns. A field matches when any pattern matches. Within one pattern, `key_pattern` and `value_pattern` must both match when both are set (an omitted one matches everything).
+- **`include_matching`**: `true` (default) keeps the matching fields and drops the rest. `false` drops the matching fields and keeps the rest.
+
+An empty `keep_fields` list together with an empty `patterns` list leaves the payload unchanged. Invalid regular expressions fail configuration loading. Numeric `between` comparisons include both endpoints.
+
+`key_pattern` variants: `exact`, `starts_with`, `ends_with`, `contains`, `regex` - each takes a string, e.g. `key_pattern = { contains = "name" }`.
+
+`value_pattern` variants: `equals` (any JSON value), `contains` (substring), `regex`, `greater_than`, `less_than`, `between` (e.g. `{ between = [1.0, 10.0] }`), and the parameterless checks `is_null`, `is_not_null`, `is_string`, `is_number`, `is_boolean`, `is_object`, `is_array` (written as plain strings, e.g. `value_pattern = "is_number"`).
+
+## unwrap_envelope
+
+Promotes a nested field of a JSON envelope to the top-level payload. Given `{ "table": "...", "operation": "...", "data": { ... } }`, setting `field = "data"` replaces the whole payload with the contents of `data`:
+
+```toml
+[transforms.unwrap_envelope]
+enabled = true
+field = "data"
+```
+
+`field` must not be empty. Messages that aren't JSON objects, or that don't contain the field, pass through unchanged.
+
+## proto_convert
+
+Converts messages between Protocol Buffers and other formats. This example exposes the `type_url` and base64 `value` of an Any envelope received as raw bytes. See the **[SDK documentation](https://iggy.apache.org/docs/connectors/sdk)** for a complete runtime configuration and the schema loading details:
+
+```toml
+[transforms.proto_convert]
+enabled = true
+source_format = "proto"
+target_format = "json"
+include_paths = ["."]
+preserve_unknown_fields = false
+
+[transforms.proto_convert.conversion_options]
+validate_messages = true
+pretty_json = false
+include_metadata = false
+type_url_prefix = "type.googleapis.com"
+strict_mode = false
+```
+
+Optional keys: `schema_path`, `message_type`, `field_mappings` (rename JSON input fields, e.g. `field_mappings = { "old" = "new" }`), `descriptor_set` (pre-compiled descriptor bytes instead of a `.proto` file), and the inactive `schema_registry_url`.
+
+A loaded descriptor is used for JSON-to-protobuf encoding. Without one, that direction produces JSON text in `Payload::Proto`. Protobuf-to-JSON conversion does not decode a custom message descriptor: it parses text as JSON, exposes an Any envelope, or returns metadata containing base64 raw data. Protobuf-to-Avro/FlatBuffers conversion only rewraps the bytes.
+
+`preserve_unknown_fields`, `validate_messages`, `type_url_prefix`, and `strict_mode` are accepted but have no effect. `pretty_json` affects JSON text output, and `include_metadata` adds fields on the supported protobuf-to-JSON paths.
+
+## flat_buffer_convert
+
+Converts JSON to the SDK's generic FlatBuffer representation, or exposes FlatBuffer bytes as metadata, base64 text, or raw bytes. It does not interpret an external `.fbs` schema. This example can be added to a JSON-producing source with `streams.schema = "flat_buffer"`:
+
+```toml
+[transforms.flat_buffer_convert]
+enabled = true
+source_format = "json"
+target_format = "flat_buffer"
+include_paths = ["."]
+preserve_unknown_fields = false
+
+[transforms.flat_buffer_convert.conversion_options]
+verify_buffers = true
+pretty_json = false
+include_metadata = false
+buffer_size_hint = 1024
+strict_mode = false
+```
+
+Optional keys: `schema_path`, `root_table_name`, `field_mappings`. JSON encoding uses a generic key/value representation, so its output is not a buffer for an arbitrary generated table type. FlatBuffer-to-JSON returns buffer metadata and base64 bytes, not decoded table fields.
+
+`schema_path`, `include_paths`, and `preserve_unknown_fields` have no effect. `root_table_name` only labels decoding metadata. `verify_buffers` checks the minimum buffer length (four bytes), not a schema-aware verifier; `buffer_size_hint` sets the initial encoder capacity. `pretty_json`, `include_metadata`, and `strict_mode` have no effect.
+
+The input payload variant must match `source_format`. The default `flat_buffer` stream decoder already returns JSON metadata, so it does not supply `Payload::FlatBuffer` to a following reverse transform.
+
+## avro_convert
+
+Converts JSON to a raw Avro datum and Avro data to JSON. The schema can be given inline (`schema_json`) or as a file (`schema_path`); the inline schema takes precedence. This example can be added to the Random source with `streams.schema = "avro"`:
+
+```toml
+[transforms.avro_convert]
+enabled = true
+source_format = "json"
+target_format = "avro"
+schema_json = '''{
+  "type": "record",
+  "name": "Message",
+  "fields": [
+    { "name": "title", "type": "string" },
+    { "name": "name", "type": "string" }
+  ]
+}'''
+
+[transforms.avro_convert.conversion_options]
+pretty_json = false
+include_metadata = false
+strict_mode = false
+```
+
+Optional keys: `schema_path`, `schema_json`, `field_mappings`. JSON encoding and Avro-to-JSON decoding require a schema; input values must match its field types. The wire payload is one raw Avro datum, not an Avro object container file. Decoding rejects trailing bytes.
+
+`field_mappings` renames input JSON fields or fields decoded from Avro. Text input is not field-mapped. Text-to-Avro parses JSON before encoding; Raw-to-Avro rewraps existing bytes without validating them. Avro-to-Text emits base64 and Avro-to-Raw preserves the bytes. All three `conversion_options` keys are accepted but have no effect. Unsupported conversion pairs pass their input through unchanged.
+
+To consume raw Avro records in a sink, configure `schema = "avro"` and `avro_schema_json` or `avro_schema_path` in its `[[streams]]` entry. The runtime decodes the datum into JSON before running transforms. A following `avro_convert` with `source_format = "avro"` would therefore receive the wrong payload variant.
+
+Unlike the field-level transforms, the three format-conversion transforms define no per-key defaults: every key shown in their examples (except the ones listed as optional) must be present, or the connector configuration fails to load. The `source_format` and `target_format` keys accept any schema value: `json`, `raw`, `text`, `proto`, `flat_buffer`, `avro`. The FlatBuffers transform additionally restricts the pair: only JSON to/from FlatBuffers, FlatBuffers to Text or Raw, and identity conversions are accepted. Any other combination fails the configuration load.
+
+## Adding a new transform
+
+The extension point is the SDK (`core/connectors/sdk/src/transforms/`):
+
+1. Add a new module implementing the `Transform` trait.
+2. Add a variant to the `TransformType` enum.
+3. Add a match arm to the `from_config` function deserializing your config.
+
+The runtime loads transforms generically by `TransformType`, so no runtime changes are needed.

@@ -1,0 +1,300 @@
+# Sink
+
+> What sink connectors do, and the Sink trait every one of them implements.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sinks/sink/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sinks/sink.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+## Overview
+
+Sink connectors are responsible for writing data from Iggy streams to external systems or destinations. They provide a way to integrate Apache Iggy with various data sources and destinations, enabling data flow between Iggy and external systems.
+
+The sink is represented by the single `Sink` trait, which defines the basic interface for all sink connectors. It provides methods for initializing the sink, writing data to external destination, and closing the sink.
+
+```rust
+use async_trait::async_trait;
+use iggy_connector_sdk::{ConsumedMessage, Error, MessagesMetadata, TopicMetadata};
+
+#[async_trait]
+pub trait Sink: Send + Sync {
+    /// Invoked when the sink is initialized, allowing it to perform any necessary setup.
+    async fn open(&mut self) -> Result<(), Error>;
+
+    /// Invoked every time a batch of messages is received from the configured stream(s) and topic(s).
+    async fn consume(
+        &self,
+        topic_metadata: &TopicMetadata,
+        messages_metadata: MessagesMetadata,
+        messages: Vec<ConsumedMessage>,
+    ) -> Result<(), Error>;
+
+    /// Invoked when the sink is closed, allowing it to perform any necessary cleanup.
+    async fn close(&mut self) -> Result<(), Error>;
+}
+```
+
+## Configuration
+
+With the local configuration provider, each sink connector has a TOML file in the directory specified by the main runtime config. The [runtime](https://iggy.apache.org/docs/connectors/runtime#configuration-providers) also supports an HTTP configuration provider.
+
+| Field | Meaning |
+|-------|---------|
+| `key` | Connector key (`String`), separate from the numeric plugin instance ID. |
+| `enabled` | Whether to start the connector (`bool`). |
+| `version` | Configuration version (`u64`). |
+| `name` | Display name (`String`). |
+| `path` | Shared-library path (`String`). |
+| `streams` | Stream configuration entries. |
+| `transforms` | Optional transform configuration. |
+| `plugin_config` | Optional custom configuration object deserialized by the plugin. |
+| `plugin_config_format` | Optional default format for the HTTP API's plugin-config response. The FFI always receives JSON. |
+| `verbose`, `benchmark` | Optional logging flags (`bool`). |
+
+The two flags at the end are optional and default to `false`: `verbose` switches the connector's per-batch logging to info level, and `benchmark` emits per-batch timing events for performance measurement.
+
+**Main runtime config (connectors.toml, in the repository root):**
+
+Use the matching 0.9.0/edge checkout and broker from the [quick start](https://iggy.apache.org/docs/connectors/introduction#quick-start). Its broker must use the credentials below. Create the `connectors` directory, then save these two configuration files there and in the repository root as labeled.
+
+```toml
+[iggy]
+address = "localhost:8090"
+username = "iggy"
+password = "iggy"
+
+[connectors]
+config_type = "local"
+config_dir = "connectors"
+```
+
+**Sink connector config (connectors/stdout.toml):**
+
+```toml
+# Type of connector (sink or source)
+type = "sink"
+key = "stdout" # Unique sink key
+
+# Required configuration for a sink connector
+enabled = true
+version = 0
+name = "Stdout sink"
+path = "target/release/libiggy_connector_stdout_sink"
+plugin_config_format = "toml"
+
+# Collection of the streams from which messages are consumed
+[[streams]]
+stream = "example_stream"
+topics = ["example_topic"]
+schema = "json"
+batch_length = 100
+poll_interval = "5ms"
+consumer_group = "stdout_sink_connector"
+# batch_length, poll_interval and consumer_group are optional; the runtime
+# defaults are 1000, "5ms" and "iggy-connect-sink-<key>" respectively.
+
+# Custom configuration for the sink connector, deserialized to type T from `plugin_config` field
+[plugin_config]
+print_payload = true
+
+# Optional data transformation(s) to be applied after consuming messages from the stream
+[transforms.add_fields]
+enabled = true
+
+# Collection of the fields transforms to be applied after consuming messages from the stream
+[[transforms.add_fields.fields]]
+key = "message"
+value.static = "hello"
+```
+
+### Environment Variable Overrides
+
+Configuration properties can be overridden using environment variables. Supported scalar fields and indexed stream entries use the pattern: `IGGY_CONNECTORS_SINK_[KEY]_[PROPERTY]`
+
+For example, to disable the sink with key `stdout` at the next runtime start:
+
+```bash
+export IGGY_CONNECTORS_SINK_STDOUT_ENABLED=false
+```
+
+Top-level fields of `plugin_config` can be overridden (or injected) the same way with the `IGGY_CONNECTORS_SINK_[KEY]_PLUGIN_CONFIG_[FIELD]` pattern. This lets you supply credentials without writing them into the TOML file:
+
+```bash
+export IGGY_CONNECTORS_SINK_STDOUT_PLUGIN_CONFIG_PRINT_PAYLOAD=true
+```
+
+## Sample implementation
+
+Let's implement the example sink connector, which will simply print the messages to the standard output.
+
+This sink keeps an in-memory invocation counter. The runtime does not persist sink plugin state; Iggy consumer-group offsets are managed separately.
+
+Also, when implementing the sink connector, make sure to use the `sink_connector!` macro to expose the FFI interface and allow the connector runtime to register the sink with the runtime.
+
+And finally, each sink should have its own, custom configuration, which is passed along with the unique plugin ID via expected `new()` method.
+
+Use the [reference crate's Cargo.toml](https://github.com/apache/iggy/blob/master/core/connectors/sinks/stdout_sink/Cargo.toml) from the matching checkout, including `[lib] crate-type = ["cdylib", "lib"]` and its workspace dependency features. The Rust blocks through the `Sink` implementation below combine into `src/lib.rs`; the trait above is a separate API reference.
+
+Start with the imports, then define the state, connector and configuration.
+
+```rust
+use async_trait::async_trait;
+use iggy_connector_sdk::{
+    ConsumedMessage, Error, MessagesMetadata, Sink, TopicMetadata, sink_connector,
+};
+use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
+use tracing::info;
+```
+
+```rust
+#[derive(Debug)]
+struct State {
+    invocations_count: usize,
+}
+```
+
+```rust
+#[derive(Debug)]
+pub struct StdoutSink {
+    id: u32,
+    print_payload: bool,
+    state: Mutex<State>,
+}
+```
+
+```rust
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StdoutSinkConfig {
+    print_payload: Option<bool>,
+}
+```
+
+```rust
+impl StdoutSink {
+    pub fn new(id: u32, config: StdoutSinkConfig) -> Self {
+        StdoutSink {
+            id,
+            print_payload: config.print_payload.unwrap_or(false),
+            state: Mutex::new(State { invocations_count: 0 }),
+        }
+    }
+}
+```
+
+We can invoke the expected macro to expose the FFI interface and allow the connector runtime to register the sink within the runtime.
+
+```rust
+sink_connector!(StdoutSink);
+```
+
+The reference manifest supplies these dependencies:
+
+- async-trait
+- dashmap
+- iggy_connector_sdk
+- serde
+- tokio
+- tracing
+
+Now, let's implement the `Sink` trait for our `StdoutSink` struct.
+
+```rust
+#[async_trait]
+impl Sink for StdoutSink {
+    async fn open(&mut self) -> Result<(), Error> {
+        info!(
+            "Opened stdout sink connector with ID: {}, print payload: {}",
+            self.id, self.print_payload
+        );
+        Ok(())
+    }
+
+    async fn consume(
+        &self,
+        topic_metadata: &TopicMetadata,
+        messages_metadata: MessagesMetadata,
+        messages: Vec<ConsumedMessage>,
+    ) -> Result<(), Error> {
+        let mut state = self.state.lock().await;
+        state.invocations_count += 1;
+        let invocation = state.invocations_count;
+        drop(state);
+
+        info!(
+            "Stdout sink with ID: {} received: {} messages, schema: {}, stream: {}, topic: {}, partition: {}, offset: {}, invocation: {}",
+            self.id,
+            messages.len(),
+            messages_metadata.schema,
+            topic_metadata.stream,
+            topic_metadata.topic,
+            messages_metadata.partition_id,
+            messages_metadata.current_offset,
+            invocation
+        );
+        if self.print_payload {
+            for message in messages {
+                info!(
+                    "Message offset: {}, payload: {:#?}",
+                    message.offset, message.payload
+                );
+            }
+        }
+        Ok(())
+    }
+
+    async fn close(&mut self) -> Result<(), Error> {
+        info!("Stdout sink connector with ID: {} is closed.", self.id);
+        Ok(())
+    }
+}
+```
+
+It's also important to note, that the supported format(s) might vary depending on the connector implementation. For example, you might expect `JSON` as the payload format, which can be then easily parsed and processed by upstream components such as data transforms, but at the same time, you could support the other formats and let the user decide which one to use.
+
+For a sink that only prints JSON, replace the `if self.print_payload` block in `consume()` with `print_json_messages(messages, &messages_metadata);` and add this function. Unsupported payloads are logged and skipped by this variant:
+
+```rust
+use iggy_connector_sdk::Payload;
+use tracing::warn;
+
+pub fn print_json_messages(messages: Vec<ConsumedMessage>, metadata: &MessagesMetadata) {
+    for message in messages {
+        match message.payload {
+            Payload::Json(value) => info!("JSON payload: {value}"),
+            _ => warn!("Unsupported payload format: {}", metadata.schema),
+        }
+    }
+}
+```
+
+While the schema of messages (that will be consumed from the Iggy stream), cannot be controlled by the sink connector itself, the built-in configuration allows to decide what's the expected format of the messages (the particular `StreamDecoder` will be used).
+
+The runtime logs and counts decoding or transform failures, drops the affected messages and passes the remaining batch to the plugin. A plugin `consume()` error is counted as a failed batch. The runtime uses auto-commit when polling and does not automatically retry that failed batch; any destination retry must be implemented by the plugin.
+
+Build the matching plugin, runtime and CLI from the repository root:
+
+```bash
+cargo build --release -p iggy_connector_stdout_sink -p iggy-connectors -p iggy-cli
+```
+
+On an empty broker, create the configured stream and topic:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create example_stream
+./target/release/iggy --username iggy --password iggy topic create example_stream example_topic 1 none 1d
+```
+
+After saving the configuration files above, start the runtime. This explicitly enables the sink if you tried the optional disabling override:
+
+```bash
+IGGY_CONNECTORS_SINK_STDOUT_ENABLED=true IGGY_CONNECTORS_CONFIG_PATH=connectors.toml cargo run --release --bin iggy-connectors
+```
+
+Produce JSON messages to this topic, for example with the [Random source](https://iggy.apache.org/docs/connectors/sources/random), to see the sink output.
+
+And that's all, enjoy using the sink connector!
+
+On a side note, if you'd like to produce the messages to the Iggy stream instead, you can implement your own **[Source connector](https://github.com/apache/iggy/tree/master/core/connectors/sources)** too :)
