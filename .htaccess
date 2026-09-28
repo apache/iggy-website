@@ -21,3 +21,9 @@
 # "Not Found" body and the 404.html produced by `next build` is never used.
 # The status code stays 404 either way; this only replaces the body.
 ErrorDocument 404 /404.html
+
+# CSP permissions for iggy.apache.org: the kapa.ai "Ask AI" widget and the
+# Google reCAPTCHA it uses. kapa.ai is approved by VP Data Privacy in the ASF
+# privacy policy:
+# https://privacy.apache.org/policies/privacy-policy-public.html#i-kapaai
+SetEnv CSP_PROJECT_DOMAINS "https://widget.kapa.ai/ https://proxy.kapa.ai/ https://kapa-widget-proxy-la7dkmplpq-uc.a.run.app/ https://metrics.kapa.ai/ https://www.google.com/ https://www.gstatic.com/"
