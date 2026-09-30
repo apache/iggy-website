@@ -7,7 +7,7 @@ You will build a small order-processing service. A producer writes order events 
 
 ## Before we start
 
-You need Docker, Python 3.10 to 3.13, and the Python SDK in a virtual environment. On Linux the server needs kernel 5.19 or newer; macOS has no kernel requirement. See [System requirements](/docs/server/introduction#system-requirements).
+You need Docker, Python 3.10 to 3.13, and the Python SDK in a virtual environment. On Linux the server needs kernel 5.19 or newer, but macOS has no kernel requirement (see [System requirements](/docs/server/introduction#system-requirements)).
 
 ```bash
 python -m venv .venv
@@ -15,7 +15,7 @@ source .venv/bin/activate
 pip install apache-iggy
 ```
 
-Consumer groups need a binary transport. TCP is used here. HTTP cannot join a group; see [Consumer groups](/docs/introduction/concepts#consumer-groups) and the [FAQ](/docs/faq/faq).
+Consumer groups need a binary transport, so this tutorial uses TCP. HTTP cannot join a group (see [Consumer groups](/docs/introduction/concepts#consumer-groups) and the [FAQ](/docs/faq/faq)).
 
 ## Start the server
 
@@ -90,7 +90,7 @@ async def main():
 asyncio.run(main())
 ```
 
-`Partitioning.messages_key` hashes the key to pick the partition. Orders for one customer stay in order because they share a partition. The connection string comes from the environment, so the same script works against a server on another host; see [Connection strings](/docs/sdk/connection-strings).
+`Partitioning.messages_key` hashes the key to pick the partition, so orders for one customer share a partition and stay in order. The connection string comes from the environment, so the same script works against a server on another host (see [Connection strings](/docs/sdk/connection-strings)).
 
 Run it:
 
@@ -98,7 +98,7 @@ Run it:
 python orders_producer.py
 ```
 
-Output from one run. Yours will differ because customers are random.
+This is the output from one run. Yours will differ because customers are picked at random.
 
 ```
 order  1 customer=eve -> partition 2 offset 0
@@ -182,9 +182,9 @@ async def main():
 asyncio.run(main())
 ```
 
-`consume_messages` runs until the shutdown event is set. Ctrl-C, or a SIGTERM from a supervisor, sets it; the current message finishes and the call returns. The instance name is only for the log.
+`consume_messages` runs until the shutdown event is set. Ctrl-C, or a SIGTERM from a supervisor, sets it, and the current message finishes before the call returns. The instance name is only used in the log.
 
-`AutoCommit.After` stores the offset once the handler returns, whether or not it raised, so handle errors inside `handle`.
+`AutoCommit.After` stores the offset once the handler returns, even if it raised an exception. Handle errors inside `handle`, or a failed message is skipped rather than retried.
 
 ## Run it
 
@@ -225,7 +225,7 @@ python order_service.py svc-b
 python orders_producer.py
 ```
 
-The server rebalances. In this run `svc-b` took partition 2 and `svc-a` kept 0 and 1. No order was printed by both.
+The server rebalances the group. In this run `svc-b` took partition 2 and `svc-a` kept 0 and 1, and no order was printed by both.
 
 ```
 [svc-b] joined group order-processors, waiting for orders
@@ -261,7 +261,7 @@ The server rebalances. In this run `svc-b` took partition 2 and `svc-a` kept 0 a
 [svc-b] partition 2 offset 26: order 15 for ada total 81.49
 ```
 
-**Resume.** Start `svc-a` again. It prints only its `joined` line: the group's stored offsets mean nothing is replayed. Run the producer once more and `svc-a` gets partition 2 back:
+**Resume.** Start `svc-a` again. It prints only its `joined` line, because the group's stored offsets mean nothing is replayed. Run the producer once more and `svc-a` gets partition 2 back:
 
 ```
 [svc-a] joined group order-processors, waiting for orders
@@ -271,10 +271,10 @@ The server rebalances. In this run `svc-b` took partition 2 and `svc-a` kept 0 a
 [svc-a] partition 2 offset 37: order 15 for bob total 158.09
 ```
 
-Rebalancing is cooperative. When a partition moves, the server stops the previous owner polling it, then hands it over, with a timeout that defaults to 30 seconds. See [How does consumer group rebalancing work?](/docs/faq/faq#q-how-does-consumer-group-rebalancing-work).
+When a partition moves, the server stops the old owner polling it before handing it to the new one, and waits up to 30 seconds by default (see [How does consumer group rebalancing work?](/docs/faq/faq#q-how-does-consumer-group-rebalancing-work)).
 
 ## Running it again
 
-The producer creates the stream and topic only if they are missing, so it can be run any number of times. A restarted service resumes from the group's stored offset. To start from nothing, stop the container; `--rm` removes it and its data.
+The producer creates the stream and topic only if they are missing, so it can be run any number of times. A restarted service resumes from the group's stored offset. To start from nothing, stop the container, and `--rm` removes it along with its data.
 
 The service is the same consumer shape as the [high-level consumer example](https://github.com/apache/iggy/blob/master/examples/python/high-level/consumer.py) in the repository, with a JSON handler and signal handling added.
