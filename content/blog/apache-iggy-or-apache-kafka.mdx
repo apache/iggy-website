@@ -16,11 +16,11 @@ Iggy handles the same streaming work, with lower tail latency and less to run. I
 
 ## Reach for Iggy when
 
-**Operational weight is your main cost.** You're running a single node or a small deployment, and you don't want to operate a JVM cluster: tuning heap and GC, planning partition counts up front, running a rebalancer. Iggy is one binary and one TOML file, with the CLI, Prometheus metrics and OpenTelemetry traces built in. If you want the Web UI, that's a separate app with its own Docker image.
+**Operational weight is your main cost.** You're running a single node or a small cluster, and you don't want to operate a JVM cluster: tuning heap and GC, planning partition counts up front, running a rebalancer. Iggy is one binary and one TOML file, with the CLI, Prometheus metrics and OpenTelemetry traces built in. A cluster is the same binary, with every node loading the same TOML file. If you want the Web UI, that's a separate app with its own Docker image.
 
 **Tail latency matters more than ecosystem breadth.** There's no garbage collector, so no GC pauses, and thread-per-core with CPU pinning keeps the tail tight. You'll see the difference in your slowest requests, not in messages per second. Iggy publishes its benchmarks at [benchmarks.iggy.apache.org](https://benchmarks.iggy.apache.org) and ships iggy-bench, so you can run the same tests on your own hardware rather than taking anyone's number.
 
-**The deployment target is constrained.** You're deploying to the edge, to a customer's own hardware, or to a single box where a JVM cluster is the wrong shape. Thread-per-core runs on io_uring, so it needs Linux.
+**The deployment target is constrained.** You're deploying to the edge, to a customer's own hardware, or to a single box where a JVM cluster is the wrong shape. Thread-per-core runs on io_uring, so it needs a recent Linux kernel: 5.19 or newer.
 
 **The network is unfriendly.** QUIC and WebSocket are first-class transports here, with TLS on all three. Kafka has nothing equivalent, and that matters when producers sit on links that drop out or behind proxies that only pass HTTP.
 
@@ -28,7 +28,7 @@ Iggy handles the same streaming work, with lower tail latency and less to run. I
 
 ## Reach for Kafka when
 
-**You need multi-node durability with a long production record.** Kafka's replication has a decade of production behind it and every failure mode is written up somewhere. Iggy's clustering shipped in 0.9.0. It's based on Viewstamped Replication and tested with deterministic simulation, but that still isn't the same as years of real incidents.
+**You need a long production record.** Kafka's replication has a decade of production behind it and every failure mode is written up somewhere. Iggy's clustering shipped in 0.9.0. It's based on Viewstamped Replication and tested with deterministic simulation, but that still isn't the same as years of real incidents.
 
 **Your architecture depends on the ecosystem.** You need three connectors and a stream processor, or a schema registry, or an integration a vendor already ships.
 
