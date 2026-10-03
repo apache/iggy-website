@@ -1,0 +1,1775 @@
+# Apache Iggy documentation: Server
+
+These docs describe server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0. This file joins every page in the Server section. For the other sections, see https://iggy.apache.org/llms.txt. For all sections in one file, see https://iggy.apache.org/llms-full.txt.
+
+---
+
+# Introduction
+
+> What the Iggy server does, and where its releases and Docker images are published.
+
+Rendered page: https://iggy.apache.org/docs/server/introduction/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/introduction.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Iggy server is the most important part of the system as it's responsible for handling all the incoming connections, managing the data and providing the API for the clients. The server is written in Rust. It uses `io_uring` on Linux and a polling backend on macOS.
+
+**Diagram: The Iggy server and what connects to it.** The Iggy server uses thread-per-core with io_uring on Linux, and listens on TCP port 8090, QUIC port 8080, HTTP port 3000 and WebSocket port 8092. Around it are producers (send messages), consumers (poll messages), consumer groups (horizontal scaling), the [Web UI](https://iggy.apache.org/docs/web_ui/start), the [CLI](https://iggy.apache.org/docs/cli/start), the [MCP server](https://iggy.apache.org/docs/ai/mcp) for LLM integration, [connectors](https://iggy.apache.org/docs/connectors/introduction) (sources and sinks) and [benchmarks](https://iggy.apache.org/docs/server/benchmarking) (iggy-bench). SDKs: Rust, Python, Java, Go, Node.js, C#, C++ and PHP. Security: TLS, Argon2id, AES-256-GCM and role-based access control. Observability: Prometheus and OpenTelemetry.
+
+The releases are published to GitHub and can be found [here](https://github.com/apache/iggy/tags). The official Docker images can be found [here](https://hub.docker.com/r/apache/iggy), use `docker pull apache/iggy:0.9.0`, or `apache/iggy:latest` for the newest stable release.
+
+If you compile the source code in release mode, linking takes longer because [LTO](https://doc.rust-lang.org/cargo/reference/profiles.html#lto) is enabled in the `[profile.release]` section of the workspace [Cargo.toml](https://github.com/apache/iggy/blob/master/Cargo.toml).
+
+## System requirements
+
+The server uses `io_uring` on Linux, which sets a minimum kernel version.
+
+- **Linux kernel 5.19 or newer is required.** The shard executors create their rings with `IORING_SETUP_COOP_TASKRUN` and `IORING_SETUP_TASKRUN_FLAG`, which older kernels reject, and the server refuses to start rather than run without them. Check yours with `uname -r`.
+- **Kernel 6.1 or newer is worth having.** It is the first version with the `kernel.io_uring_disabled` sysctl, so the startup diagnostics can tell you io_uring was disabled by policy instead of failing obscurely. See [Linux tuning](https://iggy.apache.org/docs/server/linux-tuning#runtime-access-and-process-limits).
+- **Ubuntu 22.04 LTS ships 5.15 and will not run the server.** Its hardware enablement kernel is new enough, and so are Ubuntu 24.04 LTS and Debian 12 as they ship.
+- **WSL2 often ships incomplete `io_uring`**, missing setup flags or operations even on a kernel that reports 5.19 or newer. Run `wsl --update` first.
+- **macOS uses a polling backend** rather than `io_uring`, so this requirement does not apply there.
+
+Containers use the host's kernel, so it is the host that has to meet this requirement. See [Docker & Helm](https://iggy.apache.org/docs/server/docker#why-these-capabilities).
+
+## Running the server
+
+One `iggy-server` binary serves both the single-node and the clustered deployment. The loaded configuration decides which one you get. The server accepts these startup flags, plus `--help` and `--version`:
+
+| Flag | Purpose |
+|------|---------|
+| `--fresh` | Delete the data directory before starting. **This wipes all data** on that node. |
+| `--with-default-root-credentials` | Set the root credentials to `iggy`/`iggy` on first start, unless `IGGY_ROOT_USERNAME`/`IGGY_ROOT_PASSWORD` are already set. Development only. |
+| `--replica-id <N>` | Select this node's entry in `cluster.nodes`. Required when `cluster.enabled = true`. See [Clustering](https://iggy.apache.org/docs/clustering/vsr). |
+
+Configuration comes from the TOML file named by `IGGY_CONFIG_PATH`, or `core/server/config.toml` relative to the working directory. If that file is missing, the server uses the defaults embedded in the binary. Any key can be overridden with an `IGGY_`-prefixed environment variable, and a `.env` file in the working directory or its parents (or the file named by `IGGY_ENV_PATH`) is loaded at startup. See [Configuration](https://iggy.apache.org/docs/server/configuration) for the full reference.
+
+When no root credentials are provided on the first single-node start, the server generates a random root password and prints it to the log. That's the *only* time it can be read.
+
+The HTTP API endpoints can be found in [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http) file, which can be used with [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension for VS Code.
+
+In order to see the detailed logs from the server, run it with `RUST_LOG=trace` environment variable.
+
+To seed the example data, start a development server with known credentials from the root of the repository:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+In another terminal at the repository root:
+
+```bash
+cargo run --bin data-seeder-tool
+```
+
+The seeder logs in as `iggy`/`iggy` by default. Pass `--username` and `--password` to use other credentials.
+
+## Authentication
+
+For broker API commands, only the ping liveness probe and the login handshake itself (username/password, personal access token, or HTTP token refresh, all of which prove a credential) are served without an authenticated session. Every other request requires one and is subject to [permissions](https://iggy.apache.org/docs/server/security): fetching server stats, for example, needs the `read_servers` permission (the root user has it), and even the Prometheus `/metrics` scrape **must present a bearer credential**. A stateful connection authenticates by logging in with the user's credentials or personal access token. Logout, disconnection, or heartbeat eviction releases its session. Over the HTTP API, authentication is done by providing the `Authorization` header with a `Bearer` JWT or personal access token. HTTP CORS preflight responses and embedded `/ui` static assets are public; the UI's broker API calls still require authentication.
+
+---
+
+# Configuration
+
+> The server's TOML configuration, how a file is merged over the embedded defaults, and what each section controls.
+
+Rendered page: https://iggy.apache.org/docs/server/configuration/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/configuration.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+The server reads a single TOML file. A copy of [`core/server/config.toml`](https://github.com/apache/iggy/blob/master/core/server/config.toml) is embedded into the binary and serves as the default configuration, so the server boots with working defaults even without any file on disk. The embedded file is commented throughout and is the authoritative reference for the exact version you're running.
+
+A config file doesn't have to be complete. It is **merged over the embedded defaults**, so a minimal file overrides only what it names:
+
+```toml
+path = "/var/lib/iggy"
+
+[node]
+advertised_address = "iggy-1"
+
+[tcp]
+address = "0.0.0.0:8090"
+
+[http]
+address = "0.0.0.0:3000"
+```
+
+Both listeners here bind a wildcard, which tells the server nothing about where clients reach it, so [`[node]`](#node) has to name that address explicitly - without it this file is refused at boot.
+
+Host and kernel settings are configured separately from the server TOML. See [Linux tuning](https://iggy.apache.org/docs/server/linux-tuning) for service limits, memory policies, huge pages, CPU placement, and validation before deployment.
+
+## How configuration loads
+
+Configuration is resolved in three layers. Later layers win:
+
+1. **Embedded defaults**: the `config.toml` compiled into the binary.
+2. **Config file**: the path in `IGGY_CONFIG_PATH`, or `core/server/config.toml` resolved against the current working directory. A missing file is only a warning. The server continues on embedded defaults.
+3. **Environment variables**: any `IGGY_`-prefixed override.
+
+Before the environment is read, the server loads a `.env` file from the working directory or its parents, or from the path named by `IGGY_ENV_PATH`. Existing environment values take precedence over the `.env` file.
+
+After boot the server writes the effective configuration, including the addresses it actually bound, to `{path}/runtime/current_config.toml` with the default runtime subdirectory.
+
+### Environment variables
+
+Every configuration key can be overridden with an `IGGY_` variable. The name is the TOML path, uppercased, with dots turned into underscores:
+
+```bash
+export IGGY_TCP_ADDRESS=0.0.0.0:8090          # [tcp] address
+export IGGY_NODE_ADVERTISED_ADDRESS=iggy-1    # [node] advertised_address
+export IGGY_HTTP_ENABLED=true                 # [http] enabled
+export IGGY_PATH=/var/lib/iggy               # root path
+export IGGY_LOGGING_LEVEL=debug              # [logging] level
+export IGGY_SHARDING_CPU_ALLOCATION=4        # [sharding] cpu_allocation
+```
+
+Two variables live outside the config schema: `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` set the root credentials, always as a pair. They initialize the root user **only at first creation**. On an existing data directory the stored root user is recovered unchanged, but supplied environment credentials must still pass validation.
+
+### Secrets
+
+Five values are secret-flagged: `http.jwt.encoding_secret`, `http.jwt.decoding_secret`, `encryption.key`, `cluster.auth.shared_secret`, and `cluster.auth.previous_shared_secret`. Prefer setting them through their environment variables (`IGGY_HTTP_JWT_ENCODING_SECRET`, `IGGY_ENCRYPTION_KEY`, `IGGY_CLUSTER_AUTH_SHARED_SECRET`, and so on) instead of storing them in a file. Secret values are masked in logs and **never serialized** into `runtime/current_config.toml`.
+
+### Validation at boot
+
+- Array-valued environment settings replace the corresponding TOML array. For an indexed array such as `cluster.nodes`, supply every entry and its required fields through environment variables; a single field override does not merge into the existing TOML roster.
+- Unknown top-level TOML fields and unknown server `IGGY_` environment names **reject startup**. Some nested tables can still ignore unknown fields, so compare the effective configuration with the intended settings.
+- The old `[system]` table and its environment mappings are rejected. Removed placeholders such as `archive_expired` and `recreate_missing_state` must be removed, not set to `false`.
+- Several sections validate relationships between keys (QUIC windows, sharding shutdown budgets, metadata journal sizing, partition transfer floors). A violation aborts boot with an error naming the keys. The constraints are listed with their sections below.
+- The `RUST_LOG` environment variable **always takes precedence** over `logging.level`.
+
+## Command-line flags
+
+`iggy-server` accepts these three startup options, plus `--help` (`-h`) and `--version` (`-V`):
+
+| Flag | Description |
+|------|-------------|
+| `--fresh`, `-f` | Delete the configured data directory (`local_data` by default, see `IGGY_PATH`) before boot and start on empty state. In cluster mode this wipes **this replica only**; it rejoins and refills by state transfer from the others. Wiping a quorum at the same time can destroy committed data. Do not put `--fresh` in a service unit: it would re-transfer the whole dataset on every restart. |
+| `--with-default-root-credentials` | Set `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` to `iggy` unless they are already present in the environment. These values initialize the root user only at first creation. Development only. |
+| `--replica-id <N>` | Identify this node within `cluster.nodes`. Required when `cluster.enabled = true`; the value must match exactly one `replica_id` in the roster. |
+
+## Relocated configuration keys
+
+The server configuration no longer has a `[system]` wrapper. Its runtime tables live at the root, and the data directory is the root `path` key. Old `IGGY_SYSTEM_*` overrides are rejected. Retention, durability, and segment layout are [topic creation options](https://iggy.apache.org/docs/server/topic-options), not server-wide defaults.
+
+| Old server key | Replacement |
+|----------------|-------------|
+| `system.path` / `IGGY_SYSTEM_PATH` | Root `path` / `IGGY_PATH` |
+| `system.runtime`, `system.logging`, `system.encryption`, `system.memory_pool`, `system.sharding` | Root tables `runtime`, `logging`, `encryption`, `memory_pool`, `sharding`; remove `SYSTEM_` from their environment names |
+| `system.partition.validate_checksum` | `partition.validate_checksum` |
+| `system.partition.path`, `partition.path` / `IGGY_PARTITION_PATH` | Removed. The `partitions` path component is fixed. |
+| `system.topic.max_size` | `max_topic_size` topic option |
+| `system.topic.message_expiry` | `message_expiry` topic option |
+| `system.partition.enforce_fsync` | `durability` topic option: `replicated` or `persisted` |
+| `partition.consumer_offset_enforce_fsync` | `consumer_offset_durability` topic option: `replicated` or `persisted` |
+| `system.partition.messages_required_to_save` | `messages_required_to_save` topic option |
+| `system.partition.size_of_messages_required_to_save` | `size_of_messages_required_to_save` topic option |
+| `system.segment.size` | `segment_size` topic option |
+| `system.segment.preallocate` | `preallocate_segments` topic option |
+| `system.stream.path`, `system.topic.path` | Removed. The `streams` and `topics` path components are fixed; root `[stream]` and `[topic]` tables are rejected. |
+| `system.segment.archive_expired`, `system.recovery.recreate_missing_state` | Removed. Delete the keys and their old tables. |
+| `system.message_deduplication` (whole section) | Removed. No equivalent configuration. |
+| `extra` (whole section) | Removed. Admission caps are compile-time constants. No replacement. |
+
+Remove the old tables and environment variables after migrating their values. Topic policies cannot be configured through TOML or `IGGY_` overrides, and the former `enforce_fsync` topic option is also rejected. Both new durability policies independently default to `replicated`; explicitly select `persisted` at topic creation where required. Neither can be changed with `UpdateTopic`.
+
+Other removed sections, such as `[message_saver]`, `[system.state]`, `[system.backup]`, `[system.compression]`, and `[tcp.socket]`, must also be removed. Consult the embedded configuration for the deployed binary rather than relying on ignored legacy fields.
+
+## Reference
+
+The tables below list every section with its shipped defaults. In cluster mode, every enabled transport takes its **port** from this node's `cluster.nodes` `ports` entry. The transport's own `address` picks only the bind interface.
+
+### `[http]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Serve the HTTP REST API. |
+| `address` | `"127.0.0.1:3000"` | Bind address and port. |
+| `max_request_size` | `"2 MB"` | Maximum request body size, at most `"256 MiB"`. Keep it at or below `message_bus.max_message_size` for multi-replica topics so an admitted batch fits replica frames. |
+| `web_ui` | `false` | Serve the embedded Web UI at `/ui`. Requires the `iggy-web` feature and static assets built with `npm --prefix web ci` and `npm --prefix web run build:static` before compiling the server. Without the feature, `true` logs a warning; missing assets return 404. |
+
+HTTP sessions hold live server-side session state (they count against `metadata.clients_table_max`). Consumer group management (create, get, delete) is available over HTTP. Group membership (join, leave) is not and needs a stateful transport.
+
+In cluster mode, followers forward control-plane requests (streams, topics, users, and so on) to the current primary when a cluster-wide JWT key exists (see `[http.jwt]` below). Message produce and consumer-offset writes use a separate fallback: after a `TransientNotAccepted` response, the server tries each other roster node at most once. Message polls read locally on the receiving node.
+
+### `[http.cors]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Handle cross-origin requests with the rules below. |
+| `allowed_methods` | `["GET", "POST", "PUT", "DELETE"]` | Allowed HTTP methods. |
+| `allowed_origins` | `["*"]` | Permitted origins. `"*"` is only valid as the first entry (anything after it is ignored); `"*"` in any other position fails the config. |
+| `allowed_headers` | `["content-type", "authorization"]` | Request headers clients may send. |
+| `exposed_headers` | `["iggy-view"]` | Response headers browsers may read. `iggy-view` carries the current VSR view number. |
+| `allow_credentials` | `false` | Allow cookies and HTTP auth in CORS requests. `true` requires explicit (non-wildcard) origins, headers, and exposed headers. |
+| `allow_private_network` | `false` | Allow requests from private networks. |
+
+### `[http.jwt]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `algorithm` | `"HS256"` | Signing algorithm for self-issued tokens. |
+| `issuer` | `"iggy.apache.org"` | Issuer claim of minted tokens. |
+| `audience` | `"iggy.apache.org"` | Audience claim of minted tokens. |
+| `valid_issuers` | `["iggy.apache.org"]` | Issuers accepted during validation. |
+| `valid_audiences` | `["iggy.apache.org"]` | Audiences accepted during validation. |
+| `access_token_expiry` | `"1 h"` | Access token lifetime. |
+| `clock_skew` | `"5 s"` | Tolerance for clock differences during validation. |
+| `not_before` | `"0 s"` | Time before which a token is not valid. |
+| `encoding_secret` | `""` (empty) | Signing key. If only one secret is configured, it is used for both signing and verification. See the fallback rules below. |
+| `decoding_secret` | `""` (empty) | Verification key. If both secrets are set, they are used as supplied and must agree for self-issued tokens to verify. |
+| `use_base64_secret` | `false` | Treat the configured secrets as base64-encoded. |
+
+There is **no default secret**. When both secrets are empty and cluster authentication supplies no key, each server start mints a random signing key, so issued tokens **do not survive a restart** and are valid only on the node that issued them. If you configure a secret, set it through the environment (`IGGY_HTTP_JWT_ENCODING_SECRET` / `IGGY_HTTP_JWT_DECODING_SECRET`), never commit it, and use a long random value.
+
+In cluster mode the secret has an extra role: a configured secret, identical on every node, makes bearer tokens valid cluster-wide and activates follower-to-primary HTTP forwarding. When both JWT secrets are empty and `cluster.auth` is enabled, the JWT key is derived from the cluster PSK. Explicit JWT secrets take precedence. Without either, tokens are node-local and forwarding stays disabled.
+
+#### `[[http.jwt.trusted_issuers]]`
+
+Opt-in trust of external token issuers for application-to-application authentication. With none configured, the listener accepts only self-issued tokens using the configured HMAC algorithm (`HS256`, `HS384`, or `HS512`).
+
+```toml
+[[http.jwt.trusted_issuers]]
+issuer = "https://issuer.example.com"
+audience = "iggy.apache.org"
+jwks_url = "https://issuer.example.com/.well-known/jwks.json"
+user_id = 1
+```
+
+`issuer`, `audience`, and `jwks_url` are required per entry. `user_id` is the non-zero iggy user every token from that issuer is remapped onto. It defaults to `0` (root), which is **rejected**, so set it explicitly.
+
+Enabling an issuer opens an outbound JWKS fetch that is reachable before a token's signature is verified: a token naming the issuer with an unknown key id can trigger a fetch to `jwks_url`. The target is fixed (not attacker-chosen), concurrent misses coalesce onto one fetch, and repeats are rate-limited to one outbound request per issuer per short window. The same window bounds how quickly a freshly rotated signing key is picked up.
+
+### `[http.metrics]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Expose Prometheus metrics. |
+| `endpoint` | `"/metrics"` | Metrics path. Must start with `/`. |
+
+The metrics route **requires authentication**: a missing or invalid bearer credential is rejected with 401. Any authenticated user may scrape. There's no extra RBAC rule. Scrapers present a JWT or a personal access token as the bearer:
+
+```yaml
+scrape_configs:
+  - job_name: "iggy"
+    metrics_path: "/metrics"
+    authorization:
+      type: Bearer
+      credentials: "<personal-access-token>"
+    static_configs:
+      - targets: ["localhost:3000"]
+```
+
+### `[http.tls]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Serve HTTPS. |
+| `cert_file` | `"core/certs/iggy_cert.pem"` | PEM certificate path. |
+| `key_file` | `"core/certs/iggy_key.pem"` | PEM key path. |
+
+HTTP TLS is **file-based only**. There's no `self_signed` option for this listener. Both files must exist when enabled.
+
+### `[tcp]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Serve the TCP binary protocol. |
+| `address` | `"127.0.0.1:8090"` | Bind address and port. |
+
+TCP is the highest-throughput transport. These two keys, plus the TLS block below, are the entire section.
+
+#### `[tcp.tls]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Wrap TCP connections in TLS. |
+| `self_signed` | `true` | Generate an ephemeral loopback certificate, but only while `cert_file` does not exist on disk; an existing PEM pair is loaded instead (the server logs which way it went). `false` requires both files to exist. |
+| `cert_file` | `"core/certs/iggy_cert.pem"` | PEM certificate path. |
+| `key_file` | `"core/certs/iggy_key.pem"` | PEM key path. |
+
+### `[quic]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Serve the QUIC transport. |
+| `address` | `"127.0.0.1:8080"` | Bind address and port. |
+| `max_concurrent_bidi_streams` | `1` | Bidirectional streams a client may keep open on one connection. The SDK opens a fresh stream per command, so `1` caps a connection at one in-flight command. |
+| `initial_mtu` | `"1200 B"` | Initial path MTU before MTU discovery runs. 1200 bytes is the QUIC minimum; values below it are rejected at boot. Values above the real path MTU cause packet loss until black-hole detection resets to 1200. |
+| `send_window` | `"64 MiB"` | Flow-control budget for unacknowledged data in flight to one connection. A ceiling, not a reservation. |
+| `receive_window` | `"64 MiB"` | Flow-control budget for data buffered from one connection, shared by all its streams. |
+| `stream_receive_window` | `"64 MiB"` | Per-stream slice of `receive_window`. Must not exceed `receive_window`; equality is allowed. Lower it below `receive_window` if you raise the stream cap, so one unread stream cannot pin the whole connection window. |
+| `keep_alive_interval` | `"10 s"` | Keep-alive PING interval. One third of `max_idle_timeout`, so two consecutive losses fit before the idle timer closes the connection. `"0 s"` disables. |
+| `max_idle_timeout` | `"30 s"` | Idle time before a connection is closed. `"0 s"` disables (not recommended). |
+
+Raising `max_concurrent_bidi_streams` is a transport decision only: the server's accept loop takes one stream at a time and waits for its reply before accepting the next, so a higher cap does **not** make command handling concurrent.
+
+#### `[quic.certificate]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `self_signed` | `true` | **Always** generate an ephemeral loopback certificate. Unlike TCP and WebSocket, files are ignored even when they exist on disk (the server logs a warning naming the skipped files). `false` requires both files. |
+| `cert_file` | `""` (empty) | PEM certificate path. Required when `self_signed = false`. |
+| `key_file` | `""` (empty) | PEM key path. Required when `self_signed = false`. |
+
+### `[websocket]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Serve the WebSocket transport. |
+| `address` | `"127.0.0.1:8092"` | Bind address and port. |
+| `read_buffer_size` | unset (`"128 KiB"`) | Target minimum size of the frame read buffer. |
+| `write_buffer_size` | unset (`"128 KiB"`) | Target buffer size for batched writes before flush. |
+| `max_write_buffer_size` | unset (unlimited) | Hard ceiling on the write buffer; writes past it error instead of buffering. Must exceed `write_buffer_size` by at least one message. |
+| `max_message_size` | unset (`"64 MiB"`) | Upper bound on one inbound message after fragment reassembly. Must not exceed `message_bus.max_message_size`. |
+| `max_frame_size` | unset (`"16 MiB"`) | Upper bound on one inbound frame before reassembly. Must not exceed `max_message_size`. |
+| `accept_unmasked_frames` | `false` | Accept unmasked client frames in violation of RFC 6455. Strict by default. |
+
+The size knobs are optional. Leaving one unset keeps the `compio-ws` (tungstenite) default shown in parentheses. A malformed size string fails config load.
+
+#### `[websocket.tls]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Serve WSS. |
+| `self_signed` | `true` | Same load-or-generate behavior as `[tcp.tls]`: an existing PEM pair wins, otherwise an ephemeral loopback certificate is generated. |
+| `cert_file` | `"core/certs/iggy_cert.pem"` | PEM certificate path. |
+| `key_file` | `"core/certs/iggy_key.pem"` | PEM key path. |
+
+### TLS across transports
+
+The `self_signed` flag doesn't mean the same thing everywhere:
+
+| Listener | Behavior |
+|----------|----------|
+| TCP, WebSocket | `self_signed = true` generates an ephemeral certificate **only while `cert_file` does not exist**; an existing PEM pair is loaded instead. |
+| QUIC | `self_signed = true` **always** generates an ephemeral certificate and ignores configured files. |
+| HTTP | No `self_signed` option. Files only. |
+| Replica plane | Separate section, `[cluster.tls]`. See [Clustering](https://iggy.apache.org/docs/clustering/vsr). |
+
+Ephemeral certificates **change on every start** and are meant for loopback development, not production.
+
+### Root data path and runtime
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `path` | `"local_data"` | Base directory for all server data. Everything below is relative to it. |
+
+Set `path` before any TOML table header. `[runtime] path = "runtime"` and `[logging] path = "logs"` are relative to it. Data uses the fixed layout `{path}/streams/{stream_id}/topics/{topic_id}/partitions/{partition_id}`. Stream, topic, and partition path overrides are rejected.
+
+### `[logging]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `path` | `"logs"` | Log directory, relative to the root `path`. |
+| `level` | `"info"` | Filter directive in `RUST_LOG` syntax: simple levels or directives like `"warn,server=debug,iggy=trace"`. The `RUST_LOG` environment variable always takes precedence. |
+| `file_enabled` | `true` | Write logs to file as well as stdout. |
+| `max_file_size` | `"500 MB"` | Size at which a log file rotates. `0` disables both size-based and hourly rotation. |
+| `max_total_size` | `"4 GB"` | Total log budget; oldest files are deleted first. `0` disables the total-size cleanup limit; the rolling appender still caps archives at 100000. Retention and, when `max_file_size` is nonzero, hourly rotation still apply. |
+| `rotation_check_interval` | `"1 h"` | How often rotation status is checked. Avoid values below 1 s. |
+| `retention` | `"7 days"` | How long log files are kept. Avoid values below 1 s. |
+
+### `[encryption]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Encrypt stored message payloads and user headers with AES-256-GCM. Metadata journals, snapshots, and structural record headers remain unencrypted. |
+| `key` | `""` (empty) | 32-byte key, base64-encoded. Required when enabled. Secret-flagged: prefer `IGGY_ENCRYPTION_KEY`. |
+
+### `[memory_pool]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Reuse aligned buffers through the memory pool. Buffers are allocated on demand. |
+| `size` | `"4 GiB"` | Pool allocation budget, not a process memory limit. When the pool cannot supply a buffer within this budget, allocation continues outside it. Minimum 512 MiB; must be a multiple of 4096 (page size). |
+| `bucket_capacity` | `8192` | Maximum buffers per bucket. Must be a power of two; minimum 128. |
+
+The pool has 28 buckets with buffer sizes from 4 KiB to 512 MiB.
+
+### `[data_maintenance.messages]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `cleaner_enabled` | `true` | Run the segment cleaner. It deletes the oldest **sealed** segments of topics with a finite `message_expiry` or `max_topic_size`, per partition, best-effort. The active segment is never touched, and stored consumer/group offsets can hold back deletion. |
+| `interval` | `"1 m"` | Cleaner run interval. |
+
+### `[heartbeat]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Verify client heartbeats. |
+| `interval` | `"30 s"` | Expected heartbeat interval. |
+
+When enabled, a connection that sends nothing (no request, no PING) for 1.2 x `interval` (36 s at the default) **and** still holds a consumer group membership has its session released, so its groups rebalance off it. The verifier checks once per `interval`, so eviction can occur later than the staleness threshold. A connection holding no membership is left alone and reaped when its socket closes.
+
+The Rust, Go, Python, Node, async Java, and C# TCP clients ping automatically every 5 s by default, well inside the staleness window. Call `connect()` to start the heartbeat in the Rust, Go, Python, and async Java high-level clients; logging in without it does not start their pingers. The blocking Java client has **no automatic heartbeat**, only a manual ping. Wherever nothing pings, an idle consumer group member is evicted, and only the application can keep it alive (ping) or bring it back (reconnect).
+
+### `[telemetry]`
+
+Server OTLP export is unavailable in this revision: `grpc` prevents startup, and `http` does not deliver logs or traces. Leave `enabled = false`.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Enable OpenTelemetry export. |
+| `service_name` | `"iggy"` | Reported service name. |
+| `telemetry.logs.transport` | `"grpc"` | Log export transport: `"grpc"` or `"http"`. |
+| `telemetry.logs.endpoint` | `"http://localhost:7281/v1/logs"` | Log export endpoint. |
+| `telemetry.traces.transport` | `"grpc"` | Trace export transport: `"grpc"` or `"http"`. |
+| `telemetry.traces.endpoint` | `"http://localhost:7281/v1/traces"` | Trace export endpoint. |
+
+### `[sharding]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `cpu_allocation` | `"numa:auto"` | Number of shards and their CPU affinity. See syntaxes below. |
+| `pin_cores` | `true` | Pin shard threads to dedicated cores, drawn from the process's allowed CPU set (cooperates with systemd `AllowedCPUs=` and container cpusets). Set `false` on hosts where the server shares cores with other workloads. |
+| `inbox_capacity` | `1024` | Per-shard inbox capacity for consensus, connection setup, and reconciliation. Raising `[metadata]` or `[partition]` `prepare_queue_depth` raises the capacity needed here. |
+| `reply_inbox_capacity` | `1024` | Separate per-shard channel for forwarded client replies. Size for peak reply fan-out; dropped replies have no bus retransmission. |
+| `shutdown_drain_timeout` | `"10 s"` | Per-shard bus drain budget on shutdown. Slow-fsync hosts may need more. |
+| `shutdown_poll_interval` | `"50 ms"` | Poll cadence for the shutdown flag. Must be less than or equal to `shutdown_drain_timeout`. |
+| `shutdown_join_timeout` | `"30 s"` | Hard deadline for joining shard threads at exit; a wedged shard is abandoned with an error log. Must be at least `shutdown_drain_timeout`. |
+| `reconcile_periodic_interval` | `"1 s"` | Safety tick for the partition reconciliation loop, which also wakes on every metadata commit. |
+
+Valid `cpu_allocation` syntaxes:
+
+- `"all"`: one shard per available CPU core
+- a number, e.g. `4`: four shards on the first four CPUs in the process's allowed set when `pin_cores` is enabled
+- a range, e.g. `"5..8"`: three shards on cores 5, 6, 7
+- `"numa:auto"`: all NUMA nodes and cores, NUMA-aware
+- `"numa:nodes=0,1;cores=4;no_ht=true"`: NUMA nodes 0 and 1, four cores each, no hyperthreads
+
+### `[metadata]`
+
+Tunables for the metadata consensus plane (shard 0's VSR replica: users, streams, topics, sessions).
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `prepare_queue_depth` | `32` | Uncommitted metadata ops in flight at once. Submits beyond it are rejected with a transient error the SDKs retry. Capped at 127 by the view-change wire format. |
+| `journal_slots` | `1024` | In-memory index of the metadata WAL, in slots. Larger buys more headroom between forced checkpoints at the cost of memory and bigger WAL rewrites. Boot enforces `journal_slots >= 4 x max(64, prepare_queue_depth)`. |
+| `clients_table_max` | `8192` | Slots in the VSR client table: how many distinct clients (TCP/QUIC/WebSocket virtual clients and HTTP sessions together) hold live session state. When full, the client with the oldest last commit is evicted and re-registers on its next request. The HTTP session cap tracks this at half. Must be between 2 and 65536. |
+
+### `[partition]`
+
+Partition storage and consensus tunables share this table. Unlike `[metadata]` (one plane on shard 0), a pipeline exists per partition, so raising per-partition budgets **multiplies resource use by the partition count**.
+
+`durability`, `consumer_offset_durability`, segment size, preallocation, and the message/byte flush thresholds are [topic creation options](https://iggy.apache.org/docs/server/topic-options). `wal_bytes_max` sizes the persistence machinery without selecting the topic's completion policy.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `prepare_queue_depth` | `32` | Uncommitted produce and consumer-offset ops in flight per partition. Submits past it spill into a request queue of twice this depth; once both are full the server rejects the request with `TransientNotAccepted`. A lost rejection reply can still make the client wait for its timeout. Must be between 1 and 127. |
+| `validate_checksum` | `true` | Re-hash batches read from segment storage and report a mismatch instead of serving them. |
+| `wal_bytes_max` | `"256 MiB"` | Active WAL plus queued/in-flight prepare budget per multi-replica partition when either topic policy is `persisted`. A 4 KiB multiple, from 128 MiB + 8 KiB through 4 GiB. Checkpointing reclaims history only after materialized state is synchronized. Temporary rewrites require extra disk space. Environment override: `IGGY_PARTITION_WAL_BYTES_MAX`. |
+| `dedup_clients_max` | `4096` | Client request watermarks retained per partition to deduplicate retries. At capacity, the client with the oldest latest commit is evicted and loses that coverage. Between 1 and 65536. |
+| `consumer_offsets_max` | `4096` | Durable offset keys admitted per partition, counted separately for standalone consumers and groups. Existing keys remain writable at the limit; new keys are rejected with `TooManyConsumerOffsets`. Between 1 and 262144. |
+| `offset_reservation_lease` | `65536` | Offsets reserved ahead in the superblock for single-replica partitions. Crash recovery skips the unused reservation to avoid reusing acknowledged offsets. Multi-replica groups ignore it. Between 1 and 16777216. |
+| `evicted_ring_capacity` | `4096` | Entries retained per multi-replica partition for journal repair after a peer rejoins. Must be between 1 and 65536. Single-replica partitions retain nothing. |
+| `evicted_ring_bytes_max` | `"16 MiB"` | Byte ceiling for the evicted ring; whichever ring cap trips first evicts. At most `"256 MiB"`. |
+| `transfer_served_cache_bytes_max` | `"2176 MiB"` | Byte budget, **per shard**, for segment payloads kept resident to serve state-transfer chunk requests. The default fits two sealed segments at the 1 GiB ceiling, each with one max-message overshoot. Serving concurrency is `floor(this / max(transfer_artifact_bytes_max, 1 GiB + 64 MiB))`, minimum one; boot warns when it drops below two. At most `"64 GiB"`. |
+| `transfer_artifact_bytes_max` | `"1088 MiB"` | Allocation ceiling for one received state-transfer artifact, per shard (up to four transfers run at once). Boot enforces the floor `1 GiB + message_bus.max_message_size`; the shipped value sits exactly at it. Raising `message_bus.max_message_size` alone therefore refuses boot: raise this by the same amount in the same edit. At most `"64 GiB"`. |
+
+### `[message_bus]`
+
+Tunables for the internal bus that ships consensus traffic between replicas and client traffic between shards.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `max_batch` | `256` | Messages coalesced into one `writev(2)` call. Hard upper bound 512 (`IOV_MAX/2` on Linux). |
+| `max_message_size` | `"64 MiB"` | Wire-level cap on a single framed message, at most `"256 MiB"`. Values above `"64 MiB"` exceed the Go SDK's frame limit. Coupled to `partition.transfer_artifact_bytes_max` and `websocket.max_message_size` (see those keys). |
+| `peer_queue_capacity` | `256` | Bound on the per-peer queue. `cluster.repair_chunk_max` must stay strictly below it. |
+| `reconnect_period` | `"5 s"` | Interval between outbound reconnect attempts to peers. |
+| `close_peer_timeout` | `"2 s"` | Per-peer close drain budget before force-cancellation. |
+| `close_grace` | `"2 s"` | Bound on a single stream shutdown in the TLS-family transports. |
+| `handshake_grace` | `"10 s"` | Bound on a connection's handshake phase, so a slowloris peer cannot pin per-connection resources indefinitely. |
+
+### `[personal_access_token]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `max_tokens_per_user` | `100` | Maximum active tokens per user. |
+| `personal_access_token.cleaner.enabled` | `true` | Periodically remove expired tokens. |
+| `personal_access_token.cleaner.interval` | `"1 m"` | Cleaner run interval. |
+
+### `[consumer_group]`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `rebalancing_timeout` | `"30s"` | Maximum time a partition can remain in pending revocation before being force-transferred to the target member. |
+
+### `[node]`
+
+This node's own client-facing identity. The address is read only while `cluster.enabled = false`: in cluster mode the roster answers the same question per node, so the address itself is ignored and the server says so at startup. The key is still validated in every mode, so a malformed value refuses boot even with `cluster.enabled = true`.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `advertised_address` | unset | The address clients dial, published in cluster metadata. A literal IP or a DNS hostname. Left unset, the server derives it from the bind address of the first enabled listener; that fails when the listener binds a wildcard, and the server refuses to start rather than publish an address no client can use. Declaring the unspecified address (`0.0.0.0`, `::`) is refused for the same reason. |
+
+### `[cluster]`
+
+Cluster mode is configured here but documented in [Clustering](https://iggy.apache.org/docs/clustering/vsr). The section contains:
+
+| Key | Default | One-liner |
+|-----|---------|-----------|
+| `enabled` | `false` | Participate in a cluster. Requires `--replica-id` at launch. |
+| `name` | `"iggy-cluster"` | Permanent cluster identity, hashed into every superblock on first boot. Renaming against existing data refuses start. |
+| `heartbeat_timeout` | `"5s"` | Primary liveness window; a silent primary triggers a view change. At least `"2s"` and at least 4 x `commit_broadcast_interval`. |
+| `commit_broadcast_interval` | `"500ms"` | How often the primary broadcasts its commit point; this is the liveness signal. |
+| `prepare_retransmit_interval` | `"250ms"` | Retransmit cadence for unacknowledged prepares. |
+| `view_change_retransmit_interval` | `"500ms"` | Retransmit cadence during a view change. |
+| `view_change_status_timeout` | `"5s"` | Backstop for a stalled view change; escalates to a fresh election. At least 4 x `view_change_retransmit_interval`. |
+| `request_start_view_retransmit_interval` | `"1s"` | Re-request cadence for the current view's StartView. |
+| `view_probe_attempts_max` | `5` | Unanswered probes a recovering replica tolerates before electing on its recovered log. Between 1 and 100. |
+| `repair_retry_interval` | `"1s"` | Re-request cadence for a stalled journal-repair stream. |
+| `repair_gap_debounce_interval` | `"1s"` | How long a committed journal gap waits before repair starts, floored at 500 ms. Nonzero. Separate from retries of an already-open repair stream. |
+| `repair_chunk_max` | `128` | Prepares served per repair round. Must stay strictly below `message_bus.peer_queue_capacity`. Between 1 and 1024. |
+| `superblock_wedged_fatal_timeout` | `"2m"` | Exit if a metadata or partition superblock remains unwritable past this window. `"0"` leaves it fenced indefinitely; nonzero values must be at least `"30s"`. |
+
+Durations are **rounded down** to the consensus 10 ms tick. Values under 10 ms become one tick.
+
+Sub-sections:
+
+- `[cluster.auth]`: replica-to-replica authentication (PSK plus BLAKE3 keyed-MAC handshake). `shared_secret` must be at least 32 bytes of CSPRNG output, identical on every node. Prefer `IGGY_CLUSTER_AUTH_SHARED_SECRET`. `previous_shared_secret` enables rolling key rotation.
+- `[cluster.coordinator]`: `skip_shard_zero_for_replicas = true` and `skip_shard_zero_for_clients = false` control connection placement when more than one shard runs.
+- `[cluster.tls]`: TLS 1.3 on the replica port. Requires `cluster.auth.enabled`. The PSK authenticates the peer, TLS supplies confidentiality.
+- `[[cluster.nodes]]`: the full roster, byte-identical on every node. Each entry has `name`, `ip`, `replica_id`, and `ports` (`tcp`, `quic`, `http`, `websocket`, `tcp_replica`). In cluster mode `ports` is the single source of listener ports: `tcp` and `tcp_replica` ports are always required, and every other enabled transport also needs an explicit per-node port or the server refuses to start. `advertised_address` and per-CIDR `advertised_addresses` selectors control what clients are told to dial.
+
+---
+
+# Topic Options
+
+> Per-topic retention, durability and segment layout options, set when the topic is created.
+
+Rendered page: https://iggy.apache.org/docs/server/topic-options/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/topic-options.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Retention, durability, and segment layout are per-topic decisions, made when the topic is created. They used to be server-wide `[system.*]` keys, which gave every knob two homes. The server now [refuses to boot](https://iggy.apache.org/docs/server/configuration#relocated-configuration-keys) on the old keys, and each topic carries its own values instead.
+
+Options are key-value pairs sent with `CreateTopic`. Unknown keys are **rejected at the edge, never skipped**: a silently ignored knob would leave the client on server defaults with no way to find out. The same mechanism exists for streams and users, but their catalogs are empty today. Only topics have option keys.
+
+## The catalog
+
+| Option | Default | Constraints | Description |
+|--------|---------|-------------|-------------|
+| `max_topic_size` | unlimited | finite values at least `segment_size` | Per-partition limit on sealed segment bytes. Delete the oldest sealed segments once that partition exceeds it. |
+| `message_expiry` | none | | Delete the oldest sealed segments whose newest message timestamp is older than this duration. |
+| `compression_algorithm` | `none` | `none` or `gzip` | Placeholder: stored and reported, no compression applied yet. |
+| `segment_size` | 1 GiB | 0 selects the default; otherwise a 512-byte multiple from 1 MiB through 1 GiB | Soft size limit per segment: a segment may close one whole batch past it. |
+| `durability` | `replicated` | `replicated` or `persisted` | Message completion policy. `persisted` requires recoverable stable-storage copies at the replication quorum before success. |
+| `consumer_offset_durability` | `replicated` | `replicated` or `persisted` | Completion policy for explicit consumer-offset stores and deletes, independent of message durability. |
+| `messages_required_to_save` | 1024 | non-zero, at most 16777216 | Flush the journal once it holds this many messages. |
+| `size_of_messages_required_to_save` | 1 MiB | 0 selects the default; at most 1 GiB | Flush the journal once it holds this many bytes. Paired with the message count; whichever threshold trips first flushes. |
+| `preallocate_segments` | `false` | `segment_size` x partitions at most 64 GiB per create | Reserve each segment's bytes up front where the filesystem supports it. |
+
+Both retention policies can be active at once. The active segment is **never touched**, and its bytes are excluded from the size limit. A segment whose end offset exceeds the lowest stored consumer or consumer-group offset is retained; with no stored offsets, this barrier is absent. Deletion is done by the server's segment cleaner (`[data_maintenance.messages]`, enabled by default).
+
+Both durability policies write data to disk and default independently to `replicated`. Neither inherits the other. Flush thresholds schedule ordinary segment writes; required persistence, capacity pressure, or lifecycle operations can flush earlier. They do not weaken the `persisted` completion guarantee.
+
+Value forms are forgiving: byte sizes accept a raw number of bytes or a string like `"128 MiB"`, expiry accepts microseconds or a humantime string like `"7 days"`, booleans accept `true`/`false`. Create admission re-parses and re-encodes what you send, so a string `segment_size=128MiB` is stored as the number it names.
+
+`preallocate_segments` requests a `segment_size` reservation for each partition's segment file when it is opened, including during topic creation and rotation. On Linux this reserves disk space without changing the file's logical length. Unsupported or failed reservations log a warning and fall back to ordinary allocation. With the default 1 GiB segment size, the request is 1 GiB per partition up front, which is why it's opt-in and why one create is **capped at 64 GiB** of requested reservation.
+
+## Setting options
+
+At creation, every interface takes the same keys:
+
+```bash
+# CLI: --set is repeatable. Positional arguments: stream, name,
+# partitions count, compression algorithm.
+iggy topic create my-stream my-topic 1 none \
+  --set segment_size=128MiB \
+  --durability persisted \
+  --consumer-offset-durability persisted
+```
+
+In the CLI, both durability policies have named flags. `--set` is repeatable and covers other storage options, such as `segment_size`. `compression_algorithm`, `message_expiry`, and `max_topic_size` also have first-class parameters. Run `iggy options topic` to discover what the server accepts.
+
+SDKs expose typed durability values in their topic creation options. In Rust, set `TopicCreateOptions::durability` and `TopicCreateOptions::consumer_offset_durability` to `Durability::Replicated` or `Durability::Persisted`. The HTTP API takes `"durability"` and `"consumer_offset_durability"` as string values in the create body's `options` map.
+
+Keys absent from the wire request are resolved by the admitting server and stored as **derived** entries. Typed SDKs can send their default durability values explicitly. Binary `GetTopic` responses carry explicit and derived blocks; HTTP reports an `explicit` flag per option. Both report option values and the provenance of the request. See the update limitation below.
+
+## Create-only vs updatable
+
+**Only three options** can change after creation, via `UpdateTopic`:
+
+- `compression_algorithm`
+- `message_expiry`
+- `max_topic_size`
+
+Updates are **patches**: a key you don't send keeps its current value.
+
+The storage options (`segment_size`, `durability`, `consumer_offset_durability`, `messages_required_to_save`, `size_of_messages_required_to_save`, `preallocate_segments`) are **create-only**. A topic gets them at creation and keeps them. `UpdateTopic` rejects changes to either durability policy, so select both before creating the topic.
+
+An update that explicitly sends `server_default` (zero) for `message_expiry` or `max_topic_size` has inconsistent reporting: the server retains the previous fixed response fields but stores zero in the corresponding option entries. The CLI sends these sentinels when those update arguments are omitted. Supply explicit expiry and size values when updating a topic; do not rely on zero to reset or preserve its retention settings.
+
+## Discovering the catalog
+
+Ask the server which keys it accepts, with their types, defaults, and descriptions:
+
+```bash
+iggy options topic
+```
+
+For HTTP, set `IGGY_TOKEN` to a valid JWT or personal access token:
+
+```bash
+curl --fail-with-body \
+  -H "Authorization: Bearer $IGGY_TOKEN" \
+  http://localhost:3000/options/topic
+```
+
+The Rust SDK exposes the same call as `describe_options`. The scope is `topic`, `stream`, or `user`.
+
+Discovery matters most on the binary transports: TCP, QUIC, and WebSocket carry **only an error code** for a rejected key, not its name, so the catalog is how a client finds out what this server supports. Over HTTP the error message names the offending key directly.
+
+## Durability
+
+`replicated` waits for quorum commit and application without an additional stable-storage barrier. `persisted` also requires recoverable stable-storage copies at the required quorum. On a single node that means recoverable local persistence before success; in a cluster it uses durable prepare history. Setting `messages_required_to_save=1` is not required for `persisted`.
+
+The former `enforce_fsync` option is rejected. Use `durability` for messages and `consumer_offset_durability` for explicit offset changes. Poll auto-commit remains asynchronous, and HTTP `ack=none` confirms dispatch only, regardless of these policies.
+
+See [Durability](https://iggy.apache.org/docs/server/durability) for single-node failure behavior and [Cluster Durability](https://iggy.apache.org/docs/clustering/durability) for the quorum and WAL guarantees.
+
+---
+
+# Storage Engine
+
+> The segmented append-only log, and how streams, topics, partitions and segments map onto files on disk.
+
+Rendered page: https://iggy.apache.org/docs/server/storage-engine/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/storage-engine.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Iggy's storage engine is built around the concept of a **segmented append-only log**. Message data follows a hierarchy: System -> Streams -> Topics -> Partitions -> Segments. This page covers how data is stored, indexed, flushed, recovered, and cleaned up on disk.
+
+**Diagram: Stream hierarchy.** An example of how data is organised:
+
+- Stream `orders` (ID 0)
+  - Topic `user-events`, 3 partitions (about 2.4 million messages a second)
+    - Partitions 0, 1 and 2, each an append-only log made of segments: seg-0 and seg-1 are sealed, seg-2 is active.
+  - Topic `order-events`, 3 partitions (about 1.8 million messages a second)
+    - Partitions 0, 1 and 2, with the same segment layout.
+
+A stream contains topics, a topic contains partitions, and a partition is stored as segments.
+
+**Diagram: Append-only log.** Messages are appended in order, each with the next offset (0, 1, 2 and so on). New messages are always written at the end. A consumer tracks its own position in the log with an offset, independently of other consumers.
+
+## Directory layout
+
+All data lives under the root `path` directory (default `local_data`, overridden with `IGGY_PATH`):
+
+```bash
+local_data/
+├── metadata/                        # Metadata plane (see below)
+│   ├── journal.wal                  # Prepare journal: replicated metadata operations
+│   ├── snapshot.bin                 # MessagePack snapshot of the metadata state machine
+│   ├── superblock.a                 # Ping-pong superblock pair: checkpoint record,
+│   └── superblock.b                 #   newest slot wins by sequence
+├── state/
+│   └── log                          # Created at boot; legacy state plumbing
+├── runtime/                         # Runtime data
+├── logs/                            # Server log files
+└── streams/
+    └── {stream_id}/
+        └── topics/
+            └── {topic_id}/
+                └── partitions/
+                    └── {partition_id}/
+                        ├── superblock.a                  # Partition consensus superblock pair
+                        ├── superblock.b
+                        ├── prepares-{created_revision}/  # Prepare WAL, when a cluster topic policy is persisted
+                        ├── offsets/
+                        │   ├── consumers/                # Stored offsets of individual consumers
+                        │   └── groups/                   # Stored offsets of consumer groups
+                        ├── 00000000000000000000.log      # Segment: batch records
+                        ├── 00000000000000000000.index    # Segment: sparse index
+                        ├── 00000000000016000000.log
+                        └── 00000000000016000000.index
+```
+
+Stream, topic, and partition ids are numeric and **0-based**. Each partition directory holds pairs of `.log` and `.index` files. The filename is the segment's start offset, zero-padded to 20 digits. Recovery can create an empty active segment at a reserved offset beyond the last stored message. Next to the segments, every partition keeps its own superblock pair (replica identity and consensus state for that partition) and an `offsets/` tree for consumer offset storage. Multi-replica partitions also keep a prepare WAL when either topic durability policy is `persisted`.
+
+## Segmented log
+
+**Diagram: Partition storage layout.** An example partition at the default 1 GiB segment size. A segment can exceed that size by one batch before rotating, and message counts depend on payload and batch sizes.
+
+- Segment `00000000000000000000`: 1 GiB, about 16 million messages, offsets 0 to 15,999,999, sealed and read-only.
+- Segment `00000000000016000000`: 1 GiB, about 16 million messages, offsets 16,000,000 to 31,999,999, sealed and read-only.
+- Segment `00000000000032000000`: 412 MiB so far, about 6.5 million messages, active and being written with vectored I/O.
+
+Each segment has two files: a `.log` file with the message data (batch records with a 48-byte header per message), and a `.index` file with positional and time indexes for fast offset and timestamp lookups.
+
+Each partition is a segmented log: an ordered list of **sealed** (read-only) segments plus one **active** (writable) segment. When the active segment reaches the topic's `segment_size` (default 1 GiB), it is sealed and a new active segment starts at the next offset.
+
+`segment_size` is a per-topic creation option, bounded to a 512-byte multiple between 1 MiB and 1 GiB. It's a **soft limit**: rotation fires after the append that crosses it, so the crossing batch lands whole and a sealed segment may run one batch past the configured size. `preallocate_segments` (also per topic) reserves each segment's bytes up front on filesystems that support it. See [Topic options](https://iggy.apache.org/docs/server/topic-options).
+
+## On-disk batch format
+
+Segments store **batch records**, not individual messages. The record is byte-identical to the wire encoding: the one layout a `SendMessages` body, the replicated prepare, the persisted segment record, and the poll reply all share. There is **no other message encoding**.
+
+```text
+[batch header: 256 bytes][blob: message frames]
+frame = [frame header: 48 bytes][payload][user_headers]
+```
+
+The 256-byte batch header carries `partition_id`, `base_offset`, `base_timestamp`, `origin_timestamp`, `batch_length`, `batch_checksum` (XxHash3-64), and `message_count`. The rest is reserved and must be zero. Each 48-byte frame header carries `checksum` (XxHash3-64), `id` (u128), `offset_delta` (u32), `timestamp_delta` (u32), and the two lengths. A message's absolute offset is `base_offset + offset_delta`; its server timestamp is the flat `base_timestamp`, while `timestamp_delta` resolves producer time against `origin_timestamp`. All fields are **little-endian**, and records are stored contiguously with no padding.
+
+The full byte-level tables live on the [Message batches](https://iggy.apache.org/docs/binary-protocol/messages) page. Absent at-rest encryption, what lands on disk is exactly what the producer sent, with the server stamping `partition_id` at admission and `base_offset` / `base_timestamp` (plus a `batch_checksum` recompute) at journal append.
+
+## Indexes
+
+Each segment has an accompanying `.index` file holding a **sparse index**: one 24-byte entry per flushed write, not per message.
+
+| Field | Bytes | Type | Description |
+|-------|-------|------|-------------|
+| offset | 0..8 | u64 | Absolute offset of the flushed batch |
+| timestamp | 8..16 | u64 | Timestamp of the flushed batch |
+| position | 16..24 | u64 | Byte position of the batch start in the `.log` file |
+
+Little-endian, no header, no padding. To serve a poll, the server binary-searches the index for the closest entry at or below the target offset (or timestamp), seeks to its `position`, and walks batch records from there. Because the index is a sparse hint, a lookup below the indexed range falls back to the segment start rather than failing.
+
+There is no index caching configuration: the in-memory index cache is an internal per-segment structure the server manages itself.
+
+## Write pipeline
+
+Messages are admitted, stamped, and buffered in the partition journal. Their completion path depends on the topic's durability policy:
+
+```mermaid
+graph TD
+  A["Client SendMessages: batch with producer-computed checksums"] --> B["Admission: verify checksums, stamp partition_id"]
+  B --> C["Stamp base_offset / base_timestamp, recompute batch_checksum"]
+  C --> D["Append to the in-memory partition journal"]
+  D --> E{"Multiple replicas?"}
+  E -->|"Yes"| R["Replicate prepares; meet required WAL barriers before PrepareOk"]
+  E -->|"No"| F["VSR quorum commit"]
+  R --> F
+  F --> G["Apply committed state; write segments when required"]
+  G --> H{"Single replica and persisted?"}
+  H -->|"Yes"| J["Complete local segment synchronization"]
+  H -->|"No"| I["Reply under the topic's completion policy"]
+  J --> I
+```
+
+The flush thresholds and completion policies are **per-topic creation options**:
+
+- `messages_required_to_save` (default `1024`): count threshold.
+- `size_of_messages_required_to_save` (default `1 MiB`): byte threshold.
+- `durability` (default `replicated`): message completion policy; `persisted` requires recoverable stable storage at the replication quorum.
+- `consumer_offset_durability` (default `replicated`): the independent policy for explicit offset stores and deletes.
+
+A full active segment also triggers an ordinary flush. These are soft limits: a flush writes whole committed batches, so the actual count or size can overshoot. Required persistence, capacity pressure, and lifecycle operations can flush below the thresholds. The settings do not define a periodic flush interval. The `MessagesWriter` uses **vectored I/O** with up to 1024 buffers per syscall, so many buffered batches can land in one write.
+
+With `replicated`, completion does not wait for an additional stable-storage barrier. With `persisted`, a single-replica partition flushes and synchronizes committed segment state before success. A multi-replica partition instead gates the required prepare acknowledgements on recoverable WAL history, so persisted success can precede an ordinary segment flush. `messages_required_to_save=1` is not required.
+
+For multi-replica partitions, the disk prepare WAL is enabled when either policy is `persisted` and includes message payloads even if only the offset policy is persisted. Checkpoints synchronize materialized files before reclaiming WAL history. See [Durability](https://iggy.apache.org/docs/server/durability) and [Cluster Durability](https://iggy.apache.org/docs/clustering/durability) for completion guarantees and failure behavior.
+
+## Boot-time segment recovery
+
+At startup, recovery validates batch checksums, partition identity, and the segment chain before serving data. With message durability `replicated`, it walks the log from byte zero because buffered writeback can preserve later pages before earlier ones. With `persisted`, completed durable segment flushes allow an index-anchored recovery path.
+
+A missing or torn sparse index can be rebuilt from valid log data. An incomplete tail can be truncated, but an interior gap, intact records after damage, or a contradiction with durable history can require recovery refusal. Recovery does not blindly truncate at the first invalid batch.
+
+When a prepare WAL exists, recovery reconciles it with materialized segment and offset state. Unrecoverable partition data is fenced and repaired from peers when available. It must not be replaced by an empty healthy partition. A singleton has no peer copy to fetch.
+
+## Read integrity
+
+Disk reads are verified before they reach a consumer:
+
+```toml
+[partition]
+validate_checksum = true
+```
+
+With `validate_checksum = true` (the default), every batch a disk poll reads is re-hashed and compared against its stored checksum. A mismatch stops the disk walk and logs an error on the server. The consumer receives any valid prefix already read, or an ordinary empty poll if none was read; the protocol does not report the checksum failure to the consumer. Repeated polls can therefore wait indefinitely at damaged data. Setting it to `false` skips the re-hash and serves whatever decodes, which can hand a consumer bytes provably not the ones written. Only disable it with a corruption guard elsewhere in the stack.
+
+Binary polls reuse the stored batch layout. A reply may slice a larger stored batch and rewrite its header, and at-rest encryption requires decryption before the reply. HTTP additionally serializes the result as JSON.
+
+## Memory pool
+
+Iggy includes a custom memory pool to reuse buffers on the hot path. The pool has **28 buckets** with buffer sizes from 4 KiB up to 512 MiB (non-uniform spacing, denser around common message sizes, with sizes above 2 MiB rounded to hugepage-friendly steps). Components request a buffer from the appropriate bucket and return it when done.
+
+```toml
+[memory_pool]
+enabled = true
+size = "4 GiB"            # Total pool size (minimum 512 MiB, multiple of the 4096-byte page size)
+bucket_capacity = 8192    # Buffers per bucket (power of 2, minimum 128)
+```
+
+Buffers are allocated lazily. A pool miss can allocate outside the pool, so message processing is not allocation-free. Internal components can pass ownership of existing buffers without copying their contents.
+
+## Retention and cleanup
+
+Two independent retention policies exist, both **per-topic options configurable at creation or update** (see [Topic options](https://iggy.apache.org/docs/server/topic-options)). The segment cleaner enforces them:
+
+```toml
+[data_maintenance.messages]
+cleaner_enabled = true    # default
+interval = "1 m"          # default
+```
+
+**Size-based retention** (`max_topic_size`): the cluster has no single owner of a topic-wide total, so each partition enforces an equal share: `max_topic_size / partition_count`, counted over **sealed** bytes. The share is floored at one sealed-segment ceiling (`segment_size` plus the maximum message-bus frame, since a sealed segment can overshoot by one batch). A cap that divides below that floor is raised to it, so the policy always means at least "keep the newest sealed segment". Once sealed bytes exceed the budget, the oldest sealed segments are trimmed. There is no percentage-based early trigger.
+
+**Time-based retention** (`message_expiry`): sealed segments whose newest message is older than the expiry are deleted.
+
+Both policies can be active at once. They only ever touch sealed segments. Deletion also stops at the minimum committed consumer or consumer-group offset, and pending persistence checkpoints can defer it. The active segment is **never deleted by retention**, even if its messages have expired.
+
+## Metadata plane
+
+Metadata operations (create stream, delete topic, create user, and so on) do not use the partition storage above. They replicate through the metadata consensus group and persist in `local_data/metadata/`:
+
+- **`journal.wal`**: the prepare journal. Each entry is a 256-byte `PrepareHeader` (the consensus header carrying checksums, view, op and commit numbers, operation discriminant, and acting user) followed by the operation's wire-format body, exactly as replicated. This is the write-ahead log: an operation is journaled before it is applied.
+- **`snapshot.bin`**: a **MessagePack** (rmp-serde) snapshot of the whole metadata state machine, written at checkpoints so the journal can be truncated. Recovery loads the snapshot, then replays journal entries newer than it, rebuilding the client session table alongside.
+- **`superblock.a` / `superblock.b`**: a ping-pong pair of checkpoint records, where the newest valid slot wins by sequence number. The superblock records which checkpoint is current and the snapshot's checksum. Boot cross-checks the pairing: a superblock pointing at a checkpoint newer than the on-disk snapshot, or a snapshot whose checksum doesn't match the record, refuses to boot rather than silently rewinding committed state.
+
+Partition directories carry the same superblock mechanism for their own consensus state (replica identity, view), which is how a restarted replica proves it is itself rather than a blank impostor.
+
+## Encryption
+
+Iggy supports optional **AES-256-GCM** encryption for message payloads and user headers. They are encrypted before storage and decrypted for polling. Metadata journals, metadata snapshots, and structural record headers remain unencrypted. The key must decode from base64 to 32 bytes. See [Security](https://iggy.apache.org/docs/server/security#data-encryption-at-rest).
+
+```toml
+[encryption]
+enabled = false
+key = ""  # 32-byte base64-encoded key
+```
+
+## Compression
+
+The `compression_algorithm` topic option accepts `none` (default) and `gzip`, but it is a **placeholder today**: the value is persisted and reported back, but no message compression is applied. Payload encryption still applies when enabled. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers) in the Iggy repo.
+
+## Removed and relocated settings
+
+Earlier releases documented several storage features and `[system.*]` keys that no longer exist:
+
+- **`cache_indexes`**: removed. Index caching is internal now (see [Indexes](#indexes)).
+- **`[system.message_deduplication]`**: removed configuration; it does not configure the partition request deduplication table.
+- **Segment archiving / S3 backup placeholders**: removed. Delete `archive_expired` and the old `[system.segment]` table rather than retaining a `false` value.
+- **`enforce_fsync`**: replaced by the topic `durability` policy. Consumer-offset completion has its own `consumer_offset_durability` policy. Both default independently to `replicated`.
+- **`[system.*]` tables**: removed or moved to root tables. Retention, segment size, preallocation, and flush thresholds are per-topic options.
+
+The config loader rejects the old `[system]` table and `IGGY_SYSTEM_*` environment mappings. The full mapping is in [Relocated configuration keys](https://iggy.apache.org/docs/server/configuration#relocated-configuration-keys).
+
+---
+
+# Durability
+
+> What a completed write guarantees, how to select topic durability, and what survives a single-node crash.
+
+Rendered page: https://iggy.apache.org/docs/server/durability/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/durability.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+A successful write has the guarantee selected by the topic's `durability`
+option. The default, `replicated`, waits for consensus commit and local
+application without an additional stable-storage barrier. `persisted` also
+requires a recoverable copy on stable storage at the replication quorum.
+
+**Both policies write data to disk.** The difference is what must have
+completed before the server reports success. On a single node the quorum is
+one, so `replicated` provides no second copy and can acknowledge messages
+that exist only in the server process's memory. For multiple replicas, see
+[Cluster Durability](https://iggy.apache.org/docs/clustering/durability).
+
+## Select the policy when creating the topic
+
+| Topic option | Default | Controls |
+| --- | --- | --- |
+| `durability` | `replicated` | Message production |
+| `consumer_offset_durability` | `replicated` | Explicit consumer-offset stores and deletes |
+
+Both accept `replicated` or `persisted`. They default **independently**:
+setting `durability=persisted` leaves consumer offsets at `replicated`
+unless that option is also supplied. Neither inherits the other.
+
+For persisted messages and consumer offsets, create a topic in an existing
+stream:
+
+```bash
+iggy topic create my-stream my-topic 1 none \
+  --durability persisted \
+  --consumer-offset-durability persisted
+```
+
+These are [topic creation options](https://iggy.apache.org/docs/server/topic-options), not
+`config.toml` settings or server environment overrides. `GetTopic` reports
+the effective values. Both policies are create-only; `UpdateTopic` cannot
+change them on an existing topic.
+
+The former `enforce_fsync` topic option is rejected. Use `durability` for
+messages and `consumer_offset_durability` for offsets. The old server-wide
+`consumer_offset_enforce_fsync` setting has also been removed.
+
+## The single-node write path
+
+With `replicated`, the server commits and applies the operation locally.
+Message batches can remain in the in-memory partition journal after success.
+Ordinary segment writes still happen when a flush trigger fires, and a write
+that triggers a flush can wait for that I/O, but success does not require
+stable-storage synchronization.
+
+With `persisted`, successful message completion follows this path:
+
+```text
+local commit
+  -> write committed batches to .log and .index
+  -> synchronize both files and any newly created segment names
+  -> reply to the producer
+```
+
+The committed batches are flushed even below the ordinary flush thresholds.
+**Setting `durability=persisted` is sufficient; setting
+`messages_required_to_save=1` is not required.** A single-replica partition
+does not use the cluster's prepare WAL.
+
+For explicit offset changes, `consumer_offset_durability=persisted`
+similarly waits for the required local file and directory synchronization
+before success. On a singleton, persisting an offset does not force earlier
+`replicated` messages to be flushed. Select both policies as `persisted`
+when both messages and their stored offsets need that protection.
+
+## Flush scheduling is separate
+
+| Topic option | Default | Effect |
+| --- | --- | --- |
+| `messages_required_to_save` | `1024` | Message-count trigger for ordinary segment writes |
+| `size_of_messages_required_to_save` | `1 MiB` | Byte-count trigger for ordinary segment writes |
+| `segment_size` | `1 GiB` | Soft segment limit; a whole batch can cross it |
+
+A count or byte trigger, or a full active segment, can flush the committed
+journal prefix. Required persistence, capacity pressure, and lifecycle work
+can flush earlier. These thresholds are not a maximum data-loss guarantee
+and do not specify a periodic flush interval. A quiet `replicated` topic
+can retain messages in process memory while waiting for a trigger.
+
+Reducing the thresholds changes batching and I/O frequency. It does not give
+`replicated` the stable-storage guarantee of `persisted`.
+
+## What survives a failure
+
+This table describes acknowledged messages on one node, with no later
+retention, purge, or deletion:
+
+| Failure | `replicated` | `persisted` |
+| --- | --- | --- |
+| Process crash, `SIGKILL`, panic, or OOM kill | Unflushed messages can be lost | Acknowledged messages are recoverable from local storage |
+| Machine crash, kernel panic, or power loss | Unflushed messages and unsynchronized file writes can be lost | Acknowledged messages are recoverable if the storage honors synchronization |
+| Storage device lost or irreparably damaged | No surviving local copy is guaranteed | No surviving local copy is guaranteed |
+
+Completed buffered file writes normally remain in Linux's page cache after
+the server process dies. Messages still in the process's journal do not.
+Page cache alone does not protect against machine or power failure.
+
+A graceful shutdown drains work and forces a final flush of committed
+messages, regardless of the thresholds. This depends on the shutdown
+finishing and its I/O succeeding. A container or service termination that
+expires its grace period and sends `SIGKILL` is a process crash, not a
+completed graceful shutdown.
+
+## Which responses prove completion
+
+The policy applies to the completed server operation, not merely to enqueueing
+a request in a producer or receiving an early dispatch response.
+
+For HTTP production:
+
+| Request | Response | Meaning |
+| --- | --- | --- |
+| Default, or `?ack=replicated` | `201 Created`, `Iggy-Durability: replicated` or `persisted` | The write completed under the topic's message policy |
+| `?ack=none` | `202 Accepted`, `Iggy-Durability: none` | Dispatch was accepted; commit and persistence were not awaited |
+
+The query value `ack=replicated` selects the awaited path even when the
+topic uses `persisted`. It does not override the topic policy.
+
+**Poll auto-commit is asynchronous.** A successful poll does not confirm
+that its offset write committed or became durable, even with
+`consumer_offset_durability=persisted`. When processing needs an explicit
+offset completion guarantee, store the offset explicitly and await success.
+
+## Recovery and cost
+
+Recovery validates segment batches and partition identity. It can truncate
+an incomplete tail and rebuild a missing or torn sparse index. Interior
+damage, gaps, or intact records beyond damaged data can require refusal or
+peer repair instead of truncation. A single node cannot fetch a missing copy
+from another replica. See [Storage Engine](https://iggy.apache.org/docs/server/storage-engine).
+
+`persisted` adds synchronization to the completion path. Its latency and
+throughput depend on storage, filesystem, batching, and concurrency. Measure
+both policies on the intended hardware rather than applying results from the
+removed `enforce_fsync` configuration. The
+[benchmarking guide](https://iggy.apache.org/docs/server/benchmarking) explains how to reproduce a
+workload.
+
+The implementation references are the
+[topic policy definitions](https://github.com/apache/iggy/blob/97f7b0c0335f81691bef34f923f21d783016a6a4/core/common/src/types/options/durability.rs),
+[partition completion paths](https://github.com/apache/iggy/blob/97f7b0c0335f81691bef34f923f21d783016a6a4/core/partitions/src/iggy_partition.rs),
+and [HTTP response handling](https://github.com/apache/iggy/blob/97f7b0c0335f81691bef34f923f21d783016a6a4/core/server/src/http/handlers.rs).
+
+---
+
+# Networking
+
+> The four transports Iggy serves simultaneously, TCP, QUIC, WebSocket and HTTP, and what each is best suited to.
+
+Rendered page: https://iggy.apache.org/docs/server/networking/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/networking.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Iggy supports four transport protocols simultaneously, each optimized for different use cases. All stateful protocols (TCP, QUIC, WebSocket) use the same custom binary wire protocol, while HTTP provides a standard REST API.
+
+## Transport protocols
+
+| Protocol | Default Address | Implementation | Best for |
+|----------|----------------|----------------|----------|
+| TCP | `127.0.0.1:8090` | compio + custom binary protocol | Highest throughput, lowest latency |
+| QUIC | `127.0.0.1:8080` | compio-quic (quinn) | Secure connections out of the box |
+| HTTP | `127.0.0.1:3000` | axum | REST API, web integrations |
+| WebSocket | `127.0.0.1:8092` | compio-ws | Browser clients, bidirectional streaming |
+
+**Performance ranking** (lowest to highest overhead): TCP > QUIC > WebSocket > HTTP
+
+## Binary protocol
+
+Every request and reply on the stateful transports starts with a fixed 256-byte header (the same Viewstamped Replication header layout the cluster uses internally), followed by the command payload. The `iggy_binary_protocol` crate provides zero-copy serialization for these headers, and foreign SDKs implement the same contract natively. See the [Binary Protocol](https://iggy.apache.org/docs/binary-protocol) section for the full specification.
+
+## Connection handling across shards
+
+The server runs one thread and runtime per selected shard (thread-per-core, shared-nothing), with CPU selection and optional pinning controlled by `[sharding]`. All listeners (every client transport) bind on shard 0 only. Shard 0's coordinator hands accepted plaintext TCP and WebSocket connections to peer shards round-robin by transferring the file descriptor at accept time. From then on the connection lives entirely on its shard. QUIC, TCP with TLS, WebSocket with TLS, and HTTP terminate on shard 0, because their per-connection state cannot move between threads. Sockets **never migrate** after accept: an operation that touches a partition owned by another shard rides the internal message bus instead.
+
+## TCP
+
+TCP provides the highest performance as it works directly with binary data without the overhead of HTTP or TLS handshakes (unless TLS is enabled). The full set of keys:
+
+```toml
+[tcp]
+enabled = true
+address = "127.0.0.1:8090"
+
+[tcp.tls]
+enabled = false
+self_signed = true
+cert_file = "core/certs/iggy_cert.pem"
+key_file = "core/certs/iggy_key.pem"
+```
+
+## QUIC
+
+QUIC runs the same binary protocol over UDP, on top of the quinn library, with TLS built in. It isn't quite as fast as TCP, but security comes out of the box (TLS is **mandatory**). Defaults:
+
+```toml
+[quic]
+enabled = true
+address = "127.0.0.1:8080"
+max_concurrent_bidi_streams = 1
+initial_mtu = "1200 B"
+send_window = "64 MiB"
+receive_window = "64 MiB"
+stream_receive_window = "64 MiB"
+keep_alive_interval = "10 s"
+max_idle_timeout = "30 s"
+
+[quic.certificate]
+self_signed = true
+cert_file = ""
+key_file = ""
+```
+
+A few of these are deliberate rather than arbitrary:
+
+- `max_concurrent_bidi_streams = 1`: the Rust SDK opens a fresh stream per command and the server accepts one at a time, so a connection carries one in-flight command. Raising the cap does **not** make handlers concurrent.
+- `initial_mtu = "1200 B"` is the QUIC minimum. MTU discovery probes upward automatically, and boot rejects values below 1200.
+- `stream_receive_window` is the per-stream slice of `receive_window`, equal to it because there is a single stream. Lower it if you ever raise the stream cap.
+- `keep_alive_interval` is one third of `max_idle_timeout`, so two consecutive lost keep-alives fit before the idle timer closes the connection.
+
+## HTTP
+
+The HTTP API is built on [axum](https://github.com/tokio-rs/axum) and provides a standard REST interface. It includes JWT authentication, CORS configuration, and optional TLS.
+
+HTTP is the most accessible protocol but has the highest overhead due to JSON serialization and the stateless nature of HTTP (no persistent connections for consumer groups). You can find request examples in the [server.http](https://github.com/apache/iggy/blob/master/core/server/server.http) file.
+
+The HTTP server also hosts:
+
+- **Prometheus metrics** at `/metrics` (endpoint configurable via `[http.metrics]`). The route authenticates like every other read: scrapers must present a bearer credential (JWT or personal access token). The `/ping` API route, CORS preflight responses, and enabled `/ui` static assets are public. Login and refresh routes prove credentials in the request body.
+- **Embedded Web UI** at `/ui`, which requires `web_ui = true` in `[http]` (**off by default**) on a server built with the `iggy-web` feature (part of the default build) and the Web UI static assets. Build the assets before compiling the server; see [Configuration](https://iggy.apache.org/docs/server/configuration).
+
+## WebSocket
+
+WebSocket provides bidirectional streaming over HTTP upgrade. Iggy uses the `compio-ws` crate to connect tungstenite framing to compio's completion-based I/O. The default WebSocket read buffer is 128 KiB and the default maximum message size is 64 MiB; these are separate settings.
+
+The `[websocket]` section exposes the frame-tuning knobs (`read_buffer_size`, `write_buffer_size`, `max_write_buffer_size`, `max_message_size`, `max_frame_size`, `accept_unmasked_frames`). See [Configuration](https://iggy.apache.org/docs/server/configuration). TLS for WebSocket has its own `[websocket.tls]` section.
+
+**Historical benchmark comparison** from the [WebSocket implementation article](https://iggy.apache.org/blogs/2025/11/17/websocket-io-uring) (AWS i3en.3xlarge, 4 producers or consumers, 40M messages, 1,000 messages per batch, fsync enabled). These measurements predate 0.9.0:
+
+- Producer avg latency: TCP 2.61ms vs WebSocket 3.43ms (+31%)
+- Consumer avg latency: TCP 0.70ms vs WebSocket 1.44ms (+106%)
+
+## TLS
+
+Each transport configures TLS in its own section, and the `self_signed` semantics differ per transport:
+
+| Transport | Section | Behavior |
+|-----------|---------|----------|
+| TCP | `[tcp.tls]` | `self_signed = true` generates an ephemeral certificate only while `cert_file` does not exist; an existing PEM pair is loaded instead. |
+| WebSocket | `[websocket.tls]` | Same load-or-generate rule as TCP. |
+| QUIC | `[quic.certificate]` | TLS is mandatory (part of the QUIC spec). `self_signed = true` **always** generates an ephemeral certificate and ignores `cert_file`/`key_file`, logging a warning if the files exist. |
+| HTTP | `[http.tls]` | No `self_signed` option: HTTPS requires certificate and key files in `cert_file`/`key_file`. |
+
+With `self_signed = false`, `cert_file` and `key_file` must both exist. For production, provide proper certificate files everywhere. Ephemeral certificates **change on every start**, so a trust configuration pinned to one generated certificate does not survive a restart.
+
+## Heartbeat
+
+```toml
+[heartbeat]
+enabled = true
+interval = "30 s"
+```
+
+The verifier checks once per interval and releases a session whose last heartbeat is more than 1.2x the interval old, so its consumer groups rebalance off it. Requests and pings refresh the heartbeat. Only connections holding a consumer-group membership are evicted. Others are left alone until their socket closes.
+
+The Rust, Go, Python, Node, async Java and C# TCP clients have automatic heartbeats, normally every 5 seconds once connected. This is below the default 36-second inactivity threshold; the periodic verifier means eviction does not occur at an exact 36-second deadline. The blocking Java client has no automatic heartbeat, so an idle consumer-group member must ping manually or reconnect after eviction.
+
+## Cluster networking
+
+In cluster mode, listener ports come exclusively from each node's `cluster.nodes` ports entry, including the `tcp_replica` port for the consensus plane, and nodes can advertise different client-facing addresses per client network. Replica-to-replica traffic can be authenticated with a pre-shared key and wrapped in TLS 1.3. See [Clustering configuration](https://iggy.apache.org/docs/clustering/configuration) and [Clustering security](https://iggy.apache.org/docs/clustering/security).
+
+---
+
+# Security
+
+> Authentication, authorization, transport encryption and encryption at rest in the Iggy server.
+
+Rendered page: https://iggy.apache.org/docs/server/security/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/security.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Iggy provides multiple layers of security covering authentication, authorization, transport encryption, and data encryption at rest.
+
+## Authentication
+
+Iggy supports two authentication mechanisms:
+
+### Username and password
+
+Users authenticate with a username and password, for example via the Rust SDK's `login_user()`. Passwords are hashed using **Argon2id** (a memory-hard hashing algorithm). On first single-node startup, the server generates a random password for the initial root account (username `iggy` by default) and writes it to the logs. A first cluster boot requires explicit root credentials. You can override this by setting environment variables:
+
+```bash
+export IGGY_ROOT_USERNAME=iggy
+export IGGY_ROOT_PASSWORD=my-secret-password
+```
+
+Or use the `--with-default-root-credentials` flag for development (sets root credentials to `iggy`/`iggy`).
+
+These variables initialize the root account only when it is first created. Supplied values are still validated on later starts, but they do not replace the stored credentials. Use the password-change API or `iggy user password` with the current password to change an existing account. The `--fresh` flag deletes all data; it is not needed for a password change.
+
+The root user **cannot be deleted**, and its permissions are fixed: it always holds every permission.
+
+### Personal Access Tokens (PAT)
+
+PATs provide programmatic access with optional expiry. Each user can have up to `max_tokens_per_user` (default 100) stored tokens, including expired tokens until the cleaner removes them. Tokens are **hashed before storage** and can be revoked at any time.
+
+```bash
+# Create a PAT via CLI
+IGGY_TOKEN=$(iggy --quiet -u iggy -p my-secret-password pat create my-token 7d)
+
+# Use the PAT for authentication
+iggy -t "$IGGY_TOKEN" stream list
+```
+
+An automatic cleaner removes expired tokens at a configurable interval.
+
+Broker API commands require an authenticated session or bearer credential, except for ping and the login/refresh flows that establish or prove a credential. The Prometheus `/metrics` scrape requires a JWT or personal access token. HTTP CORS preflight responses and embedded `/ui` static assets are public; the UI's broker API calls still require authentication.
+
+## Authorization
+
+Iggy provides granular permissions at three levels:
+
+1. **Global permissions** - apply to the whole server and all streams
+2. **Stream permissions** - scoped to one stream and all its topics
+3. **Topic permissions** - scoped to one topic within a stream
+
+The root user has full access to everything and **bypasses all permission checks**. Other users can be assigned specific permissions using the CLI, HTTP API, SDK, or Web UI.
+
+### Permission matrix
+
+The global permissions and the operations they unlock:
+
+| Operation | Required global permission |
+|-----------|---------------------------|
+| Get server stats | `read_servers` |
+| List clients, get client | `read_servers` |
+| Create, update, delete users; update permissions; change passwords | `manage_users` |
+| Get user, list users | `read_users` |
+| Create, update, delete streams | `manage_streams` |
+| Get stream, list streams | `read_streams` |
+| Create, update, delete topics | `manage_topics` |
+| Get topic, list topics | `read_topics` |
+| Consumer groups: create, delete, join, leave, get | `read_topics` |
+| Poll messages | `poll_messages` |
+| Send messages | `send_messages` |
+
+Two kinds of implication apply on top of the table:
+
+- **Supersets**: every `manage_*` permission includes its `read_*` counterpart. In addition `manage_streams` includes `manage_topics`, `read_streams` includes `read_topics`, and `read_topics` includes `poll_messages`. `manage_topics` also includes `send_messages`, so `manage_streams` permits sending too.
+- **Self-service**: an authenticated user can always read their own account, change their own password, and manage their own personal access tokens, without any of the user permissions above.
+
+### Scoped permissions
+
+Instead of (or in addition to) global grants, permissions can be scoped per stream and per topic:
+
+- **Stream scope**: `manage_stream`, `read_stream`, `manage_topics`, `read_topics`, `poll_messages`, `send_messages`, plus an optional per-topic map. `read_stream` includes `read_topics` and `poll_messages` within that stream.
+- **Topic scope**: `manage_topic`, `read_topic`, `poll_messages`, `send_messages`. `read_topic` includes `poll_messages` on that topic.
+
+### How permissions cascade
+
+Permissions are checked from top to bottom: global, then stream, then topic. A permission granted at a higher level covers everything below it:
+
+- Global `poll_messages` lets the user poll messages from **all** streams and topics.
+- Stream-scoped `poll_messages` on stream 1 lets the user poll from **all topics** in stream 1, but not from other streams.
+- Topic-scoped `poll_messages` on topic 5 of stream 1 lets the user poll **only** from that topic.
+
+If a stream has no entry in the user's stream permissions, only global permissions apply to it. The same holds for topics within a stream.
+
+For example, a user that may only consume from stream 42 needs no global permissions at all: grant stream-scoped `read_stream` and `poll_messages` on stream 42, and the user can read that stream, list its topics, and poll messages from any topic in it. The read grant also permits consumer-group operations in that stream. For polling without those read and group permissions, grant only `poll_messages`.
+
+## Transport encryption (TLS)
+
+Each transport configures TLS in its own section, and the `self_signed` semantics differ per transport:
+
+| Transport | Section | Behavior |
+|-----------|---------|----------|
+| TCP | `[tcp.tls]` | `self_signed = true` generates an ephemeral certificate only while `cert_file` does not exist; an existing PEM pair is loaded instead. |
+| WebSocket | `[websocket.tls]` | Same load-or-generate rule as TCP. |
+| QUIC | `[quic.certificate]` | TLS is mandatory (part of the QUIC spec). `self_signed = true` **always** generates an ephemeral certificate and ignores `cert_file`/`key_file`, logging a warning if the files exist. |
+| HTTP | `[http.tls]` | No `self_signed` option: HTTPS requires certificate and key files in `cert_file`/`key_file`. |
+
+For production deployments, provide proper certificates via `cert_file` and `key_file`. Ephemeral certificates change on every start, so a trust configuration pinned to one generated certificate does not survive a restart. See [Networking](https://iggy.apache.org/docs/server/networking) for the surrounding transport configuration.
+
+## Data encryption at rest
+
+Iggy supports optional **AES-256-GCM** encryption for message payloads and user headers. They are encrypted before storage and decrypted for polling. Metadata journals, metadata snapshots, and structural record headers remain unencrypted. This option does not provide whole-directory encryption. The encryption key must decode from base64 to 32 bytes.
+
+```toml
+[encryption]
+enabled = false
+key = ""  # 32-byte base64-encoded key
+```
+
+## JWT (HTTP API)
+
+The HTTP API uses JWT (JSON Web Tokens) for session management. Tokens are signed with HS256 by default and have configurable expiry, clock skew tolerance, and audience/issuer validation:
+
+```toml
+[http.jwt]
+algorithm = "HS256"
+issuer = "iggy.apache.org"
+audience = "iggy.apache.org"
+access_token_expiry = "1 h"
+clock_skew = "5 s"
+```
+
+Further keys (`valid_issuers`, `valid_audiences`, `not_before`, `use_base64_secret`, the signing secrets) are covered in [Configuration](https://iggy.apache.org/docs/server/configuration).
+
+**Signing secrets**: `encoding_secret` and `decoding_secret` default to empty. Without `cluster.auth`, the server generates a secure random secret on every start. That's a safe single-node default with two consequences: issued tokens **die on restart**, and in a cluster each node signs with its own key, so bearers are node-local and follower-to-primary request forwarding stays disabled. For clusters, configure an identical secret on every node (prefer the `IGGY_HTTP_JWT_ENCODING_SECRET`/`IGGY_HTTP_JWT_DECODING_SECRET` environment variables over on-disk config), or enable `cluster.auth` so the JWT key derives from the cluster's shared PSK.
+
+**Refresh tokens**: `POST /users/refresh-token` re-issues an access token from a still-valid one presented in the request body, answering the same identity shape as login, so HTTP clients can extend a session without re-sending credentials.
+
+**Federated issuers**: the opt-in `[[http.jwt.trusted_issuers]]` list accepts tokens minted by external identity providers for application-to-application flows. Each entry names an `issuer`, `audience`, and `jwks_url`. Signatures are verified against the issuer's JWKS (fetches are rate-limited), and every token from that issuer is remapped onto the configured non-root `user_id`. With no entries configured, the listener accepts only self-issued tokens. See [Configuration](https://iggy.apache.org/docs/server/configuration) for the key reference.
+
+## Cluster security
+
+In cluster mode, replica-to-replica traffic can require an authenticated handshake based on a pre-shared key (with a documented rolling rotation procedure) and can be wrapped in TLS 1.3. With `cluster.auth` enabled and no JWT secrets configured, the PSK also becomes the cluster-wide JWT key source. See [Clustering security](https://iggy.apache.org/docs/clustering/security).
+
+---
+
+# Docker & Helm
+
+> Run the Iggy server from the official Docker images, and deploy it with the Helm chart.
+
+Rendered page: https://iggy.apache.org/docs/server/docker/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/docker.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+## Docker
+
+You can easily run the Iggy server with Docker - the official images can be found [here](https://hub.docker.com/r/apache/iggy), use `docker pull apache/iggy:0.9.0`, or `apache/iggy:latest` for the newest stable release.
+
+These properties of the published image matter for deployment:
+
+- The working directory is `/app` and the `iggy-server` and `iggy` binaries are on `PATH` (`/usr/local/bin`). The default data directory `local_data` therefore resolves to `/app/local_data` - **mount your volume there**, or set `IGGY_PATH` and mount that path instead.
+- The image bakes in no address overrides, so the server binds the loopback defaults (`127.0.0.1`) and is **unreachable from outside the container** even with published ports. Set `IGGY_TCP_ADDRESS=0.0.0.0:8090` (and the equivalent for every other transport you expose) alongside the `-p` flags.
+- The wildcard says nothing about where clients reach the container, so the server refuses to start until `IGGY_NODE_ADVERTISED_ADDRESS` supplies that address. Use `localhost` when the ports are published to the host, the compose service name when the clients are containers on the same network, and the external hostname or load balancer name when they are further away. The value reaches clients through cluster metadata, where it is the endpoint they reconnect through.
+
+Below is an example `docker-compose.yml` which overrides the default configuration (see [Configuration](https://iggy.apache.org/docs/server/configuration)) with environment variables. If you prefer using the configuration file, you can mount it as a volume and provide the path to it with the `IGGY_CONFIG_PATH` environment variable.
+
+The examples use a permissive syscall profile and unlimited locked memory for development. Production deployments can use a custom seccomp profile and a finite locked-memory budget that permit the server's required operations. See [Linux tuning](https://iggy.apache.org/docs/server/linux-tuning#runtime-access-and-process-limits).
+
+```yaml
+services:
+  iggy:
+    image: apache/iggy:0.9.0
+    container_name: iggy
+    restart: unless-stopped
+    cap_add:
+      - SYS_NICE
+    security_opt:
+      - seccomp:unconfined
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    environment:
+      - IGGY_ROOT_USERNAME=iggy
+      - IGGY_ROOT_PASSWORD=Secret123
+      - IGGY_TCP_ADDRESS=0.0.0.0:8090
+      - IGGY_HTTP_ADDRESS=0.0.0.0:3000
+      - IGGY_NODE_ADVERTISED_ADDRESS=localhost
+      - IGGY_QUIC_ENABLED=false
+      - IGGY_WEBSOCKET_ENABLED=false
+    ports:
+      - "8090:8090"
+      - "3000:3000"
+    volumes:
+      - iggy:/app/local_data
+
+volumes:
+  iggy:
+```
+
+Or when running with `docker run`:
+
+```bash
+docker run -d --name iggy \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=Secret123 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 -e IGGY_HTTP_ADDRESS=0.0.0.0:3000 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
+  -p 8090:8090 -p 3000:3000 \
+  -v iggy:/app/local_data \
+  apache/iggy:0.9.0
+```
+
+### Why these capabilities?
+
+- **`SYS_NICE`** broadens scheduling and NUMA permissions. Pinning a thread owned by the process with `sched_setaffinity` does not by itself require this capability; container policies can impose additional restrictions. See [Linux affinity permissions](https://man7.org/linux/man-pages/man2/sched_setaffinity.2.html).
+- **`seccomp:unconfined`** permits `io_uring` calls blocked by Docker's default seccomp profile. A custom profile allowing the required syscalls is an alternative to disabling filtering. See [Docker seccomp profiles](https://docs.docker.com/engine/security/seccomp/).
+- **`memlock: -1`** removes the process's locked-memory limit. A finite limit is valid if it covers the runtime's requirements; neither setting overrides the container's memory limit.
+- **Host kernel 5.19 or newer** is required. Containers use the host's kernel, so these settings alone are not enough. See [System requirements](https://iggy.apache.org/docs/server/introduction#system-requirements).
+
+### Available images
+
+| Image | Description |
+|-------|-------------|
+| `apache/iggy` | Server + CLI |
+| `apache/iggy-web-ui` | Standalone Web UI |
+| `apache/iggy-connect` | Connectors runtime |
+| `apache/iggy-mcp` | MCP server |
+| `apache/iggy-bench-dashboard` | Benchmark dashboard (server + WASM frontend) |
+
+Images tagged `latest` are based on stable releases. Images tagged `edge` are built from the latest `master` branch.
+
+### Building from source
+
+The repository root carries its own `Dockerfile` and `docker-compose.yml` for building from source (a multi-stage build: Rust compilation including the Web UI, then a minimal runtime image):
+
+```bash
+docker build -t iggy .
+```
+
+Or use `docker compose up` directly from the repository root. That image **differs from the published one**: it sets the `0.0.0.0` address of all four listeners via `ENV` and keeps its data at `/local_data`. Those wildcards are baked into the image, so a plain `docker run` of it refuses to start until you pass `IGGY_NODE_ADVERTISED_ADDRESS` yourself. The repository's compose file publishes the ports to the host, so it declares `IGGY_NODE_ADVERTISED_ADDRESS=localhost`.
+
+### Running the CLI inside the container
+
+The `iggy` CLI is on `PATH` in the official image. With the compose example above (container `iggy`, password `Secret123`):
+
+```bash
+docker exec -it iggy iggy -u iggy -p Secret123 stream list
+```
+
+## Helm charts
+
+Helm charts for Kubernetes deployment are available in the [repository](https://github.com/apache/iggy/tree/master/helm/charts/iggy). Almost everything server-related nests under the `server:` key in `values.yaml`. The chart also bundles a Web UI deployment under `ui:`.
+
+### Quick start
+
+```bash
+helm install iggy ./helm/charts/iggy --set server.image.tag=0.9.0
+```
+
+### Chart components
+
+- **Server Deployment** - runs `apache/iggy` with the pod security context the server needs: seccomp profile `Unconfined` (for `io_uring`) plus the `IPC_LOCK` capability (for memory locking). Listener addresses are set to `0.0.0.0` via `server.env`, and the data volume mounts at `/app/local_data`. The chart supplies `IGGY_NODE_ADVERTISED_ADDRESS` as the in-cluster Service DNS name; override it with `server.advertisedAddress` when clients arrive through a LoadBalancer or an Ingress. The server image tag defaults to the chart's `appVersion` (`0.9.0-edge.6` in this source revision). The quick start selects `0.9.0` explicitly.
+- **Server Service** - exposes the `http` (3000), `quic` (8080/UDP), `tcp` (8090), and `websocket` (8092) ports.
+- **Web UI Deployment + Service** - a separate `apache/iggy-web-ui` deployment on port 3050, enabled by default (`ui.enabled`).
+- **Secret** - root user credentials from `server.users.root` (default `iggy`/`changeit`). Point `server.users.root.existingSecret.name` at your own Secret in production; `usernameKey` and `passwordKey` select its keys.
+- **PersistentVolumeClaim** - storage for `/app/local_data`, **disabled by default** (`server.persistence.enabled`), 8Gi when enabled.
+- **ServiceAccount** and **Ingress** - a shared ServiceAccount and separate optional server/UI ingresses. The chart has no HPA template. Server `replicaCount` must not exceed 1; cluster mode uses one release per node, each with its own replica ID and storage.
+- **ServiceMonitor** - Prometheus scrape config (optional). The `/metrics` endpoint requires a bearer credential like every other read, so wire a token (e.g. a personal access token stored in a Secret) into `server.serviceMonitor.authorization` - an unauthenticated scrape gets 401.
+
+### Key values
+
+```yaml
+# values.yaml (excerpt, chart defaults)
+server:
+  replicaCount: 1
+  # The address clients dial, published in cluster metadata. Declaring
+  # IGGY_NODE_ADVERTISED_ADDRESS in server.env instead also works, but
+  # setting both is refused at render time. Empty falls back to the
+  # in-cluster Service DNS name.
+  advertisedAddress: ""
+  image:
+    repository: apache/iggy
+    tag: ""  # Falls back to Chart.yaml appVersion
+  ports:
+    http: 3000
+    quic: 8080
+    tcp: 8090
+    websocket: 8092
+  users:
+    root:
+      username: iggy
+      password: changeit
+  persistence:
+    enabled: false
+    size: 8Gi
+  serviceMonitor:
+    enabled: false
+    # The metrics endpoint requires a bearer credential:
+    # authorization:
+    #   credentials:
+    #     name: iggy-metrics-token
+    #     key: token
+
+ui:
+  enabled: true
+  image:
+    repository: apache/iggy-web-ui
+    tag: "0.4.0"
+
+podSecurityContext:
+  seccompProfile:
+    type: Unconfined
+
+securityContext:
+  capabilities:
+    add:
+      - IPC_LOCK
+
+resources: {}
+```
+
+Save the excerpt as `my-values.yaml`, customize it for your environment, and deploy with:
+
+```bash
+helm install iggy ./helm/charts/iggy -f my-values.yaml --set server.image.tag=0.9.0
+```
+
+---
+
+# Linux tuning
+
+> Prepare Linux hosts for Iggy and measure the effects of memory, CPU, storage, and network tuning.
+
+Rendered page: https://iggy.apache.org/docs/server/linux-tuning/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/linux-tuning.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Host settings affect both production latency and benchmark results. Start with the distribution defaults, satisfy Iggy's runtime requirements, then change one setting at a time. The examples below are experiments for dedicated Linux hosts, not a configuration to apply unchanged to every VM.
+
+Use the [benchmarking guide](https://iggy.apache.org/docs/server/benchmarking) to compare throughput, p50, p99 and p99.9 latency, memory use, and errors under the same workload. Keep the server version, transport, topic durability, CPU allocation, and storage identical between runs.
+
+## Inspect the host first
+
+Run these read-only checks before changing the VM image or starting a benchmark:
+
+```bash
+uname -r
+lscpu
+free -h
+swapon --show
+ulimit -Sn
+ulimit -Hn
+ulimit -Sl
+ulimit -Hl
+sysctl vm.swappiness vm.dirty_background_bytes vm.dirty_bytes
+sysctl vm.dirty_background_ratio vm.dirty_ratio
+grep -E '^(HugePages_|Hugepagesize|Hugetlb|AnonHugePages)' /proc/meminfo
+ls /sys/kernel/mm/hugepages/
+```
+
+The shell's limits are not necessarily the service's limits. For a running process, inspect `/proc/PID/limits`, `/proc/PID/status`, and its cgroup limits. Replace `PID` with that process's ID. Record the VM type, vCPU topology, memory limit, disk type and provisioned throughput, filesystem, and network bandwidth with the result.
+
+## Runtime access and process limits
+
+Iggy uses `io_uring`. The kernel must implement the operations required by the server build, and the service or container must be allowed to use them. The server's startup diagnostics identify failed ring creation and unsupported operations. Where the kernel exposes them, inspect:
+
+```bash
+sysctl kernel.io_uring_disabled kernel.io_uring_group
+```
+
+`io_uring_disabled=0` permits ring creation. With `1`, an unprivileged service needs membership in the configured `io_uring_group`. With `2`, creation is disabled. Container syscall filters can independently deny access. Configure access for the service rather than assuming that a root shell proves the container can start. See the [kernel's io_uring controls](https://docs.kernel.org/admin-guide/sysctl/kernel.html#io-uring-disabled) and [Docker deployment guidance](https://iggy.apache.org/docs/server/docker).
+
+Size file-descriptor limits for connections, partitions, open segment files, and runtime overhead. `LimitNOFILE=65536` is an example starting budget, not an Iggy requirement. Increase it if measurements justify more. A systemd service can use the following drop-in:
+
+```ini
+[Service]
+LimitNOFILE=65536
+LimitMEMLOCK=infinity
+```
+
+Unlimited locked memory is an option for a dedicated service with a planned memory budget. A finite limit is also valid if it covers the runtime's locked-memory requirements. Neither setting creates RAM or overrides a container's memory ceiling.
+
+Recheck the actual process limits after restarting the service. PAM settings in `/etc/security/limits.conf` do not configure a system service. See [systemd resource limits](https://man7.org/linux/man-pages/man5/systemd.exec.5.html#PROCESS_PROPERTIES).
+
+## Swapping and writeback
+
+On a host with disk-backed swap and enough RAM for the workload, try `vm.swappiness=10` and compare it with the existing value. It reduces the preference for swapping relative to reclaiming file cache. It does not disable swapping, and even `0` permits swapping under sufficient pressure. zram and zswap can warrant different values. See [Linux swappiness](https://docs.kernel.org/admin-guide/sysctl/vm.html#swappiness).
+
+```bash
+# Optional experiment. Record the previous value first.
+sudo sysctl -w vm.swappiness=10
+```
+
+Leave memory for the kernel, page cache, other processes, and Iggy's buffers. Watch swap-in/out with `vmstat 1` and memory pressure in `/proc/pressure/memory`. Disabling swap does not fix an undersized memory budget.
+
+Dirty-page limits govern buffered writeback. Large percentage limits, such as `dirty_background_ratio=10` and `dirty_ratio=30`, can permit large bursts on high-memory VMs. If writeback coincides with latency spikes, compare explicit byte limits sized from disk throughput and the acceptable backlog.
+
+Byte and ratio forms are alternatives. Writing one disables its corresponding other form. These settings do not replace Iggy's persistence barriers. See [Linux writeback controls](https://docs.kernel.org/admin-guide/sysctl/vm.html#dirty-background-bytes).
+
+## Huge pages and mimalloc
+
+Huge pages can reduce translation overhead, but they consume memory differently from ordinary pages. Measure both throughput and tail latency. Iggy's default server build uses mimalloc. Check the startup allocator message, since builds that disable mimalloc do not use its environment options.
+
+There are three distinct controls:
+
+| Control | Meaning |
+| --- | --- |
+| Transparent huge pages (THP) | Kernel promotion of eligible mappings. Inspect the top-level and per-size THP policies. |
+| Linux HugeTLB pools | Explicitly reserved pages. `vm.nr_hugepages` counts pages of the default size reported by `Hugepagesize`. |
+| mimalloc environment options | Tell the allocator which page mechanisms to request. They are not kernel pool sizes. |
+
+### Explicit large pages
+
+First verify the default page size and leave sufficient ordinary memory. If `Hugepagesize` is `2048 kB`, 512 reserved pages consume 1 GiB:
+
+```bash
+# Only for a host whose default Hugepagesize is 2048 kB
+# and whose memory budget permits a 1 GiB reservation.
+sudo sysctl -w vm.nr_hugepages=512
+grep -E '^(HugePages_|Hugepagesize|Hugetlb)' /proc/meminfo
+```
+
+The requested count may not be allocated on a fragmented host. Boot-time reservation is more reliable. Reserved HugeTLB memory is unavailable for ordinary allocations or page cache, even while unused. Check NUMA placement and the actual pool, not just the requested count. See [HugeTLB administration](https://docs.kernel.org/admin-guide/mm/hugetlbpage.html).
+
+Try the allocator option on a mimalloc-enabled server, with access to the pool configured for its service account:
+
+```bash
+MIMALLOC_ALLOW_LARGE_OS_PAGES=1 MIMALLOC_VERBOSE=1 ./target/release/iggy-server
+```
+
+Set allocator variables in the launching environment or the service's `Environment=` entries before process startup. The server can allocate before loading its `.env` file. Verbose allocator output is useful for checking the experiment, then turn it off for timed runs.
+
+**Do not copy a Linux page count into `MIMALLOC_RESERVE_HUGE_OS_PAGES`.** That mimalloc option counts **1 GiB pages**. A value of `2048` requests 2 TiB, whereas `vm.nr_hugepages=2048` represents 4 GiB only when the default HugeTLB page size is 2 MiB. A 2 MiB pool does not provide a matching 1 GiB reservation.
+
+A separate 1 GiB-page experiment requires platform support, a suitable pool, and a budget for each process. mimalloc advises normally choosing this reservation mode separately from `MIMALLOC_ALLOW_LARGE_OS_PAGES`. See [mimalloc environment options](https://github.com/microsoft/mimalloc#environment-options). HugeTLB allocation can require `CAP_IPC_LOCK` or membership in `vm.hugetlb_shm_group`, as described in [mmap permissions](https://man7.org/linux/man-pages/man2/mmap.2.html).
+
+### Transparent huge pages
+
+Inspect the current policy instead of universally enabling or disabling THP:
+
+```bash
+cat /sys/kernel/mm/transparent_hugepage/enabled
+cat /sys/kernel/mm/transparent_hugepage/defrag
+```
+
+Compare the existing policy with `madvise` if allocator page promotion or compaction is relevant. Direct reclaim and compaction can stall allocations. On recent kernels, per-size policies and explicit `MADV_COLLAPSE` requests also matter, so the top-level switch alone does not describe all behavior. See [transparent huge-page controls](https://docs.kernel.org/admin-guide/mm/transhuge.html).
+
+Verify actual usage in `/proc/PID/smaps`: `AnonHugePages` reports PMD-sized anonymous THP, while `Private_Hugetlb` and `Shared_Hugetlb` identify explicit huge-page mappings. A successful pool reservation alone does not prove Iggy used it.
+
+## CPU placement and NUMA
+
+Allocate dedicated CPUs where possible. On the current server, `[sharding] cpu_allocation` and `pin_cores` control shard placement, and the process's allowed CPU set constrains allocation. Check the embedded configuration for the exact version being deployed. Separate server CPUs from a colocated load generator and leave capacity for kernel and network work.
+
+Inspect NUMA topology with `lscpu` or `numactl --hardware`. Compare physical-core-only placement with SMT when relevant. Match memory placement and any per-node huge-page reservation to the CPUs running the shards. Avoid assuming that allocating a pool on one NUMA node helps shards running on another.
+
+For a reproducible dedicated-host experiment, compare the `performance` CPU governor with the current governor if the guest exposes CPU frequency control. Power and thermal limits can still constrain frequency. Many cloud guests cannot control the host's governor. Record the setting rather than assuming a command changed it. See [CPU performance scaling](https://docs.kernel.org/admin-guide/pm/cpufreq.html).
+
+Inspect CPU steal time, cgroup throttling, and per-core utilization before increasing shard counts. If one core handles most interrupts or receive processing, inspect RSS queue distribution and IRQ affinity. Do not disable irqbalance or assign every IRQ to a fixed core without measuring. See [Linux network scaling](https://docs.kernel.org/networking/scaling.html).
+
+## Network and storage
+
+Socket-buffer requirements depend on bandwidth and round-trip time. For example, 10 Gbit/s across 10 ms has a bandwidth-delay product of about 12.5 MB. If the connection is window-limited, inspect `net.core.rmem_max`, `net.core.wmem_max`, `net.ipv4.tcp_rmem`, and `net.ipv4.tcp_wmem`. Larger ceilings permit larger buffers, but do not force the application to use them or guarantee higher throughput.
+
+Raise `somaxconn`, `tcp_max_syn_backlog`, or `netdev_max_backlog` only when backlog pressure or drops show the need. QUIC uses UDP, so TCP tuning does not configure its flow-control windows or UDP receive buffers.
+
+Keep changes such as `tcp_tw_reuse`, shorter TCP timeouts, and wider ephemeral-port ranges tied to a demonstrated connection-churn problem. See [TCP controls](https://docs.kernel.org/networking/ip-sysctl.html) and [core networking controls](https://docs.kernel.org/admin-guide/sysctl/net.html).
+
+Use storage with measured sustained bandwidth and latency, and record cloud volume and instance limits. Keep free space for segments, WAL, and recovery. Compare warm-cache and cold-cache runs explicitly. Do not periodically drop caches or disable storage flushes to improve a benchmark number. Storage, retention, and the selected durability policy must match the workload being evaluated.
+
+## Apply, verify, and reproduce
+
+Trial a change with a runtime setting first. Keep the previous value for rollback. Persist accepted sysctl values in a dedicated `/etc/sysctl.d/` file and accepted service limits or allocator variables in that service's systemd drop-in. THP sysfs writes require a boot-time mechanism of their own. Recheck effective values after reboot and process restart.
+
+Collect `vmstat 1`, `iostat -xz 1`, `mpstat -P ALL 1`, pressure counters, and network drop/retransmission counters alongside benchmark results. The iostat and mpstat tools are provided by the sysstat package. Run long enough to include segment flushes, WAL checkpoints, and sustained device limits, rather than measuring only buffered admission.
+
+Iggy's topic `durability` and `consumer_offset_durability` independently default to `replicated`. `persisted` changes completion guarantees, and huge pages or sysctl settings do not replace it. Poll auto-commit remains asynchronous. Record both policies, replication-group size, payload and batch sizes, warmup, CPU allocation, and the exact host changes with each benchmark result.
+
+---
+
+# Benchmarking
+
+> How Iggy is benchmarked, the tooling that ships with it, and the public platform for comparing results.
+
+Rendered page: https://iggy.apache.org/docs/server/benchmarking/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/server/benchmarking.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+**Benchmarks should be the first-class citizens**. We believe that performance is crucial for any system, and we strive to provide the best possible performance for our users. Please check, why we believe that the **[transparent benchmarking](https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks)** is so important.
+
+We've also built the **[benchmarking platform](https://benchmarks.iggy.apache.org)** where you can browse published benchmarks and compare results. This is the another open-source project available [here](https://github.com/apache/iggy/tree/master/core/bench/dashboard).
+
+![Benchmarking Platform](https://iggy.apache.org/img/bench_platform.png)
+
+*Historical dashboard screenshot showing a 0.5.0 run, not 0.9.0 measurements.*
+
+Iggy comes with a built-in benchmarking tool, `iggy-bench`. It's written in Rust and uses the `tokio` runtime for asynchronous I/O, mimicking the example client applications, so you can use it to estimate the performance of the server in your environment. It is part of the [core repository](https://github.com/apache/iggy/tree/master/core/bench) and lives in the `core/bench` directory.
+
+![Bench CLI](https://iggy.apache.org/img/bench_cli.png)
+
+*Historical CLI screenshot. Server-start and cleanup flags shown there have been removed; use the commands below and the current `iggy-bench --help`.*
+
+## Running benchmarks
+
+First build the project in release mode:
+
+```bash
+cargo build --release
+```
+
+**`iggy-bench` doesn't start a server.** It only connects, and fails with a connection error when nothing is listening. For a disposable development server with an empty data directory, use the credentials expected by the benchmark defaults:
+
+```bash
+cargo run --bin iggy-server -r -- --with-default-root-credentials
+```
+
+This flag affects only the first creation of the root user; existing credentials remain unchanged, and environment variables take precedence. For another server, pass its credentials with `iggy-bench -u USER -p PASSWORD` before the benchmark kind.
+
+The repo's driver script builds, starts the server, runs a send and a poll benchmark, and shuts the server down. **Use it only in a disposable checkout on an isolated host: it deletes `local_data` and signals matching `iggy-server` and `iggy-bench` processes by name.**
+
+```bash
+./scripts/run-benches.sh
+```
+
+With a server running, invoke the benchmark kind and transport of your choice. Workloads that produce create their benchmark streams and topics, deleting pre-existing `bench-stream-{n}` streams unless `--reuse-streams` is set. Consumer-only workloads (`pc` and `bcg`) require those streams and enough messages to exist already. Run the corresponding producer workload first, with matching stream, partition, and message counts.
+
+## Benchmark kinds
+
+Eight kinds are available, each with a short alias:
+
+Producer and consumer counts default to six. Pinned workloads also default to six streams. Set explicit counts to match the workload and available CPUs.
+
+1. Pinned producer (`pp`): N producers, each sending to its own stream-topic with a single partition:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- pinned-producer tcp
+   ```
+
+2. Pinned consumer (`pc`): N consumers, each polling its own stream-topic with a single partition:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- pinned-consumer tcp
+   ```
+
+3. Pinned producer and consumer (`ppc`), in parallel:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- pinned-producer-and-consumer tcp
+   ```
+
+4. Balanced producer (`bp`): N producers sending to M partitions in K streams with balanced partitioning:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- balanced-producer tcp
+   ```
+
+5. Balanced consumer group (`bcg`): N consumers assigned to M consumer groups polling from K partitions:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- balanced-consumer-group tcp
+   ```
+
+6. Balanced producer and consumer group (`bpcg`), in parallel:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- balanced-producer-and-consumer-group tcp
+   ```
+
+7. End-to-end producing consumer (`e2e`): each task alternates producing and consuming, measuring latency from the messages' producer timestamps:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- end-to-end-producing-consumer tcp
+   ```
+
+8. End-to-end producing consumer group (`e2ecg`): N producing consumers assigned to M consumer groups:
+
+   ```bash
+   cargo r --bin iggy-bench -r -- end-to-end-producing-consumer-group tcp
+   ```
+
+## Transports
+
+The transport subcommands are `tcp`, `quic`, `http`, and `websocket` (alias `ws`). Consumer-group workloads (`bcg`, `bpcg`, and `e2ecg`) require a binary transport: HTTP consumer-group joining returns `FeatureUnavailable`, even though the benchmark CLI accepts that combination. Each transport subcommand takes `--server-address` for a non-default server, for example:
+
+```bash
+cargo r --bin iggy-bench -r -- pinned-producer tcp --server-address 127.0.0.1:8090
+```
+
+Message count, batch size, message size, and both durability flags precede the kind subcommand. Producer, consumer, stream, and partition counts belong to the selected kind. `iggy-bench --help` and `iggy-bench examples` show the full surface.
+
+## Storing and comparing results
+
+Each transport subcommand accepts a trailing `output` subcommand that persists the run (raw JSON data and charts):
+
+```bash
+cargo r --bin iggy-bench -r -- pinned-producer tcp output -o performance_results --identifier my-host
+```
+
+When the server address uses `localhost` or `127.0.0.1`, the saved command includes non-secret environment settings from the server configuration catalog. Credentials and unknown `IGGY_` variables are omitted.
+
+`-o/--output-dir` defaults to `performance_results`. Optional flags (`--remark`, `--gitref`, extra info) annotate the run. Generated charts use the in-repo report library (`core/bench/report`). The runner (`core/bench/runner`) executes benchmarks across Git revisions. You can browse or compare results in the dashboard (`core/bench/dashboard`), which also powers the public [benchmarking platform](https://benchmarks.iggy.apache.org). A prebuilt dashboard image is available: `docker pull apache/iggy-bench-dashboard:edge`.
+
+## Performance
+
+The server is thread-per-core and shared-nothing, built on `io_uring` on Linux (via `compio`), with shard and CPU pinning configurable under `[sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmarking platform](https://benchmarks.iggy.apache.org).
+
+## Prepare the host and topic policies
+
+Use the [Linux tuning guide](https://iggy.apache.org/docs/server/linux-tuning) to check process limits, swap, huge pages, CPU/NUMA placement, writeback, and network capacity before measuring. Record the exact host settings and change one variable at a time. Use a separate load generator, or disjoint CPU sets when it shares a host with the server.
+
+`--durability` and `--consumer-offset-durability` independently default to `replicated`. Place them before the benchmark kind. For example, this keeps consumer offsets replicated while measuring persisted message acknowledgments:
+
+```bash
+cargo r --bin iggy-bench -r -- --durability persisted balanced-producer-and-consumer-group tcp
+```
+
+Add `--consumer-offset-durability persisted` to request that policy too. These are create-time options and have no effect on existing topics with `--reuse-streams`. Poll auto-commit remains asynchronous, so poll latency is not an acknowledged offset-store measurement. `iggy-bench examples` shows all benchmark kinds, transports, policy combinations, and available topic-option examples.
+
+Keep both policies, replication-group size, batch and message sizes, CPU allocation, and storage consistent between runs. Run long enough to include flushes and checkpoints, and report tail latency, errors, memory pressure, and client utilization alongside throughput.
