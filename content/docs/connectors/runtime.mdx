@@ -23,6 +23,12 @@ The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, a
 - On startup the runtime loads environment variables from the first `.env` file found in the working directory or its parents, or from the file pointed to by `IGGY_CONNECTORS_ENV_PATH`.
 - Supported scalar fields and indexed list entries can be overridden by environment variables using the `IGGY_CONNECTORS_<SECTION>_<KEY>` convention (nested keys joined by underscores), e.g. `IGGY_CONNECTORS_IGGY_USERNAME` or `IGGY_CONNECTORS_HTTP_ADDRESS`.
 
+Run `iggy-connectors --list-config-env-vars` to print the supported names and templates, then exit before dotenv and configuration loading, runtime creation, plugin loading, or other startup activity. The output is sorted and uses these placeholders:
+
+- `<N>` is a vector index from `0` through `255` for connector stream fields. Whole-value vectors are listed once without a placeholder.
+- `<KEY>` is the configured connector key, uppercased. These per-connector overrides are available only with the local configuration provider.
+- `<FIELD>` is a top-level plugin configuration field. Underscores in the field name are preserved. `FORMAT` is reserved and is listed separately as `..._PLUGIN_CONFIG_FORMAT`; the passthrough template does not guarantee that a plugin accepts every field.
+
 ## How plugins are resolved
 
 The `path` field of a connector configuration accepts both `plugin.so` and `plugin` - the OS-specific extension (`.so` / `.dylib` / `.dll`) is appended when missing. Absolute paths are checked at the literal location. Relative paths are searched in order:
