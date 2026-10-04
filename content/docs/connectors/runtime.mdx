@@ -27,7 +27,7 @@ Run `iggy-connectors --list-config-env-vars` to print the supported names and te
 
 - `<N>` is a vector index from `0` through `255` for connector stream fields. Whole-value vectors are listed once without a placeholder.
 - `<KEY>` is the configured connector key, uppercased. These per-connector overrides are available only with the local configuration provider.
-- `<FIELD>` is a top-level plugin configuration field. Underscores in the field name are preserved. `FORMAT` is reserved and is listed separately as `..._PLUGIN_CONFIG_FORMAT`; the passthrough template does not guarantee that a plugin accepts every field.
+- `<FIELD>` sets one lowercased top-level plugin configuration key. Underscores are preserved (`A_B` becomes `a_b`, not nested `a.b`), and nested plugin configuration keys cannot be set through environment variables. `FORMAT` is reserved and is listed separately as `..._PLUGIN_CONFIG_FORMAT`; the passthrough template does not guarantee that a plugin accepts every field.
 
 ## How plugins are resolved
 
