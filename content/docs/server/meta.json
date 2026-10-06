@@ -1,4 +1,4 @@
 {
   "title": "Server",
-  "pages": ["introduction", "configuration", "topic-options", "storage-engine", "durability", "networking", "security", "docker", "testing", "linux-tuning", "benchmarking"]
+  "pages": ["introduction", "upgrading", "configuration", "topic-options", "storage-engine", "durability", "networking", "security", "monitoring", "docker", "testing", "linux-tuning", "benchmarking"]
 }
