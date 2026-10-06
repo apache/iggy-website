@@ -86,7 +86,7 @@ function transformBody(source, body) {
         return line;
       }
       if (inFence) return line;
-      const component = /^\s*<([A-Z][A-Za-z]*)\s*\/>\s*$/.exec(line);
+      const component = /^\s*<([A-Z][A-Za-z0-9]*)\s*\/>\s*$/.exec(line);
       if (component) {
         const text = DIAGRAM_TEXT[component[1]];
         if (!text) {

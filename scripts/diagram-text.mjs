@@ -30,6 +30,9 @@
 const SITE = "https://iggy.apache.org";
 
 export const DIAGRAM_TEXT = {
+  Bench090DurabilityChart: `**Chart: Replicated vs. Persisted.** Side-by-side panels compare the 0.9.0 release and the next-version development snapshot. Each panel shows Replicated and Persisted producer latency on the same linear scale starting at zero. Controls select single node or 3-node cluster and p50, p99 or p999. All four measurements use 20 pinned producers with an aggregate rate limit of 800 MB/s. Replicated waits for quorum commit and local application. Persisted also requires recoverable stable-storage copies at the quorum. The full measurements appear in the expandable tables below.`,
+  Bench090LatencyChart: `**Chart: latency, 0.9.0 versus a development snapshot, per iggy-bench workload.** Three headline tiles (3-node cluster, persisted, 20 producers at p999 and p99, and single node, 20 producers at p999), then an interactive chart limited to workloads with lower p50, p99 and p999 latency, with two dots per row on a log scale, one for the 0.9.0 release and one for the development branch that follows it. It switches between single node and 3-node cluster, between p50, p99 and p999, and between table order and biggest percentage reduction. Each version uses its own iggy-bench client. The expandable “Full benchmark results” section below contains all measurements, including regressions and achieved throughput.`,
+
   AppendOnlyLogViz: `**Diagram: Append-only log.** Messages are appended in order, each with the next offset (0, 1, 2 and so on). New messages are always written at the end. A consumer tracks its own position in the log with an offset, independently of other consumers.`,
 
   BenchmarkChart: `**Diagram: Latency improvements, Tokio vs thread-per-core.** Selected historical results comparing v0.5.0 (Tokio) with v0.7.0 (thread-per-core) at about 1,000 MB/s per node. Lower latency is better.

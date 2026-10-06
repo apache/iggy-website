@@ -129,6 +129,7 @@ figure.shiki {
     border-radius: 0.375rem;
     padding: 0.15em 0.4em;
     font-size: 0.875em;
+    overflow-wrap: anywhere;
 }
 
 .fd-prose a {
