@@ -80,6 +80,10 @@ The configuration file must be in the `toml` format. By default, the server look
 
 Each setting can also be overridden using `IGGY_MCP_<SECTION>_<KEY>`, for example `IGGY_MCP_IGGY_USERNAME` or `IGGY_MCP_HTTP_ADDRESS`. Nested settings use the same underscore convention, such as `IGGY_MCP_IGGY_TLS_ENABLED`. Set `IGGY_MCP_ENV_PATH` to load a particular dotenv file; otherwise `.env` is searched for in the current directory and its parents. Existing environment variables take precedence over dotenv values.
 
+Run `iggy-mcp --list-config-env-vars` to print every supported MCP configuration variable and exit before loading dotenv or configuration files or creating the Tokio runtime. The output is sorted and contains names only. If a configuration field is an indexed vector, its template uses `<N>` for indices from `0` through `255`; whole-value vectors are listed once without a placeholder.
+
+`iggy-mcp` rejects unknown command-line arguments with exit code 2. Keep client and container argument lists empty unless they contain a supported flag.
+
 The `token` value can be either a literal PAT or a `file:` reference such as `token = "file:/run/secrets/iggy_pat"`, in which case the token is read from the given file and surrounding whitespace is removed (`~/` is expanded to the home directory). A non-empty token takes precedence over the username and password.
 
 ## Available tools

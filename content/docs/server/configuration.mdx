@@ -51,6 +51,8 @@ export IGGY_SHARDING_CPU_ALLOCATION=4        # [sharding] cpu_allocation
 
 Two variables live outside the config schema: `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` set the root credentials, always as a pair. They initialize the root user **only at first creation**. On an existing data directory the stored root user is recovered unchanged, but supplied environment credentials must still pass validation.
 
+Run `iggy-server --list-config-env-vars` to print every supported server variable and exit before loading dotenv or configuration files or creating runtime state. The output is sorted, contains names only, and uses `<N>` for indexed vector entries. Most indexed fields accept `0` through `255`; `cluster.nodes.<N>.advertised_addresses.<N>` accepts `0` through `15` for its inner index. Whole-value vector fields are listed once without a placeholder.
+
 ### Secrets
 
 Five values are secret-flagged: `http.jwt.encoding_secret`, `http.jwt.decoding_secret`, `encryption.key`, `cluster.auth.shared_secret`, and `cluster.auth.previous_shared_secret`. Prefer setting them through their environment variables (`IGGY_HTTP_JWT_ENCODING_SECRET`, `IGGY_ENCRYPTION_KEY`, `IGGY_CLUSTER_AUTH_SHARED_SECRET`, and so on) instead of storing them in a file. Secret values are masked in logs and **never serialized** into `runtime/current_config.toml`.
@@ -65,10 +67,11 @@ Five values are secret-flagged: `http.jwt.encoding_secret`, `http.jwt.decoding_s
 
 ## Command-line flags
 
-`iggy-server` accepts these three startup options, plus `--help` (`-h`) and `--version` (`-V`):
+`iggy-server` accepts these four startup options, plus `--help` (`-h`) and `--version` (`-V`):
 
 | Flag | Description |
 |------|-------------|
+| `--list-config-env-vars` | Print the supported configuration environment-variable names and templates, then exit without starting the server. See [Environment variables](#environment-variables). |
 | `--fresh`, `-f` | Delete the configured data directory (`local_data` by default, see `IGGY_PATH`) before boot and start on empty state. In cluster mode this wipes **this replica only**; it rejoins and refills by state transfer from the others. Wiping a quorum at the same time can destroy committed data. Do not put `--fresh` in a service unit: it would re-transfer the whole dataset on every restart. |
 | `--with-default-root-credentials` | Set `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` to `iggy` unless they are already present in the environment. These values initialize the root user only at first creation. Development only. |
 | `--replica-id <N>` | Identify this node within `cluster.nodes`. Required when `cluster.enabled = true`; the value must match exactly one `replica_id` in the roster. |
