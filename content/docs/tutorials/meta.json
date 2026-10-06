@@ -1,4 +1,4 @@
 {
   "title": "Tutorials",
-  "pages": ["event-driven-service"]
+  "pages": ["event-driven-service", "grafana-dashboard"]
 }
