@@ -1,0 +1,49 @@
+---
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+name: Omni
+website: https://omni.dev
+useCaseCategory: Workflow automation
+description: >-
+  Omni's Vortex, a workflow automation service, uses Iggy through the Node.js
+  SDK for its event log, outbox, replay, retention and dead-letter queue.
+logo: /img/organizations/omni.svg
+logoDark: /img/organizations/omni-dark.svg
+permissionConfirmed: true
+showText: false
+deploymentStatus: integration
+featured: false
+draft: true
+---
+
+## Maintainer notes
+
+This entry was written from Omni's public repositories rather than submitted by
+them, and nobody there has confirmed it. The evidence is the apache-iggy 0.8.0
+dependency and the event code in
+[omnidotdev/vortex-api](https://github.com/omnidotdev/vortex-api) (events
+client, retention, outbox and event log tables, dead-letter route) and
+[omnidotdev/vortex-worker](https://github.com/omnidotdev/vortex-worker)
+(consumer, publisher, outbox, replay, retention and dead-letter handling), read
+2026-10-08. The website is the organisation's own, from its GitHub profile.
+Whether Vortex runs in production is not stated publicly, so the status follows
+the other entries written from public repositories.
+
+The description is kept off the page (showText: false) because Omni has not
+confirmed it. The logo is taken from the organisation's own public materials:
+the black and white versions of the Omni mark served on omni.dev
+(/svg/omni-logo-black.svg and /svg/omni-logo-white.svg).
