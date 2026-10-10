@@ -1,0 +1,5 @@
+User-Agent: *
+Allow: /
+
+Host: https://iggy.apache.org
+Sitemap: https://iggy.apache.org/sitemap.xml

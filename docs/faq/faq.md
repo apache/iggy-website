@@ -1,0 +1,55 @@
+# FAQ
+
+> Common questions about Apache Iggy, including how it compares to Kafka and other message brokers.
+
+Rendered page: https://iggy.apache.org/docs/faq/faq/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/faq/faq.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+## Q: What is the difference between Iggy and traditional message brokers like Kafka?
+
+Iggy is a persistent message streaming platform that stores messages in an append-only log format, similar to Kafka. However, Iggy is designed for high performance and low latency using `io_uring` and a thread-per-core architecture. Iggy uses its own binary protocol rather than the Kafka protocol. Clients can use an Iggy SDK, implement the documented binary protocol, or use the HTTP API.
+
+## Q: Are there plans to support Kafka protocol in Iggy?
+
+Currently, Iggy does not support the Kafka protocol. Our focus is on providing a high-performance native protocol that leverages the strengths of Iggy's architecture. However, we are open to community contributions (in fact there is an [discussion](https://github.com/apache/iggy/discussions/6) about it).
+
+## Q: What transport protocol should I use?
+
+For maximum throughput and lowest latency, use **TCP**. If you need built-in encryption without configuring TLS separately, **QUIC** is a good choice. **WebSocket** works well for browser-based clients. **HTTP** is the most accessible but has the highest overhead due to JSON serialization. HTTP connections can be reused. Consumer groups can be created, inspected, and deleted, but there is no join/leave membership over HTTP.
+
+## Q: What are the system requirements?
+
+Iggy runs as a single server process without an external coordination service; native library requirements depend on the build. The provided Linux images include hwloc and udev libraries. The Linux shard runtime requires `io_uring` flags introduced in kernel 5.19. The server starts with around 20 MB of RAM; the default 4 GiB memory-pool setting is a budget, with buffers allocated on demand and fallback allocations outside the pool.
+
+Docker must allow the required `io_uring` calls and provide enough locked-memory allowance. The supplied Compose configuration uses `SYS_NICE`, `seccomp:unconfined` and unlimited memlock; those settings are not universal requirements for every host. See [Docker](https://iggy.apache.org/docs/server/docker) and [configuration](https://iggy.apache.org/docs/server/configuration).
+
+## Q: How does consumer group rebalancing work?
+
+When consumers join or leave a consumer group, the server triggers cooperative partition rebalancing. Partitions are redistributed among active members. During rebalancing, a pending revocation phase fences new polls from the previous owner. Its configurable timeout defaults to 30s, after which the server can force a transfer. This coordinates polling ownership; it does not prove that application processing has finished.
+
+## Q: Does Iggy support exactly-once delivery?
+
+Committing an offset before application processing, including poll-time auto-commit, can provide **at-most-once** processing: a crash can lose unprocessed messages. Committing only after successful processing supports **at-least-once** processing, with duplicates possible after a crash. Recovery also depends on retention and the configured message and consumer-offset durability. Iggy does not provide an atomic transaction between a consumer offset and an external side effect. **Exactly-once** application effects require an idempotent operation or an atomic deduplication-and-effect transaction; unique message IDs alone do not provide that guarantee.
+
+## Q: How do I secure my Iggy deployment?
+
+Iggy supports TLS on all transport protocols, Argon2id password hashing, granular per-stream/per-topic permissions, Personal Access Tokens for programmatic access, and optional AES-256-GCM message-payload encryption. For the HTTP API, JWT tokens are used for session management. See the [Security](https://iggy.apache.org/docs/server/security) documentation for details.
+
+## Q: Can I use Iggy with my existing tooling?
+
+Iggy provides a [Model Context Protocol (MCP)](https://iggy.apache.org/docs/ai/mcp) server with 40+ tools for LLM integration, [connectors](https://iggy.apache.org/docs/connectors/introduction) for piping data to/from external systems (e.g. PostgreSQL, MongoDB, Elasticsearch, ClickHouse, InfluxDB, S3, Delta Lake, Apache Iceberg, Quickwit), Prometheus metrics, and OpenTelemetry traces/logs in the connectors runtime. Broker OpenTelemetry export has runtime limitations described in [configuration](https://iggy.apache.org/docs/server/configuration#telemetry). The HTTP API works with REST clients.
+
+## Q: What happened to the Tokio-based runtime?
+
+Iggy migrated from Tokio to a thread-per-core architecture with `compio` (which uses `io_uring` on Linux) starting with version 0.6.0. The published v0.5.0 versus v0.7.0 comparison reports 92% lower P9999 latency for its 16-producer, 16-stream, 40-million-message workload, and 18% higher throughput for the corresponding fsync workload. These are historical workload results, not a guarantee for 0.9.0. You can read the full story in the [thread-per-core io_uring blog post](https://iggy.apache.org/blogs/2026/02/27/thread-per-core-io_uring/).
+
+## Q: Is clustering/replication available?
+
+Yes. Replication based on Viewstamped Replication (VSR) is built into the server. Multi-node clustering is configured via the `[cluster]` section (single-node mode is the default, `enabled = false`). It covers consensus, view changes, node authentication, and TLS between nodes, and is maturing toward production readiness. See the [Clustering](https://iggy.apache.org/docs/clustering/vsr) documentation for the protocol and [Deploy](https://iggy.apache.org/docs/clustering/deploy) for setting up a cluster.
+
+## Q: What examples are available?
+
+Examples are available in the [repository](https://github.com/apache/iggy/tree/master/examples) for multiple languages: Rust (basic, getting-started, message-envelope, message-headers, multi-tenant, new-sdk, sink-data-producer, stream-builder, tcp-tls), C#, Go, Java, Node.js, PHP, and Python. Docker Compose files and Helm charts are also provided.

@@ -1,0 +1,155 @@
+# Introduction
+
+> The connector runtime: dynamically loaded source and sink plugins, how data flows through them, and what ships today.
+
+Rendered page: https://iggy.apache.org/docs/connectors/introduction/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/introduction.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+The highly performant and modular runtime for statically typed, yet dynamically loaded connectors. Ingest the data from the external sources and push it further to the Iggy streams, or fetch the data from the Iggy streams and push it further to the external sources. Create your own Rust plugins by simply implementing either the `Source` or `Sink` trait and build custom pipelines for the data processing.
+
+The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, and can be fetched via `docker pull apache/iggy-connect:0.5.0`.
+
+## Architecture
+
+Connectors are dynamically loaded shared libraries (`.so` on Linux, `.dylib` on macOS, `.dll` on Windows) loaded at runtime via `dlopen2`. Message batches and metadata crossing the FFI boundary between the runtime and plugins are serialized using **postcard**, a compact binary format. Plugin configuration is passed as JSON. The SDK initializes one Tokio runtime per loaded plugin library, shared by its connector instances. All plugins run in the same process.
+
+### Data Flow
+
+The connector runtime operates in two directions - **source** (ingest) and **sink** (egress):
+
+**Diagram: Connector pipelines.**
+
+- Source flow (ingest): a data source (for example PostgreSQL, Elasticsearch or the random generator) is read by the connector runtime through the source plugin's `poll()`. The runtime applies any transforms (`add_fields`, `delete_fields`, `filter_fields`, `update_fields`), encodes the data and sends it to an Iggy stream and topic.
+- Sink flow (egress): the connector runtime polls messages from Iggy as a consumer group, decodes them, applies any transforms, and passes them to the sink plugin's `consume()`, which writes to an external system (for example PostgreSQL, MongoDB, Elasticsearch, Iceberg, Quickwit or stdout).
+
+**Key details:**
+
+- **Transforms** run inside the runtime process, not inside the plugins. They are applied after decoding for sources (before sending to Iggy) and after consuming from Iggy for sinks (before forwarding to the external system).
+- **State persistence** applies to source connectors and stores the optional checkpoint bytes supplied by the plugin, using a local file or an HTTP backend. The SDK provides MessagePack helpers. The runtime acknowledges a source batch after forwarding it to Iggy and saving its optional checkpoint. See [state storage](https://iggy.apache.org/docs/connectors/runtime#state-storage).
+- **Consumer groups** track sink offsets automatically. Offsets are committed when messages are polled, before processing by the external sink completes.
+
+### Available Connectors
+
+| Type   | Connectors                                                     |
+|--------|----------------------------------------------------------------|
+| Source | Elasticsearch, InfluxDB, PostgreSQL, Random                    |
+| Sink   | ClickHouse, Delta Lake, Apache Doris, Elasticsearch, HTTP, Apache Iceberg, InfluxDB, Meilisearch, MongoDB, PostgreSQL, Quickwit, RabbitMQ, Redshift, S3, Stdout, SurrealDB |
+
+### Transforms
+
+The following built-in transforms are available:
+
+- **add_fields** - add new fields to the message payload.
+- **delete_fields** - remove existing fields from the message payload.
+- **filter_fields** - keep or drop fields based on key and value patterns.
+- **update_fields** - update existing fields with static or computed values such as `timestamp_millis` or `uuid_v7`.
+- **proto_convert** - convert messages between Protocol Buffers and other formats.
+- **flat_buffer_convert** - convert messages between FlatBuffers and other formats.
+- **avro_convert** - convert messages between Avro and other formats.
+- **unwrap_envelope** - promote a nested field of a JSON envelope to the top-level payload.
+
+See the **[Transforms documentation](https://iggy.apache.org/docs/connectors/transforms)** for the configuration of each transform.
+
+### Supported Schemas
+
+Messages can be decoded and encoded using the following formats: **JSON**, **Raw bytes**, **Text**, **Protocol Buffers**, **FlatBuffers**, and **Avro**. For Avro, the schema can be provided per stream via the `avro_schema_json` or `avro_schema_path` keys in the `[[streams]]` section.
+
+## Features
+
+- **High Performance**: Utilizes Rust's performance characteristics to ensure fast data ingestion and egress.
+- **Low memory footprint**: Designed with memory efficiency in mind, minimizing the memory footprint of the connectors.
+- **Modular Design**: Designed with modularity in mind, allowing for easy extension and customization.
+- **Dynamic Loading**: Supports dynamic loading of plugins, allowing integration with various data sources and sinks at runtime.
+- **Statically Typed**: Ensures type safety and compile-time checks, reducing runtime errors.
+- **Easy Customization**: Provides a simple interface for implementing custom connectors, making it easy to create new plugins.
+- **Data transformation**: Supports data transformation with the help of existing functions.
+- **Powerful configuration**: Define your sinks, sources, and transformations in the configuration file or fetch them from a remote HTTP API.
+- **Flexible configuration providers**: Support for local file-based and HTTP-based configuration providers for centralized configuration management.
+
+## Quick Start
+
+Run these commands from the root of the same Iggy source checkout used for the server and plugins. This guide targets server 0.9.0, including its edge builds.
+
+1. Build the server, CLI, runtime and quick-start plugins:
+
+    ```bash
+    cargo build --release -p server -p iggy-cli -p iggy-connectors \
+      -p iggy_connector_random_source -p iggy_connector_stdout_sink \
+      -p iggy_connector_quickwit_sink
+    ```
+
+    For a debug build, omit `--release` and replace `target/release` with `target/debug` in both the commands and plugin paths. Make sure that the plugins specified in `core/connectors/runtime/example_config/connectors/` directory under `path` are available. The configuration must be provided in `toml` format.
+    The example directory also enables connectors for ClickHouse, Delta Lake, Apache Doris, Apache Iceberg, and InfluxDB. Without their backing services (or their compiled plugins) these are reported with the `Error` status, but they don't block the remaining connectors. Set `enabled = false` in their files to skip them entirely.
+
+2. Run `docker compose -f examples/rust/src/sink-data-producer/docker-compose.yml up -d`, which will start the Quickwit server to be used by an example sink connector. At this point, you can access the Quickwit UI at [http://localhost:7280](http://localhost:7280) - check this dashboard again later on, after the `events` index will be created.
+
+3. In the terminal that will run the connectors, set the runtime configuration path:
+
+    ```bash
+    export IGGY_CONNECTORS_CONFIG_PATH=core/connectors/runtime/example_config/config.toml
+    ```
+
+4. Start the Iggy server in a separate terminal with credentials matching the sample connector configuration:
+
+    ```bash
+    IGGY_ROOT_USERNAME=iggy IGGY_ROOT_PASSWORD=iggy cargo run --bin iggy-server --release
+    ```
+
+    With the server running, create the example streams and topics using the CLI from this checkout. An existing server must have these credentials, or you must adjust the commands and connector configuration to match it.
+
+    ```bash
+    target/release/iggy --username iggy --password iggy stream create example_stream
+    target/release/iggy --username iggy --password iggy topic create example_stream example_topic 1 none 1d
+    target/release/iggy --username iggy --password iggy stream create qw
+    target/release/iggy --username iggy --password iggy topic create qw records 1 none 1d
+    ```
+
+5. Execute `cargo run --example sink-data-producer --release`, which sends 100 batches of messages to previously created `qw` stream and `records` topic (this will be used by the Quickwit sink connector).
+
+6. Start the connector runtime `cargo run --bin iggy-connectors --release` in the terminal configured in step 3. The Quickwit sink indexes the produced records in the `events` index. At the same time, you should see the new messages being added to the `example_stream` stream and `example_topic` topic by the Random source connector - you can [start the Iggy Web UI](https://iggy.apache.org/docs/web_ui/start) to browse the data. The messages will have applied the basic fields transformations.
+
+## Configuration
+
+Overriding the configuration via environment variables follows the same rules as the main [Iggy server](https://iggy.apache.org/docs/server/configuration).
+
+You can provide the following envs during the runtime startup:
+
+```text
+IGGY_CONNECTORS_ENV_PATH - path to the .env file for custom environment variables
+
+IGGY_CONNECTORS_CONFIG_PATH - path to the connectors runtime configuration file
+```
+
+Supported scalar fields and indexed list entries can be overridden with the `IGGY_CONNECTORS_` prefix, followed by section and key names joined by underscores, e.g. `IGGY_CONNECTORS_IGGY_USERNAME`. Header and URL-template maps are configured in TOML. Local connector settings use a per-connector prefix, described in the [runtime configuration guide](https://iggy.apache.org/docs/connectors/runtime#local-file-provider).
+
+## Runtime
+
+All the connectors are implemented as Rust libraries and can be used as a part of the connector runtime. The runtime is responsible for managing the lifecycle of the connectors and providing the necessary infrastructure for the connectors to run. For more information, please refer to the **[runtime documentation](https://iggy.apache.org/docs/connectors/runtime)**.
+
+## Sink
+
+Sinks are responsible for consuming the messages from the configured stream(s) and topic(s) and sending them further to the specified destination. For example, the Quickwit sink connector is responsible for sending the messages to the Quickwit indexer.
+
+Please refer to the **[Sink documentation](https://iggy.apache.org/docs/connectors/sinks/sink)** for the details about the configuration and the sample implementation.
+
+When implementing `Sink`, make sure to use the `sink_connector!` macro to expose the FFI interface and allow the connector runtime to register the sink with the runtime.
+Each sink should have its own, custom configuration, which is passed along with the unique plugin ID via expected `new()` method.
+
+## Source
+
+Sources produce messages to an Iggy stream and topic. Configure one `[[streams]]` entry per source instance: the runtime currently retains only the last configured producer. For example, the Random source connector generates random messages that are then sent to the configured stream and topic.
+
+Please refer to the **[Source documentation](https://iggy.apache.org/docs/connectors/sources/source)** for the details about the configuration and the sample implementation.
+
+## Building the connectors
+
+New connector can be built simply by implementing either `Sink` or `Source` trait. Please check the **[sink](https://iggy.apache.org/docs/connectors/sinks/sink)** or **[source](https://iggy.apache.org/docs/connectors/sources/source)** documentation, as well as the existing examples under `core/connectors/sinks` and `core/connectors/sources`.
+
+## Transformations
+
+Field transformations (depending on the supported payload formats) can be applied to the messages either before they are sent to the specified topic (e.g. when produced by the source connectors), or before consumed by the sink connectors. To add a new transformation, implement the `Transform` trait in a new module under the SDK's `transforms` directory, add a variant to the `TransformType` enum, and extend its `from_config` function - the runtime picks it up without any further changes. Each transform may have its own, custom configuration.
+
+To find out more about the transforms, please refer to the **[Transforms documentation](https://iggy.apache.org/docs/connectors/transforms)**. For the stream decoders and encoders, see the **[SDK documentation](https://iggy.apache.org/docs/connectors/sdk)**.

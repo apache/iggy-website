@@ -1,0 +1,126 @@
+# InfluxDB Sink
+
+> Write messages from Iggy streams to InfluxDB as line-protocol points, on both InfluxDB V2 and V3.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sinks/influxdb/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sinks/influxdb.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+The InfluxDB sink connector consumes messages from Iggy streams and writes them to InfluxDB as line-protocol points. It supports both InfluxDB V2 (OSS 2.x / Cloud) and InfluxDB V3 (Core / Enterprise), selected with the `version` option.
+
+This page is a curated subset of the documentation. The canonical reference is the upstream [influxdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/influxdb_sink) in the `apache/iggy` repository.
+
+## Configuration
+
+Use the broker credentials and runtime setup from the [sink guide](https://iggy.apache.org/docs/connectors/sinks/sink#configuration). From the matching 0.9.0/edge repository root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_influxdb_sink
+```
+
+Create the InfluxDB organization and bucket (V2), or database (V3), and provide a token with write access. Save the following connector file in the runtime's connector directory, replacing the URL and token for your deployment. Startup checks `GET /health` with the configured token, using `Token` authentication for V2 and `Bearer` for V3. A successful health check does not verify write permissions.
+
+```toml
+type = "sink"
+key = "influxdb"
+enabled = true
+version = 0
+name = "InfluxDB sink"
+path = "target/release/libiggy_connector_influxdb_sink"
+plugin_config_format = "toml"
+
+[[streams]]
+stream = "events"
+topics = ["influx_events"]
+schema = "json"
+batch_length = 100
+poll_interval = "5ms"
+consumer_group = "influxdb_sink"
+
+[plugin_config]
+version = "v2"
+url = "http://localhost:8086"
+org = "iggy"
+bucket = "events"
+token = "replace_with_secret_token"
+measurement = "iggy_messages"
+precision = "us"
+batch_size = 500
+```
+
+Create the Iggy resources and send a row:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create events
+./target/release/iggy --username iggy --password iggy topic create events influx_events 1 none 1d
+./target/release/iggy --username iggy --password iggy message send --partition-id 0 events influx_events '{"sensor":"temperature","value":21.5}'
+```
+
+InfluxDB V2 organizes data as `org` + `bucket`. V3 uses a single `db` field instead. Omitting `version` defaults to `"v2"` for backward compatibility. The write body, batching, and retry behavior are identical between versions. The connector handles the differing endpoints, auth header styles, and precision spellings internally.
+
+For V3, replace the entire `[plugin_config]` section. Unknown options are rejected, so remove the V2 `org` and `bucket` fields:
+
+```toml
+# V3 variant: org/bucket are replaced by db
+[plugin_config]
+version = "v3"
+url = "http://localhost:8181"
+db = "my-db"
+token = "replace_with_secret_token"
+```
+
+### Common Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `version` | string | `v2` | `v2` or `v3` |
+| `url` | string | **required** | InfluxDB base URL |
+| `org` | string | **required** (v2) | Organization name |
+| `bucket` | string | **required** (v2) | Target bucket |
+| `db` | string | **required** (v3) | Target database |
+| `token` | string | **required** | API token; redacted in the plugin’s debug representation |
+| `measurement` | string | `iggy_messages` | Line-protocol measurement name |
+| `precision` | string | `us` | Timestamp precision: `ns`, `us`, `ms`, or `s` |
+| `batch_size` | u32 | `500` | Maximum messages per write request; `0` behaves as `1` |
+| `payload_format` | string | `json` | `json`, `text`, or `base64` |
+| `include_metadata` | bool | `true` | Include stream/topic/partition metadata as tags or fields; independent of checksum and origin timestamp |
+
+The `include_checksum`, `include_origin_timestamp`, `include_stream_tag`, `include_topic_tag`, and `include_partition_tag` flags also default to `true`.
+
+- `message_id` is always a string field and `offset` is always a tag.
+- With `include_metadata = true`, stream, topic and partition are tags by default. Disabling an individual `include_*_tag` flag writes that value as an `iggy_stream`, `iggy_topic`, or `iggy_partition` field instead.
+- `include_metadata = false` omits those three values. It does not disable the independently controlled `iggy_checksum` and `iggy_origin_timestamp` fields.
+
+Point timestamps come from the Iggy message timestamp in microseconds, converted to `precision`. A zero timestamp uses the current wall-clock time. Millisecond and second precision discard finer timestamp digits.
+
+InfluxDB identifies points by measurement/table, tags and timestamp. Removing stream, topic or partition tags can merge distinct messages that share an offset and timestamp; moving those values to fields does not preserve their identity. See the [V2](https://docs.influxdata.com/influxdb/v2/reference/syntax/line-protocol/#duplicate-points) and [V3](https://docs.influxdata.com/influxdb3/core/reference/line-protocol/#duplicate-points) duplicate-point rules.
+
+Resilience options include `timeout` (`30s`), `max_retries` (`3` total write attempts), `retry_delay` (`1s`), `retry_max_delay` (`5s`), `max_open_retries` (`10` total health-check attempts), `open_retry_max_delay` (`60s`), `circuit_breaker_threshold` (`5`), and `circuit_breaker_cool_down` (`30s`). Invalid duration strings warn and fall back to `1s`. See the upstream [influxdb_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/influxdb_sink) for the full list.
+
+## Payload Formats
+
+- **`json`** (default): the message payload is validated as JSON, compact-serialized, and written as a single `payload_json` string field (individual JSON fields do not become separate field entries).
+- **`text`**: the payload must be valid UTF-8 and is written as a single `payload_text` string field.
+- **`base64`**: the payload bytes are base64-encoded into a `payload_base64` string field.
+
+`payload_format` selects the stored representation after stream decoding and transforms. For arbitrary bytes, use `schema = "raw"` with `payload_format = "base64"` and no payload-changing transform. For plain text, use `schema = "text"` with `payload_format = "text"`. JSON stream decoding can change the original byte representation.
+
+Text carriage returns and newlines become the literal sequences `\r` and `\n` in the stored string. Use base64 if those original bytes must round-trip. Tabs in measurement names or tag values are rejected; quoted text fields allow tabs.
+
+Format names are case-insensitive; `utf8` aliases `text` and `raw` aliases `base64`. An unrecognized `payload_format` logs a warning and falls back to `json`.
+
+## Reliability
+
+Messages are serialized to line protocol and each polled batch is split into chunks of at most `batch_size` messages, one HTTP POST per chunk. The final partial chunk is written immediately; the connector does not accumulate messages across polls. A serialization error rejects its entire chunk. Later chunks are still attempted after a failure, and the first error is returned after the loop.
+
+HTTP 429, all 5xx responses, and network errors are retried. `max_retries = 3` allows the initial attempt plus two retries; `0` and `1` both allow one attempt. Backoff starts at `retry_delay`, doubles, adds ±20% jitter, and is capped by `retry_max_delay`. An integer-seconds `Retry-After` on a 429 overrides that cap; HTTP-date values are ignored. Startup health checks use a separate attempt budget and cap, retrying any failed check.
+
+The circuit breaker counts at most one failure per consumed batch, based on its first error. A permanent HTTP error does not increment the counter; a fully successful batch resets it. While the breaker is open, incoming batches fail without a write. After the cool-down window, writes resume and the failure counter resets.
+
+The runtime records a plugin error and continues polling with consumer auto-commit. Failed chunks and batches skipped by the circuit breaker are not queued for replay, so retries and the circuit breaker do not provide an end-to-end at-least-once guarantee. Other chunks from the same batch may already have reached InfluxDB.
+
+## Transforms
+
+Transforms can be applied before writing to InfluxDB. See the [transforms documentation](https://iggy.apache.org/docs/connectors/transforms) for the available types and their configuration.
