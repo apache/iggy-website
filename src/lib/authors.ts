@@ -57,6 +57,12 @@ export const authors: Record<string, Author> = {
     url: "https://github.com/krishvishal",
     image: "/img/authors/krishna.png",
   },
+  justin: {
+    name: "Justin Mclean",
+    title: "Apache Iggy Contributor",
+    url: "https://github.com/justinmclean",
+    image: FALLBACK_IMAGE,
+  },
 };
 
 /**

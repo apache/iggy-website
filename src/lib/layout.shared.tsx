@@ -21,6 +21,7 @@ import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 import Image from "next/image";
 import { Logo } from "@/components/logo";
 import { GitHubStars } from "@/components/github-stars";
+import { AskAIButton } from "@/components/ask-ai-button";
 import { ASFDropdown } from "@/components/asf-dropdown";
 import { ASFMobileLinks } from "@/components/asf-mobile-links";
 import {
@@ -67,6 +68,11 @@ const sharedLinks: BaseLayoutProps["links"] = [
     type: "custom",
     on: "menu",
     children: <ASFMobileLinks />,
+  },
+  {
+    type: "custom",
+    secondary: true,
+    children: <AskAIButton />,
   },
   {
     type: "custom",
@@ -122,6 +128,11 @@ export function docsOptions(): BaseLayoutProps {
         children: <CommunityDropdown />,
       },
       communityMobileMenu,
+      {
+        type: "custom",
+        secondary: true,
+        children: <AskAIButton />,
+      },
       {
         type: "custom",
         on: "nav",

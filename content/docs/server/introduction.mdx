@@ -19,7 +19,8 @@ The server uses `io_uring` on Linux, which sets a minimum kernel version.
 - **Kernel 6.1 or newer is worth having.** It is the first version with the `kernel.io_uring_disabled` sysctl, so the startup diagnostics can tell you io_uring was disabled by policy instead of failing obscurely. See [Linux tuning](/docs/server/linux-tuning#runtime-access-and-process-limits).
 - **Ubuntu 22.04 LTS ships 5.15 and will not run the server.** Its hardware enablement kernel is new enough, and so are Ubuntu 24.04 LTS and Debian 12 as they ship.
 - **WSL2 often ships incomplete `io_uring`**, missing setup flags or operations even on a kernel that reports 5.19 or newer. Run `wsl --update` first.
-- **macOS uses a polling backend** rather than `io_uring`, so this requirement does not apply there.
+- **macOS uses a polling backend** rather than `io_uring` when the server runs natively, so this requirement does not apply there.
+- **Docker Desktop needs one extra setting on 0.9.0.** Its Linux VM reports a single NUMA node but rejects binding memory to it, so the server exits with `failed to bind shard 0 memory to its NUMA node`. Add `-e IGGY_SHARDING_CPU_ALLOCATION=all` to the `docker run` command. Each shard stays pinned to its own core; only the memory binding is skipped, and on a single node it does nothing useful. The same applies to WSL2 and any other host with one NUMA node.
 
 Containers use the host's kernel, so it is the host that has to meet this requirement. See [Docker & Helm](/docs/server/docker#why-these-capabilities).
 

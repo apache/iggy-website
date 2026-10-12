@@ -3,6 +3,8 @@
   "pages": [
     "index",
     "introduction",
+    "tutorials",
+    "troubleshooting",
     "server",
     "clustering",
     "binary-protocol",
