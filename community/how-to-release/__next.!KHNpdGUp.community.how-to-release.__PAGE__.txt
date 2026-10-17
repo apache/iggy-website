@@ -1,0 +1,40 @@
+3:"$Sreact.fragment"
+4:"/_next/static/chunks/0vov8es4ujaym.js"
+5:"/_next/static/chunks/3dvxc_i7jdz7n.js"
+6:I[39756,["$4","$5"],"default"]
+7:I[37457,["$4","$5"],"default"]
+e:"/_next/static/chunks/0pg-3l73j6-i4.js"
+f:"/_next/static/chunks/38pnqf8p8ymvl.js"
+10:"/_next/static/chunks/1mwfozxzplnkm.js"
+11:"/_next/static/chunks/07igp-s_v4qmc.js"
+12:I[22016,["$4","$5","$e","$f","$10","$11"],""]
+1a:"ViewportBoundary"
+1b:I[97367,["$4","$5"],"$1a"]
+1c:"MetadataBoundary"
+1d:I[97367,["$4","$5"],"$1c"]
+1e:"$Sreact.suspense"
+1f:I[27201,["$4","$5"],"IconMark"]
+9:X
+9:C
+a:X
+d:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","main",null,{"className":"min-h-screen px-6 py-20 md:px-12","children":["$","div",null,{"className":"mx-auto grid max-w-6xl gap-12 lg:grid-cols-[16rem_1fr]","children":[["$","aside",null,{"className":"lg:sticky lg:top-24 lg:self-start","children":[["$","$L12",null,{"href":"/community","className":"mb-5 block text-sm font-semibold uppercase tracking-wide text-fd-muted-foreground transition-colors hover:text-fd-foreground","children":"Community"}],["$","nav",null,{"className":"space-y-1","children":[["$","$L12","/community/team",{"href":"/community/team","className":"block rounded-lg px-3 py-2 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/60 hover:text-fd-foreground","children":"Team"}],["$","$L12","/community/how-to-contribute",{"href":"/community/how-to-contribute","className":"block rounded-lg px-3 py-2 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/60 hover:text-fd-foreground","children":"How to Contribute"}],["$","$L12","/community/become-a-committer",{"href":"/community/become-a-committer","className":"block rounded-lg px-3 py-2 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/60 hover:text-fd-foreground","children":"Become a Committer"}],["$","$L12","/community/how-to-release",{"href":"/community/how-to-release","className":"block rounded-lg px-3 py-2 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/60 hover:text-fd-foreground","children":"How to Release"}],["$","$L12","/community/graduation-checklist",{"href":"/community/graduation-checklist","className":"block rounded-lg px-3 py-2 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/60 hover:text-fd-foreground","children":"Graduation Checklist"}],["$","$L12","/community/brand-kit",{"href":"/community/brand-kit","className":"block rounded-lg px-3 py-2 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/60 hover:text-fd-foreground","children":"Brand Kit"}],["$","$L12","/community/mailing-lists",{"href":"/community/mailing-lists","className":"block rounded-lg px-3 py-2 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/60 hover:text-fd-foreground","children":"Mailing Lists"}]]}]]}],["$","div",null,{"className":"min-w-0","children":[["$","header",null,{"className":"mb-12","children":[["$","h1",null,{"className":"mb-4 text-4xl font-extrabold tracking-tight text-fd-foreground md:text-5xl","children":"How to Release"}],["$","p",null,{"className":"max-w-3xl text-lg leading-relaxed text-fd-muted-foreground","children":"Apache releases are source releases voted on by the project community. This page gives release managers a high-level checklist for Apache Iggy."}]]}],["$","h2",null,{"className":"mb-4 text-2xl font-bold text-fd-foreground","children":"Release Checklist"}],["$","ol",null,{"className":"list-decimal space-y-2 pl-6 text-base leading-relaxed text-fd-muted-foreground","children":[["$","li","Prepare the release candidate from a clean source state and update versioned metadata.",{"children":"Prepare the release candidate from a clean source state and update versioned metadata."}],["$","li","Build source artifacts, checksums and OpenPGP signatures.",{"children":"Build source artifacts, checksums and OpenPGP signatures."}],["$","li","Verify licenses, NOTICE files, dependency metadata and source-only release contents.",{"children":"Verify licenses, NOTICE files, dependency metadata and source-only release contents."}],"$L13","$L14","$L15"]}],"$L16","$L17"]}]]}]}],null,"$L18"]}],"p":"$@19","v":null,"s":"$a"}}]]
+b:[["children",{"s":"how-to-release","h":96,"d":{"r":["$","$3","c",{"children":[null,["$","$L6",null,{"parallelRouterKey":"children","template":["$","$L7",null,{}]}]]}],"p":"$@c","v":"$9","s":"$a"},"c":"$Qd"}]]
+2:[["children",{"s":"community","h":64,"d":{"r":["$","$3","c",{"children":[null,["$","$L6",null,{"parallelRouterKey":"children","template":["$","$L7",null,{}]}]]}],"p":"$@8","v":"$9","s":"$a"},"c":"$Qb"}]]
+1:[["children",{"s":"(site)","c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":16,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L1b",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L1d",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$1e",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"How to Release | Apache Iggy"}],["$","meta","1",{"name":"description","content":"Release guidance for Apache Iggy release managers."}],["$","link","2",{"rel":"canonical","href":"https://iggy.apache.org/community/how-to-release/"}],["$","meta","3",{"property":"og:title","content":"How to Release | Apache Iggy"}],["$","meta","4",{"property":"og:description","content":"Release guidance for Apache Iggy release managers."}],["$","meta","5",{"property":"og:url","content":"https://iggy.apache.org/community/how-to-release/"}],["$","meta","6",{"property":"og:site_name","content":"Apache Iggy"}],["$","meta","7",{"property":"og:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","meta","8",{"property":"og:image:width","content":"1200"}],["$","meta","9",{"property":"og:image:height","content":"630"}],["$","meta","10",{"property":"og:image:alt","content":"Apache Iggy"}],["$","meta","11",{"property":"og:type","content":"website"}],["$","meta","12",{"name":"twitter:card","content":"summary_large_image"}],["$","meta","13",{"name":"twitter:title","content":"How to Release | Apache Iggy"}],["$","meta","14",{"name":"twitter:description","content":"Release guidance for Apache Iggy release managers."}],["$","meta","15",{"name":"twitter:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","link","16",{"rel":"icon","href":"/img/favicon.png"}],["$","$L1f","17",{}]]}]}],null]}],null]}],"p":"$@20","v":null,"s":"$a"}},"a":"$@21","u":"$@22","b":"q71K2lXZ7zl1yy89ux0Hh"}
+23:I[97367,["$4","$5"],"OutletBoundary"]
+13:["$","li","Call a vote on the dev mailing list and allow the required voting period.",{"children":"Call a vote on the dev mailing list and allow the required voting period."}]
+14:["$","li","After approval, publish artifacts to Apache distribution infrastructure and update the website.",{"children":"After approval, publish artifacts to Apache distribution infrastructure and update the website."}]
+15:["$","li","Announce the release only after mirrors and public metadata have settled.",{"children":"Announce the release only after mirrors and public metadata have settled."}]
+16:["$","h2",null,{"className":"mb-4 mt-12 text-2xl font-bold text-fd-foreground","children":"Required Reading"}]
+17:["$","ul",null,{"className":"list-disc space-y-2 pl-6 text-base leading-relaxed text-fd-muted-foreground","children":[["$","li",null,{"children":["$","$L12",null,{"href":"https://www.apache.org/legal/release-policy.html","className":"text-fd-primary hover:underline","children":"ASF release policy"}]}],["$","li",null,{"children":["$","$L12",null,{"href":"https://www.apache.org/dev/release-distribution","className":"text-fd-primary hover:underline","children":"ASF release distribution"}]}]]}]
+18:["$","$L23",null,{"children":["$","$1e",null,{"name":"Next.MetadataOutlet","children":"$@24"}]}]
+22:true
+a:300
+24:null
+a:C
+21:0
+c:"$undefined"
+8:"$undefined"
+20:"$undefined"
+19:"$undefined"

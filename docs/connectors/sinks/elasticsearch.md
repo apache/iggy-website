@@ -1,0 +1,98 @@
+# Elasticsearch Sink
+
+> Index messages from Iggy streams into an Elasticsearch index using the bulk API.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sinks/elasticsearch/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sinks/elasticsearch.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+The Elasticsearch sink connector consumes messages from Iggy streams and indexes them into an Elasticsearch index using the bulk API.
+
+## Configuration
+
+Use the broker credentials and runtime setup from the [sink guide](https://iggy.apache.org/docs/connectors/sinks/sink#configuration). Save the configuration below in the runtime's connector directory and replace the Elasticsearch credentials with your own. From the matching 0.9.0/edge repository root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_elasticsearch_sink
+```
+
+```toml
+type = "sink"
+key = "elasticsearch-sink"
+enabled = true
+version = 1
+name = "Elasticsearch Sink"
+path = "target/release/libiggy_connector_elasticsearch_sink"
+
+[[streams]]
+stream = "events"
+topics = ["logs"]
+schema = "json"
+batch_length = 100
+poll_interval = "5ms"
+consumer_group = "elasticsearch-sink"
+
+[plugin_config]
+url = "http://localhost:9200"
+index = "events"
+username = "elastic"
+password = "changeme"
+create_index_if_not_exists = true
+```
+
+Create the Iggy resources and send a JSON document:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create events
+./target/release/iggy --username iggy --password iggy topic create events logs 1 none 1d
+./target/release/iggy --username iggy --password iggy message send --partition-id 0 events logs '{"timestamp":"2026-01-01T00:00:00Z","message":"hello","service_name":"example","level":"info"}'
+```
+
+### Plugin config options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `url` | string | required | Elasticsearch cluster URL |
+| `index` | string | required | Target index name |
+| `username` / `password` | string | none | Optional basic authentication; both values must be supplied to enable it |
+| `create_index_if_not_exists` | bool | `true` | Create the index on startup when it is missing |
+| `index_mapping` | table | none | Body of the create-index request (mappings, settings) |
+| `batch_size` | integer | unused | Accepted but currently not read by the connector |
+| `timeout_seconds` | integer | `30` | HTTP request timeout in seconds, from connection through response body; `0` is treated as `1` |
+
+The stream-level `batch_length` governs batching: each consume cycle submits its supported messages in one bulk request. The connector performs no retries of its own. Request, HTTP-status, and response-decoding failures return an error; the runtime logs and counts it, adds no processed messages for that batch, and continues polling. Consumer auto-commit occurs before indexing completes, and the failed poll is not replayed.
+
+Individual document errors inside a successful bulk response are logged and counted in the plugin's closing statistics, but the plugin still returns success. The runtime's processed-message count can therefore include documents rejected by Elasticsearch. Monitor the document-error logs as well as runtime errors.
+
+Bulk actions do not specify document IDs. Elasticsearch generates them, so replaying a message can create another document. The connector does not provide end-to-end exactly-once delivery.
+
+### Index mapping
+
+`index_mapping` is sent verbatim as the body of the create-index request, so it must be a structured object, not a JSON string embedded in TOML. It is used only when the connector creates an index; it does not update an existing index and is ignored when `create_index_if_not_exists = false`. That setting disables the startup existence check too. Express the mapping as nested TOML tables:
+
+```toml
+[plugin_config.index_mapping.mappings.properties.timestamp]
+type = "date"
+
+[plugin_config.index_mapping.mappings.properties.message]
+type = "text"
+
+[plugin_config.index_mapping.mappings.properties.service_name]
+type = "keyword"
+
+[plugin_config.index_mapping.mappings.properties.level]
+type = "keyword"
+```
+
+## Payload handling
+
+- JSON objects are indexed as documents directly. Other JSON values are forwarded without being wrapped as objects and can be rejected by Elasticsearch.
+- Raw payloads are parsed as JSON when possible, and wrapped as `{ "data": "<base64>", "data_type": "raw" }` when that fails.
+- Text payloads are wrapped as `{ "text": "...", "data_type": "text" }`.
+- Other payload formats are skipped with a warning.
+
+Object documents are enriched before indexing with `_iggy_offset`, `_iggy_stream`, `_iggy_topic`, `_iggy_partition`, and `_iggy_timestamp`. These fields replace matching payload fields. `_iggy_timestamp` is the connector's processing time in Unix epoch milliseconds, not the message's stored timestamp. `_iggy_headers` is added or replaced only when message headers are present.
+
+Use HTTPS when credentials must be protected in transit. The connector uses the Elasticsearch client's certificate verification; this configuration does not expose a switch to disable it.
