@@ -96,7 +96,7 @@ export default function DownloadsPage() {
           Downloads
         </h1>
         <p className="mb-14 max-w-3xl text-lg leading-relaxed text-fd-muted-foreground">
-          The Apache Iggy project publishes source-code releases as compressed
+          The Apache Iggy&trade; project publishes source-code releases as compressed
           archives (
           <code className="rounded bg-fd-secondary px-1.5 py-0.5 text-sm">
             .tar.gz
