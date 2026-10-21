@@ -21,7 +21,7 @@ import { writeFileSync, readFileSync, existsSync } from "fs";
 
 // Only used when there is no previously fetched value on disk. Keep it roughly
 // current: a stale fallback silently ships a wrong number on the site.
-const FALLBACK = "4.7K";
+const FALLBACK = "5.1K";
 
 const OUT = new URL("../src/github-stars.json", import.meta.url);
 
