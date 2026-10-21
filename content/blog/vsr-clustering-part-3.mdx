@@ -1,0 +1,232 @@
+---
+title: Apache Iggy's migration journey to clustering powered by Viewstamped Replication (part 3)
+author: krishna
+tags: ["engineering", "clustering", "viewstamped-replication", "consensus", "rust", "simulation", "testing"]
+date: 2026-10-27
+---
+
+## Introduction
+
+For about three months, from February to May 2026, a simulator was the only thing that could run Iggy's clustering code. We built the `consensus`, `metadata`, `journal` and `message_bus` crates next to the existing server, which kept shipping releases, and it was May before `iggy-server-ng` could boot a replica. The simulator runs a whole cluster on one thread, ten milliseconds at a time, and draws every packet delay, crash and task switch from a single 64-bit seed. We still test the cluster with it. It found both bugs in the fix from [part 2's "The write we put back"](https://iggy.apache.org/blogs/2026/10/13/vsr-clustering-part-2/#the-write-we-put-back), and it's why every timeout in Iggy is a count of ticks.
+
+[Part 1](https://iggy.apache.org/blogs/2026/09/28/vsr-clustering-part-1/#why-viewstamped-replication) gave determinism as one reason we chose Viewstamped Replication: the primary of view `v` is replica `v % n`, so replicas that receive the same messages in the same order make the same decisions. That only helps if the clock, the network, the disk and the order async tasks run in are deterministic too, and most of the simulator's code is there to make them so.
+
+## What the simulator runs
+
+Every replica in the simulator is a real `shard::IggyShard` running the real message pump, with one `VsrConsensus` group for metadata and one per partition, plus the metadata state machine and the partitions themselves. With `--shell`, client requests also go through the server's own request handling, login and session binding included. Everything that code touches on its way to the outside world is replaced:
+
+| Layer | In the simulator |
+| --- | --- |
+| Clock | `SimClock`, virtual time |
+| Journal | `SimJournal` in memory, held by the simulator so it outlives a crash |
+| Superblock | `SimSuperblock` in memory, which a test can make fail, or stall the way an fsync would |
+| Bus and network | one `SimOutbox` per replica, drained into a `PacketSimulator` |
+| Async runtime | `DetExecutor`, a single-threaded executor scheduled from the seed |
+
+The seam is the `MessageBus` trait, which carries the three calls that would otherwise reach the real world: `sleep`, `spawn` and `realtime_micros`. By default they're compio's timer, compio's spawn and the system clock, and the simulator overrides all three. The comment on `sleep` explains the choice:
+
+> Routed through the bus because the bus is the one dependency the shard already injects per environment; a separate clock generic would thread a second seam through every shard constructor for the same effect.
+
+The login path checks a personal access token's expiry against `realtime_micros`. If it read the system clock instead, the reply a client gets would depend on the day the test ran. Consensus stamps prepares from an injected clock for the same reason, and the simulated clock starts at 2026-01-01 so those timestamps don't decode as 1970.
+
+One call to `Simulator::step()` is one tick of virtual time:
+
+```text
+1. advance time by 10 ms   every pump's tick fires: heartbeats, retransmits, view changes
+   run the pumps           poll ready tasks until none is left
+2. deliver packets         every packet due this tick, each to a seeded shard of its replica
+   run the pumps           routing, consensus, replies and their loopback follow-ups
+3. drain the outboxes      everything sent this tick goes into the packet simulator
+4. advance the network     partitions and clogs start or end
+```
+
+When a replica has several shards, the seed picks which one each packet lands on. Usually that's a shard that doesn't own the packet, and the frame takes the same router hop it would take in production. Everything sent during a tick is on the simulated wire before network time moves, which keeps a reply from setting off another delivery in the same tick. None of this needs Docker, a server binary, sockets or `io_uring`. The only real files are the snapshots a checkpointing run writes.
+
+## Why every timeout is a count of ticks
+
+Each consensus timer in Iggy holds a number of ticks, and every tick takes one off. `TICK_INTERVAL` in `core/consensus/src/vsr_timeout.rs` is 10 ms. In production the tick is one arm of the message pump's `select_biased!`, a `bus.sleep(CONSENSUS_TICK_INTERVAL)`, and in the simulator the same call returns a virtual timer that `advance_time` fires.
+
+The config is still written in durations. At boot each one is divided by 10 ms and rounded down, with a floor of one tick:
+
+| Timer | Setting | Default | Ticks |
+| --- | --- | ---: | ---: |
+| Backup's primary-liveness window | `heartbeat_timeout` | 5 s | 500 |
+| Primary's commit broadcast | `commit_broadcast_interval` | 500 ms | 50 |
+| Prepare retransmit | `prepare_retransmit_interval` | 250 ms | 25 |
+| `StartViewChange` and `DoViewChange` resend | `view_change_retransmit_interval` | 500 ms | 50 |
+| Giving up on a view change | `view_change_status_timeout` | 5 s | 500 |
+| Recovering replica's `RequestStartView` | `request_start_view_retransmit_interval` | 1 s | 100 |
+| Repair retry | `repair_retry_interval` | 1 s | 100 |
+
+In production a tick takes 10 ms plus whatever it had to wait for. The pump re-arms its tick timer only after the tick's work is done, and the tick arm can wait behind a frame the pump is still processing, a journal fsync included. That makes 500 ticks of heartbeat window at least five seconds.
+
+Because timers count ticks, the simulator decides when time passes. A five-second heartbeat window takes five seconds on a production cluster and 500 calls to `step()` in the simulator, each returning as soon as the pumps go quiet. Seed 211 from part 2 now passes:
+
+```text
+$ workload-fuzz --seed 211 --ticks 4000 --plane metadata --faults none \
+    --journal-slots 80 --crash-prob 0.02 --restart-prob 0.08 --crash-primary
+workload-fuzz: seed=211 ticks=4000 clients=1 replicas=3 plane=Metadata faults=None shell=false crash_prob=0.02 quiesce=true
+...
+ran 4000 ticks; 54 replies; crashes=11 restarts=10 still down: 1
+...
+workload-fuzz: OK (seed=211)
+```
+
+That's 40 seconds of cluster time, with eleven crashes and ten restarts, in 0.24 seconds of wall time and 32 MB of memory.
+
+The only randomness in consensus is the jitter on the prepare retransmit's backoff. (Part 2 explained why the view-change timers aren't randomized.) Each retry doubles the wait, up to 16 times the base, and adds a random amount up to the same again. That PRNG is seeded from the replica and group ids, so the jitter replays along with everything else.
+
+Code that calls compio's timers directly can't run under the simulator, because compio panics outside its own runtime. A few storage paths still do, and two storage tests are `#[ignore]`d because of it: `WriterLease::acquire` drains through `compio::runtime::time::timeout`, which the deterministic executor can't drive.
+
+## Replaying a seed
+
+`SimSeeds::derive` turns the run's seed into six child seeds, one each for the network, the workload, the executor, the choice of entry shard, crash scheduling and the swarm parameters. The comment on `SimSeeds` says why they don't share a PRNG:
+
+> A shared stream couples them: adding a draw anywhere shifts every later draw everywhere, so enabling crash injection would change the network trace, and a bug found at one seed would vanish once an unrelated draw was added.
+
+The children are drawn from a parent PRNG in field order. An earlier version XOR-ed a different constant into the seed for each stream, and one forgotten constant is how the workload and the packet simulator ended up sharing a stream. Drawing needs no constants but makes field order part of the contract, so new streams go at the end of the struct. The workload's `Action` enum has the same rule, with a compile-time assert on its first three discriminants. With crash scheduling on a stream of its own, a run with both crash probabilities at zero draws nothing from it and replays bit for bit like a run with no injector.
+
+We ran seed 211 twice for this post, and the two outputs matched apart from the paths of their data directories. In the test suite, `workload_replay_is_deterministic` pins that property: it runs seed `0xDEAD_BEEF` twice, hashes every reply header and compares the result with `0xECC6_9F76_2D47_8F12`. The constant moves whenever the draw order does, for instance when an op gains an outcome the workload can aim for, and the comment above it lists every reason it's been re-locked.
+
+A seed replays only on the build that produced it. Draws go through `rand`'s range reduction, which means a `rand` or `rand_xoshiro` upgrade can shift every schedule, and any change that adds a draw can too. When a seed matters, we turn it into a test that asserts the property it broke. That's how seeds 211 and 144 ended up in the suite.
+
+## A seeded scheduler for async tasks
+
+The server is async Rust on compio, one thread per core. A shard runs its message pump alongside short-lived tasks for poll I/O, client requests and metadata submits, and bugs live in how those interleave. Much of our simulator is modelled on TigerBeetle's VOPR, but TigerBeetle's replicas don't run async tasks, so the VOPR has nothing to schedule at this level. Ours do, and we wrote `DetExecutor` for them.
+
+`DetExecutor` keeps `!Send` futures on one thread and switches between them only at their await points. When several tasks are ready, it polls one picked uniformly at random from the executor's stream. Only `advance_time` moves its clock. Timers due at the same moment fire in the order they were set, and a sleep's deadline is fixed when the sleep is created, as in compio. The pump relies on that, since it builds its tick timer once and polls it many times. Every poll, timer fire and spawn is folded into an FNV-1a hash of the schedule, which determinism tests compare between runs. The hash is spelled out as FNV-1a because `DefaultHasher` may change between Rust releases.
+
+A crash drops the replica's pump and every task its bus spawned where they stand, mid-await, without draining anything, and the packet simulator discards whatever is addressed to the replica. A restart builds new shards on the superblock and metadata WAL the simulator kept, under a new incarnation number derived from the seed.
+
+Each round of polling has a budget of 100,000 polls. A task that keeps waking itself runs it out, and the run fails with the seed and the schedule hash. Whenever no task is ready, every live pump must also have an empty inbox. A frame still sitting in one means something queued it without waking the pump, a lost wakeup. In production the next tick would wake the pump and drain the frame, hiding the bug, so the simulator fails the run before that tick comes.
+
+The partitions live in an `UnsafeCell<Vec<_>>`, so the borrow checker can't see a task holding a reference into it across an `.await` while another task reallocates the vector. #3557 removed the places where that happened. A debug-only guard now counts live partition borrows, and inserting or removing a partition asserts that none is held. Under `DetExecutor` a task parked on an await stays suspended while other tasks run, which `shell_detects_partition_borrow_held_across_await` relies on: it parks a read that holds a borrow, runs a removal and checks that the guard fires. The read it parks is synthetic, behind the `simulator` feature, because the production read path no longer holds a borrow across any await.
+
+Most of the determinism work was finding code that read the outside world without saying so. Plain `futures::select!` takes its arm order from a thread-local PRNG the simulator can't seed, so the pump uses `select_biased!`. The partitions' namespace index is a `BTreeMap`: the pump walks it on every tick, and a `HashMap`'s iteration order changes with each process's `RandomState`. Argon2 password hashes take a random salt. Under the `simulator` feature they use a fixed one, which keeps replicated user records the same on every run, and production keeps the random salt.
+
+Repair and state-transfer sessions still take their nonces from `Uuid::new_v4()`, which reads OS randomness, at five places in `core/shard/src/lib.rs`. Nonces are only compared for equality, so the schedule and every decision still replay, though the bytes on the wire differ between runs.
+
+## Faults and traffic
+
+The network is a `PacketSimulator`, ported with few changes. Each pair of processes has a link with a bounded queue, 64 packets by default, and each packet's delay is drawn from an exponential distribution with a floor. Loss and duplication are decided when a packet comes due. A full link evicts a random packet to make room. On each tick any path can clog for an exponentially distributed number of ticks, and the network as a whole can split. A partition is symmetric or asymmetric and takes one of three shapes: a random size, a random side for each replica, or one replica cut off. Links also filter by message type, which lets a test block only `DoViewChange` between two replicas. A crashed process has everything addressed to it dropped, and a partition that stood when it crashed still stands when it restarts.
+
+`--faults` picks a profile. `light` and `heavy` are fixed, and `swarm` draws every parameter from the seed's swarm stream:
+
+| | `light` | `heavy` | `swarm` draws |
+| --- | ---: | ---: | --- |
+| Packet loss | 2% | 10% | 0 to 15% |
+| Replay | 1% | 3% | 0 to 5% |
+| Mean delay, ticks | 3 | 8 | the minimum (1 to 3) up to 10 |
+| Link capacity | 64 | 64 | 8 to 64 |
+| Partition starts, per tick | 0.5% | 2% | 0 to 3% |
+| Partition heals, per tick | 5% | 2% | 1 to 10% |
+| Partition shape | one replica, asymmetric | random size, asymmetric | any shape, either symmetry |
+| Clogs, per path per tick | 0.2% | 1% | 0 to 1.5% |
+| Mean clog, ticks | 10 | 25 | 0 to 40 |
+
+Faults cost progress, because every lost frame waits out a resend timeout. With one client on one partition, a three-replica cluster drains about 440 replies in 5,000 ticks on a perfect network, 240 under `light` and 40 under `heavy`.
+
+As the README puts it, `none`, `light` and `heavy` are three fixed points, "so a thousand seeds against `heavy` is the same network a thousand times". `swarm` draws a new network for each seed, as the VOPR does. Its heal probability never draws zero, since a partition that can't heal leaves a permanently split cluster and a liveness failure that says nothing. Its link capacity never draws below 8, because a tiny queue drops packets by eviction and compounds with the loss draw into a network that never converges. The banner prints every value it drew, so a failing run shows which network it failed on. Seed 144's:
+
+```text
+network: loss=0.02 replay=0 delay=2..9 partition=UniformSize/Asymmetric p_partition=0.01 p_unpartition=0.01 stability=27/54 clog=0.011 clog_ticks=31 link_capacity=57
+```
+
+Crashes come from a separate injector. On each tick, with probability `--crash-prob`, it crashes one replica that's been up for at least 500 ticks, as long as a commit quorum stays live. With probability `--restart-prob` it restarts one that's been down for at least 300. The 500-tick wait gives a rejoined replica time to catch up before it can fail again, and the 300-tick wait lets the survivors commit past the crashed replica's log, which leaves its rejoin something to repair. Primaries are spared unless `--crash-primary` is set.
+
+The traffic is a workload of 25 actions, from `CreateStream` and `SendMessages` to `ChangePassword` and `StoreStaleOwnerOffset`. Each action has a module exposing the same seven items, and a macro dispatches over them, so an action without a module doesn't compile. A shadow model predicts what each committed op does to the metadata. The workload picks an outcome first and then asks the shadow for an input that should produce it. `CreateStream` can aim for `Ok` with a fresh name from the shadow, or for `NameAlreadyExists` with a name the shadow says is taken. Every reply is classified against the outcomes its action declares. `--plane` sets the mix: partition writes and consumer offsets, metadata changes, a mix of the two, every action at equal weight, or a lifecycle mix that replaces topics and hands consumer groups between owners while offsets are being written.
+
+A client keeps one request in flight and resends it after 200 ticks. That's four commit broadcasts, long enough that a request only waiting for the next broadcast doesn't get resent. A resend reuses the original bytes, because the client table deduplicates on the request number and a rebuilt request would draw a new number and commit a second time. Each resend goes to the next replica in turn, which is how a client whose primary died finds the new one.
+
+## How a run fails
+
+Checks run on every tick against each live replica and group, so a run fails on the tick where something goes wrong. Commit offsets and views may never move backwards, and no shard may drop a frame as unroutable or misrouted. A replica's commit walk can't sit behind a hole for 2,000 ticks, and a metadata primary can't sit behind its own recovery barrier that long either. The checks only read state and draw nothing from any PRNG, so turning them on doesn't change a run.
+
+The state checker, a port of the VOPR's, compares replicas with each other, because agreement between replicas is what consensus is for. It keeps a canonical chain of committed metadata ops and checks every replica against it in both directions of `(commit_a == commit_b) == (checksum_a == checksum_b)`. The same op must hold the same prepare, and the same prepare must sit at the same op, which catches one prepare committed at two positions. Each committed header's `parent` must also equal the checksum of the op before it. Partition commits get a chain per partition incarnation, kept after the partition is deleted, so a lagging replica is still checked against what its peers committed. For every op, the checker records which replicas committed it and in which boot incarnation. With that, it can tell two replicas that disagree from one replica that disagrees with its own history from before a restart.
+
+When the run ends, the driver drains every outstanding request, waits for the cluster to settle on one view and runs the oracle. The oracle checks that no live replica is ahead of the leader and that replicas agree on every committed op they share. Heads may differ, because a replica that missed the last commit broadcast is allowed to trail. With a single client, it also checks the metadata committed on the leader against the shadow's prediction. Since #4191 the drain runs the per-tick checks too, where before it could step through 50,000 ticks with nothing checked. If the drain fails, the report lists every outstanding request and one status line per replica. Part 2's three lines for seed 211 came from that report.
+
+A run can also pass without testing anything. The comment above the replay baseline records that the consumer-offset ops once drew their consumer kind as a boolean. Kind 0 isn't a valid wire value, and every request that drew it was dropped before the server could parse it. The oracle reports what it compared (`ops_compared`, `replicas_compared`, `namespaces_checked` and a few more) because, as the README says, "a check that ran against an empty chain passes silently". `--min-commits` and `--min-ops-compared` default to 1, and a run below either floor exits with code 3 and a `vacuous:` line. Before #4191 it panicked, and in a sweep a run that proved nothing looked exactly like a divergence, since both exited 101. Exit code 2 is left for an invalid configuration.
+
+While reviewing #4506, two reviewers changed `matches_consumer_owner`, the check that an offset write comes from the consumer group's current owner, to accept everything. Twenty-four fuzz seeds produced logs byte-identical to the unchanged build, and all 228 simulator tests still passed with `owners_compared=0`. The workload had never sent a store from a stale owner. Now it has `StoreStaleOwnerOffset`, and a lifecycle run under `--shell` that sees no owner-fence refusal exits 3.
+
+## Crashing the disk at every step
+
+The cluster simulator's storage never loses or tears a write. Its journal sits on `MemStorage`, and the simulator carries partition data across a restart. Disk faults have a second harness, `SimStorage` in `core/simulator/src/storage.rs`, which models the parts of a Linux filesystem that durability depends on. Partition code reaches the disk through the `DurableStorage` and `DurableFile` traits in `core/journal`, implemented by `DiskStorage` in production and by `SimStorage` here.
+
+Every file has buffered and stable bytes, and every directory has buffered and stable entries. A process crash keeps the page cache, while power loss throws away whatever isn't stable. File sync and directory sync are separate operations. Background writeback can flush pages in any order, so a later page can reach the disk while an earlier one is lost. When writeback fails, the dirty pages are dropped and the error is reported once to each handle that was open at the time. A handle opened afterwards sees success over the lost bytes, as on Linux, which makes `fsync` through a fresh descriptor useless as a barrier for writes made through another. Any operation can be failed by its position in the trace, before or after it takes effect, or torn. A torn write can return an error or report success, like a device that writes half a block and says nothing.
+
+A sweep records the operations a piece of partition code performs, then crashes at every point in that trace. At each point it fails the operation before or after it takes effect or tears it, crashes the process or cuts the power, and runs with and without background writeback. After each crash it runs the real recovery code, such as `PartitionPrepareJournal::open_with_storage`, and checks what it recovered. Seven sweeps cover 4,430 cases in 0.29 seconds:
+
+| Sweep | Cases |
+| --- | ---: |
+| Partition WAL initialization | 108 |
+| Sealed tail recovery | 224 |
+| Referenced partition WAL | 420 |
+| Partition rollback | 492 |
+| Partition transfer | 618 |
+| Partition WAL | 1,044 |
+| Owned segment | 1,524 |
+
+The partition WAL these sweeps test is the one that discarded 81 MB at boot in part 2. Grzegorz's #4132 added tests for durability failures that nothing else could reach, and two of them failed: a fresh handle's `fsync` reported success after a failed writeback (#4141), and large appends weren't grouped under one sync barrier (#4142). Issue #4252 then showed that the install backup from part 2's state transfer could miss a writeback error too. [@jiengup](https://github.com/jiengup) fixed all three, in #4253, #4202 and #4278.
+
+## What it found
+
+| Bug | Kind | How it showed up | Fix |
+| --- | --- | --- | --- |
+| A rejoining metadata backup checked prepares against its sequencer instead of its journal head | liveness | a client that was never answered | #3942 |
+| A satisfied metadata repair session was never cleared | liveness | two of three replicas live and no progress | #4008, #4073 |
+| A replica with a hole in its committed prefix could win an election | safety | 8 of the first 220 seeds | #4073 |
+| A view change waited on a dead replica over a write that was provably dead | liveness | seed 211 | #4109 |
+| A committed consumer-offset delete fenced its own partition | availability | seed 28, as a lost wakeup | #4063 |
+| A replica that joined a view through a probe answer kept an op the view had dropped | safety | seed 144, network faults only | #4191 |
+| Writeback errors hidden from a fresh handle and from an install backup, and appends missing group commit | durability | the storage sweeps | #4253, #4278, #4202 |
+
+The PR that first ran the workload under network faults and crashes, #3942, fixed the sequencer bug along the way. A backup that rejoined adopted the new view's head before the bodies arrived, then refused the prepare that would have filled its log, because it checked prepares against its sequencer. The op never reached a quorum, and its client was never answered.
+
+Grzegorz found the repair-session bug while reviewing that PR. A metadata repair session that had received everything it asked for was never cleared, and no new session could start while it existed, so the primary kept retransmitting the one op the backup wouldn't take. The review summed it up as "2/3 live, zero progress", on a configuration that was "red on roughly a third of seeds". The same review cycle turned up the hole in the committed prefix, and the sweeps that verified those fixes found seed 211. Part 2 told both stories.
+
+In seed 28, replica 1 committed a `DeleteConsumerOffset` for an offset it didn't hold, read the failed apply as divergence and fenced the partition, which stopped its pump. The simulator still counted the replica as live, so frames piled up in an inbox nothing was draining, and one log line later the lost-wakeup check fired:
+
+```text
+lost wakeup: replica 1 shard 0 inbox holds 1 frame(s) at quiescence
+```
+
+Which replicas hold an offset is deliberately not agreed, so a committed delete can't require the offset to exist. Deleting a missing offset is a no-op now.
+
+Seed 144 diverged under network faults alone:
+
+```text
+assertion `left == right` failed: replicas disagree on committed op 7: canonical
+checksum 0x956f651ddd80d3a6 (committed by {1, 2}) vs replica 0's 0x68d5380d7a7f4869.
+Two replicas committed different history at the same log position (seed=0x90)
+```
+
+Replica 0 led view 0, prepared up to op 7 and got no acknowledgements. Replica 1 won view 1, its merge correctly dropped op 7, and it prepared a different op 7. Replica 0 then joined view 1 through the answer to its probe, still holding its own op 7, and its commit walk applied it. The probe's `StartView` carried no headers to compare against. It does now, and #4191 also fixed two more defects at the same spot.
+
+Reviewers run campaigns against branches now. Grzegorz's review of #4506, which routes partition requests to their primaries, found four bugs before it merged. Seed 7016 lost a committed partition op, and the state checker named it: `replica 2 and witnesses {0: 6} disagree on committed partition op 93`. The first fix for that let a fenced backup commit an op its view had discarded, and divergence went from 6 of 300 seeds to 17. Seed 7002 built a repair request for the empty range 38 to 37 and hit an `expect`, a bug that failed 32 of 200 metadata seeds. Repair under the fence asked for one hole at a time, from the highest down, and each answer re-sent up to 128 bodies the replica already had. A 2,046-op gap took 2,076 round trips, and 17 of 400 seeds never drained.
+
+[@almostintuitive](https://github.com/almostintuitive) filed two issues with simulator reproductions. In #4284 a partition replica commits its own stale prepare after rejoining a newer view, and in #4294 a metadata primary panics after its stall detector truncates the pipeline head. Fixes for both are in review, #4433 and #4429.
+
+## What it can't see yet
+
+No campaign runs in CI. CI runs the crate's 244 tests, and `workload-fuzz` is run by hand. TigerBeetle runs its VOPR around the clock on a fleet of machines. A nightly sweep is first on our list.
+
+The cluster simulator doesn't run the production metadata WAL or superblock. `SimJournal` keeps its index in a `HashMap`, under a `TODO: Replace with actual Journal`, and `SimSuperblock` has none of the real one's framing or checksums. The storage sweeps run the real WAL, but on a single node, so a simulated cluster never loses an unpublished tail at boot the way part 2's node did.
+
+Nothing corrupts a packet in transit. Every replica reads the same perfect clock, so clock skew goes untested. `workload-fuzz` always builds one shard per replica, which leaves partitions spread across shards to the library tests, and swarm draws only the network: the replica count, the clients and the crash rates are whatever the command line says.
+
+Seeds still fail on master. For this post we ran 14 profiles against seeds 1 to 100, 1,400 runs in 71 seconds on a 16-core machine. None diverged. Of the 49 that failed, 27 tripped the recovery-barrier check and 22 never drained, 15 of those with a lifecycle op such as `DeleteTopic` waiting on a partition group that hadn't finished recovering. Another 80 exited 3, 79 of them on the lifecycle profile, which needs more than our 8,000 ticks to see an owner-fence refusal.
+
+When a run misses its request target, the VOPR heals a random core of replicas, at least a quorum, and requires that core to recover. Our `--heal-before-quiesce` heals everything, so a wedge it happens to resolve never gets reported. A core-healing mode comes after the nightly sweep, then the production journal and superblock running over `SimStorage` inside the cluster, then packet corruption.
+
+## Closing words
+
+This is the last of the three parts. The simulator lives in `core/simulator`, and its README covers every flag. Here's a run under swarm faults with crashes:
+
+```sh
+cargo run --release -p simulator --bin workload-fuzz -- \
+  --plane uniform --faults swarm --crash-prob 0.01 --restart-prob 0.05 --ticks 6000
+```
+
+Leave out `--seed` and it draws one and prints it. A failing run prints `workload-fuzz FAILED, reproduce with --seed N` ahead of the panic, and an issue with that line and the flags is the most useful bug report we get. Thanks to [@almostintuitive](https://github.com/almostintuitive) for the two issues above, and to [@jiengup](https://github.com/jiengup) for the storage fixes.
