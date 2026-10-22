@@ -65,6 +65,7 @@ function Mark({ entry }: { entry: Organization }) {
         <img
           src={src}
           alt={`${entry.name} logo`}
+          title={entry.name}
           className={WALL_LOGO_CLASS}
         />
       </span>
@@ -201,6 +202,7 @@ export function UseCaseCard({ entry }: { entry: Organization }) {
               <img
                 src={light}
                 alt={`${entry.name} logo`}
+                title={entry.name}
                 className={USE_CASE_LOGO_CLASS}
               />
             </a>
@@ -218,6 +220,7 @@ export function UseCaseCard({ entry }: { entry: Organization }) {
               <img
                 src={dark}
                 alt={`${entry.name} logo`}
+                title={entry.name}
                 className={USE_CASE_LOGO_CLASS}
               />
             </a>
