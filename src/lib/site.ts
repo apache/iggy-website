@@ -45,6 +45,7 @@ export const STATIC_ROUTES = [
   "/",
   "/blogs",
   "/downloads",
+  "/meetups",
   "/powered-by",
   "/community",
   "/community/become-a-committer",
