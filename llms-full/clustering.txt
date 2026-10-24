@@ -1,0 +1,721 @@
+# Apache Iggy documentation: Clustering
+
+These docs describe server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0. This file joins every page in the Clustering section. For the other sections, see https://iggy.apache.org/llms.txt. For all sections in one file, see https://iggy.apache.org/llms-full.txt.
+
+---
+
+# Viewstamped Replication
+
+> How Apache Iggy replicates data across a cluster with VSR
+
+Rendered page: https://iggy.apache.org/docs/clustering/vsr/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/clustering/vsr.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Apache Iggy replicates clusters with **Viewstamped Replication Revisited (VSR)**. VSR keeps an ordered state machine consistent across replicas and elects a new primary when the current primary fails.
+
+Clustering is built into the standard `iggy-server` binary. There's **no separate build, binary, or Cargo feature**: the same server runs single-node or clustered, and `cluster.enabled` in the configuration decides which one you get. Clustering is **disabled by default**.
+
+Read the [VSR paper used by the project](https://github.com/apache/iggy/blob/master/assets/vsr.pdf) for the protocol specification.
+
+> Iggy hasn't reached a 1.0 production release yet. The cluster protocol and configuration described here can still change between pre-release versions.
+
+## Current implementation
+
+The implementation includes:
+
+- normal operation with quorum commits
+- view changes and deterministic primary selection
+- metadata and partition replication
+- persistent WAL recovery and snapshots
+- replica rejoin with journal repair
+- client sessions, request fencing, and duplicate detection
+- replica authentication and optional TLS
+- leader redirection in the client SDKs
+- deterministic simulation and cross-SDK BDD coverage
+
+The main components are:
+
+| Component | Source | Responsibility |
+| --- | --- | --- |
+| Server | [`core/server`](https://github.com/apache/iggy/tree/master/core/server) | Sharded runtime, listeners, recovery, and request dispatch |
+| Consensus | [`core/consensus`](https://github.com/apache/iggy/tree/master/core/consensus) | VSR state machine, quorum, view changes, and timeouts |
+| Wire protocol | [`core/binary_protocol/src/consensus`](https://github.com/apache/iggy/tree/master/core/binary_protocol/src/consensus) | Fixed-size VSR headers and replica messages |
+| Simulator | [`core/simulator`](https://github.com/apache/iggy/tree/master/core/simulator) | Deterministic failures, delays, and network partitions |
+| Rust SDK | [`core/sdk`](https://github.com/apache/iggy/tree/master/core/sdk) | VSR framing, sessions, retries, and leader redirection |
+
+## Replication model
+
+Iggy splits replication by namespace:
+
+| Plane | Consensus group | Replicated work |
+| --- | --- | --- |
+| Metadata | One group on shard 0 | Streams, topics, users, permissions, consumer groups, and access tokens |
+| Partition | One group per partition | Messages and consumer offsets |
+
+Each group can have a *different* primary. Metadata writes route through the metadata primary. Partition writes route through the primary for that partition.
+
+Reads use the local replicated state where possible. Writes return after the required VSR commit or return a retryable error when the replica is changing view or catching up. See [Client failover](https://iggy.apache.org/docs/clustering/client-failover) for how the SDKs handle both.
+
+## Failure handling
+
+VSR uses three main flows:
+
+1. **Normal operation**: the primary assigns an operation number, sends `Prepare`, and commits after a quorum sends `PrepareOk`.
+2. **View change**: replicas exchange `StartViewChange` and `DoViewChange`, then the new primary sends `StartView`.
+3. **Recovery**: a restarted or lagging replica requests the current view and repairs missing WAL ranges before serving current state.
+
+Three replicas tolerate one unavailable replica; five tolerate two. Larger groups use a capped replication quorum and a growing view-change quorum, so the usual `2f + 1` rule does not apply to every group size. See [Cluster durability](https://iggy.apache.org/docs/clustering/durability#what-an-acknowledgement-means) for the quorum rules. Use **at least three replicas** for one-node fault tolerance. A two-node cluster is useful for development, but it **cannot make progress** after either node fails.
+
+## Wire protocol and SDKs
+
+VSR framing is the *only binary* wire protocol, used by TCP, QUIC, and WebSocket connections. HTTP uses the REST API. Every SDK (Rust, Go, Java, C#, C++, Node.js, Python) speaks it, and every BDD suite runs against the clustered-capable `iggy-server`. Binary clients built before the VSR migration **cannot talk to current servers**.
+
+The Rust SDK needs no feature flags. Depend on the published crate:
+
+```toml
+[dependencies]
+iggy = "0.11.0"
+tokio = { version = "1", features = ["full"] }
+```
+
+or track the repository directly with `iggy = { git = "https://github.com/apache/iggy" }`.
+
+The client API is the same in single-node and cluster mode. This example uses the `iggy` / `iggy` credentials explicitly provisioned in [Getting started](https://iggy.apache.org/docs/introduction/getting-started):
+
+```rust
+use iggy::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<(), IggyError> {
+    let client = IggyClientBuilder::from_connection_string(
+        "iggy://iggy:iggy@127.0.0.1:8090",
+    )?
+    .build()?;
+
+    client.connect().await?;
+
+    let cluster = client.get_cluster_metadata().await?;
+    println!("cluster: {}", cluster.name);
+
+    Ok(())
+}
+```
+
+## Status
+
+VSR started as a parallel `server-ng` implementation behind a `vsr` build feature. That phase is over. The VSR server moved into the mainline `core/server` crate and the `iggy-server` binary, the feature flag is gone, and the legacy server and its wire format were deleted. What this page describes is the only server implementation.
+
+## Next steps
+
+- [Deploy a cluster](https://iggy.apache.org/docs/clustering/deploy): build the binaries and run a three-node cluster
+- [Configuration](https://iggy.apache.org/docs/clustering/configuration): every `[cluster]` setting and its validation rules
+- [Security](https://iggy.apache.org/docs/clustering/security): replica authentication, key rotation, and TLS
+- [Client failover](https://iggy.apache.org/docs/clustering/client-failover): reads, writes, and leader redirection from the client side
+
+---
+
+# Cluster Durability
+
+> Quorum completion, persisted prepare history, and the failures each topic policy covers.
+
+Rendered page: https://iggy.apache.org/docs/clustering/durability/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/clustering/durability.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Iggy uses [Viewstamped Replication](https://iggy.apache.org/docs/clustering/vsr) to commit partition
+operations. The topic's `durability` and `consumer_offset_durability`
+options select the storage guarantee required for message production and
+explicit offset changes, respectively. Both default independently to
+`replicated`. Both continue to write data to disk.
+
+For the creation options and single-node behavior, see
+[Durability](https://iggy.apache.org/docs/server/durability).
+
+## What an acknowledgement means
+
+For an operation that waits for completion:
+
+| Policy | Required before success |
+| --- | --- |
+| `replicated` | VSR quorum commit and local application, without an additional stable-storage barrier |
+| `persisted` | VSR quorum commit backed by recoverable stable-storage copies at the required quorum, followed by local application |
+
+The policy changes what a replica must retain before its acknowledgement can
+count toward commit. It does not replace quorum commit with a primary-only
+disk write.
+
+Iggy's replication quorum is not a strict majority for every group size:
+
+| Replicas | Replication quorum | View-change quorum |
+| --- | --- | --- |
+| 1 | 1 | 1 |
+| 2 | 2 | 2 |
+| 3 | 2 | 2 |
+| 4 | 2 | 3 |
+| 5 | 3 | 3 |
+| 6 | 3 | 4 |
+
+Except for two replicas, the replication quorum is `min(ceil(n / 2), 3)`
+and the view-change quorum is `n - replication_quorum + 1`. Two replicas
+require both for either quorum. The quorums therefore intersect. These are
+the [implemented quorum rules](https://github.com/apache/iggy/blob/4a38798a506c9231afdfc83a34ebed394d41dac2/core/consensus/src/impls.rs),
+not a configurable acknowledgement count.
+
+## Replicated completion
+
+With both policies set to `replicated`, partition prepares stay off the
+disk prepare-WAL path. Replicas retain the prepares in memory, and committed
+messages reach segment files through ordinary flush scheduling.
+
+Success therefore does not prove that the operation reached stable storage
+on any replica. Replication protects against failures while sufficient peers
+retain the history and can form the quorums needed for recovery and progress.
+For example, a healthy three-replica group can continue after one replica
+fails.
+
+Failure independence matters. A shared power loss, an OOM cascade, or a
+crash triggered on every replica can destroy multiple volatile copies at
+once. A process-only failure can lose messages still in the processes'
+journals, even while the kernels and their page caches remain alive.
+Replication count alone does not establish a bound on that loss.
+
+## Persisted completion
+
+When either policy is `persisted`, each multi-replica partition uses a
+bounded on-disk prepare WAL. Message prepares contain headers and segment
+references; their payloads live in segment files retained by hard links until
+the WAL history can be reclaimed. Other operations are stored inline. A prepare
+requiring persistence cannot release its `PrepareOk` until its message bodies,
+WAL history, and durable frontier are recoverable.
+
+Prepares can be forwarded while local persistence is pending. Once enough
+replicas have met the required barrier, the operation can commit and the
+primary can apply it and reply. An acknowledged message can be recovered
+through the WAL before ordinary segment materialization and index updates
+finish; recovery does not depend on first reaching a segment flush threshold.
+
+The WAL also retains predecessors across message and offset operations.
+Consequently:
+
+- `durability=persisted` does not make an offset response persisted when
+  `consumer_offset_durability=replicated`.
+- `consumer_offset_durability=persisted` with replicated messages still
+  retains message payloads through WAL segment references. A durable offset's predecessor history must
+  remain recoverable.
+- A shared barrier can also persist co-batched operations with the weaker
+  policy. That incidental persistence does not strengthen what their earlier
+  `replicated` acknowledgements promised.
+- Only the `replicated` / `replicated` combination avoids the disk prepare
+  WAL entirely.
+
+WAL history is reclaimed only after the materialized segment and offset
+state needed to replace it has been synchronized. The server's
+`[partition] wal_bytes_max` setting, default `256 MiB`, bounds retained
+and queued/in-flight prepare bytes per partition. The accounting includes
+message bodies even when the WAL stores only references to them. Capacity pressure causes
+checkpointing and backpressure; it does not downgrade a persisted operation.
+Temporary rewrites need additional disk space.
+
+## Recovery and failure limits
+
+A restarting replica loads segment and offset state and, when enabled,
+reconciles the durable prepare WAL with that state. It also restores durable
+consensus state and follows the recovery protocol before serving as a healthy
+replica. It does not treat every locally recovered prepare as committed.
+
+Missing required history, checksum failures, or contradictory materialized
+state must not become an empty healthy partition. Recovery can fence a
+partition and repair it from peers. Storage errors withhold successful
+completion; a locally failed application of a committed operation fences the
+partition and initiates server shutdown.
+
+`persisted` protects acknowledged operations across process and power
+failures when the required storage copies remain intact and the storage
+honors synchronization. Recovery and availability still require the
+protocol's quorums. It cannot protect against destruction of all durable
+copies, nor does it prevent configured retention or explicit deletion.
+
+## Choosing the policies
+
+Use `replicated` when the workload accepts the risk of losing acknowledged
+operations after correlated failures in exchange for avoiding a required
+storage barrier at completion. Isolate replicas across failure domains; see
+[Deployment](https://iggy.apache.org/docs/clustering/deploy).
+
+Use `durability=persisted` when acknowledged messages must be recoverable
+after volatile copies are lost. Select
+`consumer_offset_durability=persisted` independently when explicit offset
+stores and deletes need the same guarantee. Ordinary flush thresholds can
+remain at their defaults.
+
+Neither policy turns HTTP `ack=none` or a poll's auto-commit into an awaited
+durable result. See [Which responses prove completion](https://iggy.apache.org/docs/server/durability#which-responses-prove-completion).
+
+The storage mechanisms are implemented in the
+[partition persistence worker](https://github.com/apache/iggy/blob/4a38798a506c9231afdfc83a34ebed394d41dac2/core/partitions/src/persistence.rs)
+and [prepare journal](https://github.com/apache/iggy/blob/4a38798a506c9231afdfc83a34ebed394d41dac2/core/journal/src/partition_journal.rs).
+The [crash-recovery tests](https://github.com/apache/iggy/blob/4a38798a506c9231afdfc83a34ebed394d41dac2/core/integration/tests/cluster/crash_durability.rs)
+exercise acknowledged persisted messages and offsets below ordinary flush
+thresholds, on both a singleton and a three-replica cluster.
+
+---
+
+# Deploy a Cluster
+
+> Build the binaries and run a three-node Apache Iggy cluster
+
+Rendered page: https://iggy.apache.org/docs/clustering/deploy/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/clustering/deploy.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Build `iggy-server` and the `iggy` CLI, run a single development node, then bring up a three-node cluster on one machine. See [Configuration](https://iggy.apache.org/docs/clustering/configuration) for the full `[cluster]` reference.
+
+## Build from source
+
+Build the server and CLI from the repository root:
+
+```bash
+cargo build --bin iggy-server --bin iggy
+```
+
+The binaries are:
+
+```text
+target/debug/iggy-server
+target/debug/iggy
+```
+
+The server uses Linux `io_uring`. Use a recent Linux kernel and a sufficient locked-memory limit.
+
+## Run one development node
+
+The default `core/server/config.toml` has clustering disabled, so a plain run starts a single node:
+
+```bash
+cargo run --bin iggy-server -- --with-default-root-credentials
+```
+
+`--with-default-root-credentials` sets the root user to `iggy`/`iggy` unless `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` are already exported. These values initialize the root user **only on its first creation**. Later starts recover the stored user; supplied environment values are still validated at boot.
+
+When clustering is disabled, `--replica-id 0` is still accepted. Any other id is rejected because it would have to match a `cluster.nodes` entry.
+
+## Run a three-node cluster
+
+Every node loads the same configuration. Nodes are told apart *only* by `--replica-id`, which selects that node's own entry in the `cluster.nodes` roster.
+
+Save this as `/tmp/iggy-vsr.toml`:
+
+```toml
+[cluster]
+enabled = true
+name = "iggy-vsr-dev"
+
+[cluster.auth]
+enabled = true
+shared_secret = ""
+
+[[cluster.nodes]]
+name = "iggy-node-1"
+ip = "127.0.0.1"
+replica_id = 0
+ports = { tcp = 8090, quic = 8080, http = 3000, websocket = 8093, tcp_replica = 9090 }
+
+[[cluster.nodes]]
+name = "iggy-node-2"
+ip = "127.0.0.1"
+replica_id = 1
+ports = { tcp = 8091, quic = 8081, http = 3001, websocket = 8094, tcp_replica = 9091 }
+
+[[cluster.nodes]]
+name = "iggy-node-3"
+ip = "127.0.0.1"
+replica_id = 2
+ports = { tcp = 8092, quic = 8082, http = 3002, websocket = 8095, tcp_replica = 9092 }
+```
+
+> `cluster.name` is a **permanent on-disk identity**. It is hashed into the cluster id stamped into every metadata and partition superblock on first boot. Changing the name later makes the server **refuse to start** against the existing data, so renaming a cluster means starting from an empty data directory.
+
+Export the settings shared by all three processes:
+
+```bash
+export IGGY_CONFIG_PATH=/tmp/iggy-vsr.toml
+export IGGY_ROOT_USERNAME=iggy
+export IGGY_ROOT_PASSWORD=iggy
+export IGGY_CLUSTER_AUTH_SHARED_SECRET="replace-with-at-least-32-random-bytes"
+```
+
+Root credentials are **mandatory on the first boot of each replica** when clustering is enabled. Restarts recover the stored root user. The shared secret must be **at least 32 bytes**. See [Security](https://iggy.apache.org/docs/clustering/security) for how it's used and rotated.
+
+Start each replica in a separate terminal. Use a different data path for every process:
+
+```bash
+# Replica 0
+IGGY_PATH=local_data/node-0 ./target/debug/iggy-server --replica-id 0
+
+# Replica 1
+IGGY_PATH=local_data/node-1 ./target/debug/iggy-server --replica-id 1
+
+# Replica 2
+IGGY_PATH=local_data/node-2 ./target/debug/iggy-server --replica-id 2
+```
+
+The exported settings must be present in all three terminals.
+
+In cluster mode:
+
+- `--replica-id` is required and must match exactly one `cluster.nodes` entry
+- `replica_id` values must be unique and contiguous from `0`
+- `ports` is the single source of listener ports: every enabled transport needs an explicit per-node port, otherwise the server **refuses to start**
+- `tcp` and `tcp_replica` ports are **always required**, even when client TCP is disabled; `tcp_replica` carries replica-to-replica consensus traffic
+- `ip` must be a **literal IP address**. Use `advertised_address` when clients can't reach it (see [Configuration](https://iggy.apache.org/docs/clustering/configuration))
+- use a different root `path` for each process on the same host
+
+## Spanning multiple hosts
+
+The roster `ip` is the address other replicas dial. It's **not the bind interface** for the client transports: `tcp`, `quic`, `http`, and `websocket` bind whatever their own `address` settings say, and the roster supplies only the port. The defaults listen on loopback, so a cluster spread across hosts needs each transport's `address` set to `0.0.0.0` or the routable interface. The server warns at startup when a bind cannot serve the advertised `ip`.
+
+## Containers
+
+Every roster field can be provided through typed environment variables instead of TOML, which suits container deployments:
+
+```text
+IGGY_CLUSTER_ENABLED=true
+IGGY_CLUSTER_NAME=my-cluster
+IGGY_CLUSTER_NODES_0_NAME=node-1
+IGGY_CLUSTER_NODES_0_IP=172.28.0.101
+IGGY_CLUSTER_NODES_0_REPLICA_ID=0
+IGGY_CLUSTER_NODES_0_PORTS_TCP=8090
+IGGY_CLUSTER_NODES_0_PORTS_QUIC=8080
+IGGY_CLUSTER_NODES_0_PORTS_HTTP=3000
+IGGY_CLUSTER_NODES_0_PORTS_WEBSOCKET=8093
+IGGY_CLUSTER_NODES_0_PORTS_TCP_REPLICA=9090
+IGGY_CLUSTER_NODES_1_NAME=node-2
+IGGY_CLUSTER_NODES_1_IP=172.28.0.102
+IGGY_CLUSTER_NODES_1_REPLICA_ID=1
+IGGY_CLUSTER_NODES_1_PORTS_TCP=8090
+IGGY_CLUSTER_NODES_1_PORTS_QUIC=8080
+IGGY_CLUSTER_NODES_1_PORTS_HTTP=3000
+IGGY_CLUSTER_NODES_1_PORTS_WEBSOCKET=8093
+IGGY_CLUSTER_NODES_1_PORTS_TCP_REPLICA=9090
+IGGY_TCP_ADDRESS=0.0.0.0:8090
+IGGY_QUIC_ADDRESS=0.0.0.0:8080
+IGGY_HTTP_ADDRESS=0.0.0.0:3000
+IGGY_WEBSOCKET_ADDRESS=0.0.0.0:8093
+IGGY_CLUSTER_AUTH_ENABLED=true
+IGGY_CLUSTER_AUTH_SHARED_SECRET=replace-with-at-least-32-random-bytes
+IGGY_ROOT_USERNAME=iggy
+IGGY_ROOT_PASSWORD=iggy
+```
+
+Give each container a static IP and put that IP in the roster: `cluster.nodes[*].ip` does **not** accept hostnames or Docker service names. The repository ships a working reference in [`bdd/docker-compose.cluster.yml`](https://github.com/apache/iggy/blob/master/bdd/docker-compose.cluster.yml), a real two-node cluster used by the BDD suites.
+
+## Check cluster metadata
+
+Ask any node for the cluster state with the CLI:
+
+```bash
+./target/debug/iggy \
+  --tcp-server-address 127.0.0.1:8090 \
+  -u iggy \
+  -p iggy \
+  cluster metadata
+```
+
+The response lists the cluster name, nodes, client endpoints, and current roles. `cluster m` is a shorthand for `cluster metadata`.
+
+## Reset a replica
+
+`iggy-server --fresh` deletes the configured data directory before boot. In cluster mode this wipes **that replica only**: it rejoins the cluster and refills its state by transfer from the other replicas. Wiping a quorum of replicas at the same time **destroys committed data**, and a service unit that always passes `--fresh` re-transfers the whole dataset on every restart.
+
+## Run the cluster test suites
+
+The cross-SDK BDD suites use a standalone server for basic features and add the two-node cluster from `bdd/docker-compose.cluster.yml` for `leader_redirection` or `all`:
+
+```bash
+./scripts/run-bdd-tests.sh rust
+./scripts/run-bdd-tests.sh rust basic_messaging
+./scripts/run-bdd-tests.sh rust leader_redirection
+```
+
+The first argument selects the SDK (`rust`, `python`, `php`, `go`, `go-race`, `node`, `csharp`, `java`, `cpp`, or `all`) and the optional second argument selects one feature (`basic_messaging`, `leader_redirection`, `raw_command`, `stream_crud`, or `all`). `leader_redirection` is the clustered feature. The Rust, Go, C#, and Java suites support it.
+
+---
+
+# Cluster Configuration
+
+> Reference for the [cluster] settings, consensus timing, and node roster
+
+Rendered page: https://iggy.apache.org/docs/clustering/configuration/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/clustering/configuration.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+All clustering settings live in the `[cluster]` section of the server configuration. The authoritative defaults with detailed comments are in [`core/server/config.toml`](https://github.com/apache/iggy/blob/master/core/server/config.toml). Every value can also be set through an `IGGY_`-prefixed environment variable, for example `IGGY_CLUSTER_ENABLED=true` or `IGGY_CLUSTER_NODES_0_IP=10.0.1.5`.
+
+With clustering enabled, the server validates the section at boot and **refuses to start** on an invalid value, printing the rule that failed. The repair chunk limit and superblock failure timeout are validated even when clustering is disabled.
+
+## Top-level settings
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `enabled` | `false` | Enables cluster mode. When disabled, the node runs single-node and the rest of the section is mostly inert. |
+| `name` | `"iggy-cluster"` | Unique cluster name shared by every node. Prevents accidental cross-cluster communication. |
+
+> `cluster.name` is a **permanent on-disk identity**, not a label. It's hashed into the cluster id stamped into every metadata and partition superblock on first boot, and the consensus layer derives its cluster id from the name unconditionally. Nodes with different names cannot connect to each other, and changing the name later makes the server refuse to start against existing data.
+
+## Consensus timing
+
+Consensus runs on a **fixed 10ms tick**. Every duration below is converted to whole ticks: values are **rounded down** to a multiple of 10ms, and anything under 10ms is raised to a single tick rather than firing sooner. `repair_gap_debounce_interval` has an additional 500ms floor.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `heartbeat_timeout` | `5s` | Backup liveness window: a replica that sees no primary traffic for this long starts a view change |
+| `commit_broadcast_interval` | `500ms` | How often the primary broadcasts its commit point; this broadcast is the cluster's liveness signal |
+| `prepare_retransmit_interval` | `250ms` | Retry prepares that backups have not acknowledged |
+| `view_change_retransmit_interval` | `500ms` | Retry `StartViewChange` / `DoViewChange` while a view change is in progress |
+| `view_change_status_timeout` | `5s` | Escalate a view change that does not conclude within this window to a fresh election |
+| `request_start_view_retransmit_interval` | `1s` | How often a recovering replica re-requests the current view's `StartView` |
+| `view_probe_attempts_max` | `5` | Unanswered `RequestStartView` probes a recovering replica tolerates before falling back to an election |
+| `repair_retry_interval` | `1s` | How long a stalled journal-repair stream waits before re-requesting its remaining window |
+| `repair_gap_debounce_interval` | `1s` | How long a committed-history gap waits before opening a repair session; floored at 500ms |
+| `repair_chunk_max` | `128` | Prepares a peer serves per repair round |
+
+Raise `heartbeat_timeout` on oversubscribed hosts where scheduling stalls fake primary death. Otherwise keep the defaults unless tests show a specific scheduling or network problem.
+
+### Validation rules
+
+Boot-time validation enforces these constraints:
+
+- Every duration must be **nonzero**. The `0`, `disabled`, and `unlimited` sentinels all parse to a zero duration and are rejected. There's no way to switch the liveness window off.
+- `heartbeat_timeout` must be at least `2s` and at least 4x `commit_broadcast_interval`, so one delayed broadcast never trips an election on a healthy primary.
+- `view_change_status_timeout` must be at least 4x `view_change_retransmit_interval`, so a few dropped view-change messages retransmit instead of escalating into a fresh cluster-wide election.
+- `view_probe_attempts_max` must be between 1 and 100.
+- `repair_chunk_max` must be between 1 and 1024, and strictly below `message_bus.peer_queue_capacity`: each repair frame rides the per-peer message-bus queue, and a full round above that capacity would overrun the queue and drop frames.
+
+## Superblock failure handling
+
+`superblock_wedged_fatal_timeout` defaults to `2m`. It controls how long repeated superblock persistence failures can continue before the process exits. The affected consensus group stays fenced while persistence is failing. `0`, `disabled`, or `unlimited` disables the process exit, leaving the group fenced; a nonzero value must be at least `30s`.
+
+## Coordinator placement
+
+These settings live under `[cluster.coordinator]` and apply when the server has more than one shard:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `skip_shard_zero_for_replicas` | `true` | Places replica connections on peer shards instead of shard 0 |
+| `skip_shard_zero_for_clients` | `false` | When enabled, excludes shard 0 from client connection placement |
+
+## Node roster
+
+`cluster.nodes` is the full roster of cluster members and is intended to be **byte-identical on every node**. The running node finds its own entry through the `--replica-id` CLI flag. Environment variables replace the entire `cluster.nodes` array rather than merging individual fields into TOML entries. If you configure any roster entry through environment variables, provide the complete roster that way.
+
+```toml
+[[cluster.nodes]]
+name = "iggy-node-1"
+ip = "10.0.1.5"
+advertised_address = "203.0.113.10"
+replica_id = 0
+ports = { tcp = 8090, quic = 8080, http = 3000, websocket = 8093, tcp_replica = 9090 }
+```
+
+### `name`
+
+Node name, unique within the roster and non-empty.
+
+### `ip`
+
+The node's roster address. Replica-to-replica consensus traffic and follower-to-primary HTTP forwarding dial it, so it must be a **literal IPv4 or IPv6 address**. Hostnames and unspecified addresses (`0.0.0.0` or `::`) are rejected when the server resolves the roster at startup.
+
+`ip` is **not the bind interface** for the client transports. `tcp`, `quic`, `http`, and `websocket` bind whatever their own `address` settings say. The roster supplies only their ports. The defaults bind loopback, so a cluster spread across hosts needs each transport's `address` set to `0.0.0.0` or the routable interface. The server warns at startup when a bind cannot serve the advertised `ip`.
+
+### `replica_id`
+
+Numeric replica id for VSR consensus, `0`-based. Ids must be unique and strictly less than the roster size, which makes them contiguous from `0`. Rosters with more than 255 replicas are unsupported.
+
+### `ports`
+
+Per-node listener ports: `tcp`, `quic`, `http`, `websocket`, and `tcp_replica`. In cluster mode `ports` is the **single source of listener ports**: every enabled transport needs an explicit per-node port, otherwise the server refuses to start. `tcp` and `tcp_replica` are always required, even when client TCP is disabled. `tcp_replica` carries consensus traffic. Port `0` is rejected, and no two roster entries may claim the same `ip:port`.
+
+### `advertised_address`
+
+Optional client-facing address handed out in cluster metadata and leader redirects. Set it when `ip` is a private replica-network address unreachable by clients (Docker, Kubernetes, NAT). Accepts a literal IP or an RFC 1123 DNS hostname: ASCII letters, digits, `-` and `.`, no port, no trailing dot. When unset, clients receive `ip`.
+
+### `advertised_addresses`
+
+Per-client-network overrides for split networks, where one catch-all `advertised_address` would route in-VPC clients out through the public side:
+
+```toml
+[[cluster.nodes]]
+name = "iggy-node-1"
+ip = "10.0.1.5"                        # replica plane + last-resort fallback
+advertised_address = "203.0.113.10"    # catch-all for unmatched clients
+replica_id = 0
+ports = { tcp = 8090, quic = 8080, http = 3000, websocket = 8093, tcp_replica = 9090 }
+
+[[cluster.nodes.advertised_addresses]]
+client_cidr = "10.0.0.0/16"            # in-VPC clients stay private
+address = "10.0.1.5"
+```
+
+Clients whose transport-level peer IP falls inside `client_cidr` are handed `address` instead of the catch-all. The **longest matching prefix** wins. Clients matching no selector fall back to `advertised_address`, then `ip`. `address` takes the same forms as `advertised_address` (literal IP or hostname, never a port).
+
+Rules and caveats:
+
+- At most 16 selectors per node. Boot rejects duplicate `client_cidr` entries on one node (compared truncated, so `10.0.1.0/16` duplicates `10.0.0.0/16`) and any two nodes advertising one `host:port` to overlapping client sets.
+- Matching is **per address family**: `0.0.0.0/0` matches no IPv6 client and `::/0` matches no IPv4 client, so covering both families takes one selector per family. IPv4-mapped IPv6 CIDRs (`::ffff:10.0.0.0/104`) match like their IPv4 form only at prefix length 96 or longer.
+- Matching sees the transport-level peer address, so clients behind a proxy or load balancer match the proxy's network, not their own.
+- Every `address` must be routable from inside its own `client_cidr`: leader-aware clients redial whatever address metadata advertises, and a selector pointing at an unreachable host strands them mid-redirect.
+- Prefer literal IPs over hostnames. SDKs differ in how they compare an advertised hostname against the address they dialed, and a mismatch costs a reconnect on every fresh connect.
+- Rolling upgrades: VSR builds predating selector support reject a TOML config containing `advertised_addresses`. Their release builds warn and ignore the equivalent `IGGY_CLUSTER_NODES_*_ADVERTISED_ADDRESSES_*` env vars; debug builds can panic on them. Upgrade every binary first, then add selectors.
+
+## Authentication and TLS
+
+`[cluster.auth]` configures the pre-shared-key replica handshake and `[cluster.tls]` wraps replica connections in TLS. Both are covered in [Security](https://iggy.apache.org/docs/clustering/security).
+
+---
+
+# Cluster Security
+
+> Replica authentication, shared-secret rotation, and TLS for replica traffic
+
+Rendered page: https://iggy.apache.org/docs/clustering/security/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/clustering/security.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Replica-to-replica security has two layers, both in the `[cluster]` configuration: a pre-shared-key handshake that authenticates peers (`[cluster.auth]`) and optional TLS that encrypts the replica connection (`[cluster.tls]`).
+
+## Replica authentication
+
+Replica authentication uses a cluster-wide pre-shared key (PSK) and a BLAKE3 keyed-MAC handshake. With `cluster.auth.enabled = true`, every replica peer must complete the authenticated handshake or be rejected:
+
+```toml
+[cluster.auth]
+enabled = true
+shared_secret = ""
+```
+
+- The secret must be **at least 32 bytes** of CSPRNG output and **byte-identical on every node**.
+- Prefer the `IGGY_CLUSTER_AUTH_SHARED_SECRET` environment variable over storing the secret in TOML. The value is masked in logs and never written into the runtime configuration snapshot.
+- Authentication is **off by default**, which leaves replica traffic unauthenticated. Enabling it is a **coordinated-restart change**: flip every node in one restart.
+- The 32-byte minimum is enforced whenever the cluster is enabled, even with `auth.enabled = false`: a configured non-empty secret shorter than 32 bytes fails boot.
+
+## Rotating the shared secret
+
+`previous_shared_secret` enables a rolling key rotation without an authentication outage. The retiring key is accepted *for verification only*. Every MAC a node produces uses `shared_secret`. Rotate in three rolls, restarting every node after each step:
+
+1. `shared_secret = old`, `previous_shared_secret = new` on every node
+2. `shared_secret = new`, `previous_shared_secret = old` on every node
+3. `shared_secret = new` alone, closing the window
+
+Leave `previous_shared_secret` **empty outside a rotation**. It has the same 32-byte floor and the same environment-variable preference as the primary key (`IGGY_CLUSTER_AUTH_PREVIOUS_SHARED_SECRET`), and it must differ from `shared_secret`. An identical value is refused at boot because the rotation would be a no-op.
+
+## Replica TLS
+
+`[cluster.tls]` wraps every replica connection on the `tcp_replica` port in TLS 1.3 (ALPN `iggy-replica`) before the replica handshake runs:
+
+```toml
+[cluster.auth]
+enabled = true
+
+[cluster.tls]
+enabled = true
+self_signed = false
+cert_file = "/etc/iggy/tls/node.crt"
+key_file = "/etc/iggy/tls/node.key"
+ca_file = "/etc/iggy/tls/ca.crt"
+```
+
+TLS requires `cluster.auth.enabled = true`, and the server **refuses to start** otherwise. The reason: replica TLS carries no client certificates, so it authenticates the acceptor only. The PSK handshake authenticates the peer. TLS supplies confidentiality. Without the PSK requirement, any TLS-capable host could register as a replica.
+
+Enabling TLS is also a coordinated-restart change: a TLS dialer can't talk to a plaintext acceptor or vice versa.
+
+Two certificate modes exist:
+
+- **CA mode** (`self_signed = false`, the default): `cert_file`, `key_file`, and `ca_file` are all required. Each node presents `cert_file` on its acceptor side, and dialers verify peer certificates against the `ca_file` trust anchors. The dialer verifies each peer against the `ip` string from that peer's `cluster.nodes` entry, so certificates need matching IP SANs.
+- **Self-signed mode** (`self_signed = true`): the node auto-generates a certificate at boot and the dialer accepts ANY peer certificate. This gives you encrypted replica traffic without certificate management, but **no acceptor authentication at all**: peer authenticity rests entirely on the PSK handshake. Use CA mode when the replica network is not trusted.
+
+## HTTP tokens across the cluster
+
+Follower nodes forward control-plane HTTP requests (stream, topic, user, and similar metadata operations) to the current metadata primary, so **any node can answer any control-plane request**. This requires JWT key material that every node can verify, from either of two sources:
+
+- explicitly configured `http.jwt` signing secrets, identical on every node, or
+- the cluster PSK: when HTTP is enabled, cluster auth is enabled, and no `http.jwt` secrets are configured, the signing key is derived from `shared_secret`.
+
+Either way, matching JWT key material lets a bearer token minted on one node verify on another. If JWT keys are derived from the PSK, rotating the PSK also changes the JWT key: `previous_shared_secret` applies only to replica authentication. Use independently configured, shared JWT keys when HTTP tokens must remain valid across PSK rotation. Forwarded requests dial the primary at its roster `ip` and `ports.http`. The follower verifies the caller's bearer locally before forwarding, and the primary re-authenticates the request through its normal stack.
+
+Acknowledged partition-plane writes over HTTP (producing messages, storing or deleting consumer offsets) first run on the contacted node. If it returns `TransientNotAccepted`, the server tries the other configured HTTP nodes at most once each, within a bounded retry window. That response proves the operation was never admitted. Ambiguous outcomes are returned without replay, and `ack=none` does not provide an acknowledgement for this fallback. Each partition is its own consensus group, so its primary can differ from the metadata primary. See [Client failover](https://iggy.apache.org/docs/clustering/client-failover) for how clients find it.
+
+When HTTP TLS is enabled, forwarding uses HTTPS and pins the destination certificate to the forwarding node's own HTTP leaf certificate. All nodes therefore need the same HTTP certificate for forwarding; distinct per-node HTTP certificates fail verification. Replica TLS is configured separately and does not encrypt the HTTP forwarding hop.
+
+---
+
+# Client Failover
+
+> Local reads, leader redirection, and retryable errors from the client side
+
+Rendered page: https://iggy.apache.org/docs/clustering/client-failover/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/clustering/client-failover.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+A clustered deployment changes what a client can expect from any single node: reads are served locally where possible, writes must reach the right primary, and the SDKs follow the primary as it moves.
+
+## Where requests are served
+
+**Reads** use the local replicated state by default on whichever node owns the namespace locally, followers included. A client connected to a follower can poll messages and read metadata without touching the primary.
+
+**Writes** go through consensus and are admitted on the plane's primary *only*: metadata operations on the metadata primary, message and offset writes on the primary of that partition's consensus group. An acknowledged write returns after the required VSR commit, or returns a retryable error when the replica is changing view or catching up. HTTP `ack=none` returns after dispatch instead.
+
+One caveat on follower reads: server-managed offset auto-commit replicates the polled offset through the partition consensus, which only the partition primary may do. A poll served by a follower **does not advance the durable consumer offset**. Auto-commit is best-effort and the poll response does not await offset persistence. On a primary, the offset submission precedes delivery of the poll reply, so it does not guarantee that the application received or processed the batch. Store offsets explicitly after processing when that ordering is required.
+
+## Leader redirection
+
+Leader-aware SDKs discover the metadata primary. Rust binary clients follow this sequence:
+
+1. The client connects and authenticates to its configured node, then fetches cluster metadata, which lists every node with its name, client endpoints, role, and status.
+2. When the connected node isn't the leader, the client reconnects to the leader's advertised endpoint for the transport in use.
+3. When the cluster is transiently leaderless, the client polls metadata every 250ms for up to 5s. If no healthy leader appears within that window, it continues on the contacted node and lets subsequent requests report their outcome.
+4. Redirects are **capped** (three in the Rust SDK) so a flapping roster can't bounce the client forever.
+
+The address a client is redirected to is the node's `advertised_address` (or the matching `advertised_addresses` selector), falling back to the roster `ip`. Getting those right matters: the client redials **exactly what the metadata advertises**. See [Configuration](https://iggy.apache.org/docs/clustering/configuration) for the selector rules.
+
+Metadata and partition primaries can differ. After a `TransientNotAccepted` response, Rust binary clients check the metadata leader and can then try the remaining advertised endpoints in a bounded roster walk. This fallback is separate from the three-redirect limit.
+
+The Rust implementation lives in [`core/sdk/src/leader_aware.rs`](https://github.com/apache/iggy/blob/master/core/sdk/src/leader_aware.rs).
+
+## Retryable errors
+
+During a view change or while a replica catches up, writes can return transient errors. Rust binary clients retry within their request budgets. `TransientNotAccepted` proves that the request was never admitted and permits retry on another node. `TransientNotCommitted` has an uncertain outcome and is replayed with the same session and request identity, then returned if the budget expires. Disconnects and exhausted routing attempts can still reach the caller. Definitive validation and permission errors are **not replayed**.
+
+## SDK support
+
+Every SDK speaks the VSR wire protocol and can connect to any node of a cluster. Client-side leader redirection is exercised by the shared `leader_redirection` BDD suite, which runs against a real two-node cluster:
+
+| SDK | VSR wire protocol | Leader redirection suite |
+| --- | --- | --- |
+| Rust | yes | yes |
+| Go | yes | yes |
+| C# | yes | yes |
+| Java | yes | yes |
+| Python | yes | not yet |
+| Node.js | yes | not yet |
+| C++ | yes | not yet |
+
+Run the suite for one SDK with:
+
+```bash
+./scripts/run-bdd-tests.sh rust leader_redirection
+```
+
+For SDKs without redirection coverage, connect clients to the current primary for write-heavy workloads, or front the cluster's HTTP transport with a load balancer and rely on [follower HTTP forwarding](https://iggy.apache.org/docs/clustering/security) for control-plane operations and acknowledged partition writes.

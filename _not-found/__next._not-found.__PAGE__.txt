@@ -1,0 +1,27 @@
+2:"$Sreact.fragment"
+3:"/_next/static/chunks/0vov8es4ujaym.js"
+4:"/_next/static/chunks/3dvxc_i7jdz7n.js"
+5:I[39756,["$3","$4"],"default"]
+6:I[37457,["$3","$4"],"default"]
+b:I[22016,["$3","$4"],""]
+c:I[97367,["$3","$4"],"OutletBoundary"]
+d:"$Sreact.suspense"
+10:"ViewportBoundary"
+11:I[97367,["$3","$4"],"$10"]
+12:"MetadataBoundary"
+13:I[97367,["$3","$4"],"$12"]
+14:I[27201,["$3","$4"],"IconMark"]
+8:X
+8:C
+9:X
+a:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$2","c",{"children":[["$","main",null,{"className":"flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center","children":[["$","p",null,{"className":"font-mono text-sm font-semibold uppercase tracking-widest text-[#ff9103]","children":"404"}],["$","h1",null,{"className":"text-3xl font-extrabold tracking-tight text-fd-foreground md:text-4xl","children":"This page could not be found"}],["$","p",null,{"className":"max-w-md text-fd-muted-foreground","children":"The page you are looking for was moved, renamed, or never existed."}],["$","$Lb",null,{"href":"/docs","className":"mt-2 inline-flex items-center rounded-lg bg-[#ff9103] px-6 py-3 text-sm font-semibold text-[#0e0f11] transition-colors hover:bg-[#ffa703]","children":"Back to documentation"}],["$","nav",null,{"aria-label":"Where to go next","className":"mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-fd-muted-foreground","children":[["$","$Lb","/",{"href":"/","className":"transition-colors hover:text-fd-primary","children":"Home"}],["$","$Lb","/docs",{"href":"/docs","className":"transition-colors hover:text-fd-primary","children":"Documentation"}],["$","$Lb","/blogs",{"href":"/blogs","className":"transition-colors hover:text-fd-primary","children":"Blog"}],["$","$Lb","/downloads",{"href":"/downloads","className":"transition-colors hover:text-fd-primary","children":"Downloads"}],["$","$Lb","/community",{"href":"/community","className":"transition-colors hover:text-fd-primary","children":"Community"}]]}],["$","p",null,{"className":"mt-6 max-w-md text-xs text-fd-muted-foreground","children":["Every page on this site is listed in"," ",["$","a",null,{"href":"/sitemap.xml","className":"underline hover:text-fd-primary","children":"/sitemap.xml"}],", and"," ",["$","a",null,{"href":"/llms.txt","className":"underline hover:text-fd-primary","children":"/llms.txt"}]," ","summarises the documentation."]}]]}],null,["$","$Lc",null,{"children":["$","$d",null,{"name":"Next.MetadataOutlet","children":"$@e"}]}]]}],"p":"$@f","v":null,"s":"$9"}}]]
+1:[["children",{"s":"/_not-found","h":64,"d":{"r":["$","$2","c",{"children":[null,["$","$L5",null,{"parallelRouterKey":"children","template":["$","$L6",null,{}]}]]}],"p":"$@7","v":"$8","s":"$9"},"c":"$Qa"}]]
+0:{"t":{"t":{"s":"","h":16,"c":"$Q1"},"h":{"r":["$","$2","h",{"children":[["$","meta",null,{"name":"robots","content":"noindex"}],["$","$L11",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L13",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$d",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"404: Page not found | Apache Iggy"}],["$","meta","1",{"name":"description","content":"Apache Iggy is a persistent message streaming platform written in Rust, supporting QUIC, TCP and HTTP transport protocols, capable of processing millions of messages per second."}],["$","link","2",{"rel":"canonical","href":"https://iggy.apache.org/_not-found/"}],["$","meta","3",{"property":"og:title","content":"404: Page not found | Apache Iggy"}],["$","meta","4",{"property":"og:description","content":"Apache Iggy is a persistent message streaming platform written in Rust, supporting QUIC, TCP and HTTP transport protocols, capable of processing millions of messages per second."}],["$","meta","5",{"property":"og:url","content":"https://iggy.apache.org/_not-found/"}],["$","meta","6",{"property":"og:site_name","content":"Apache Iggy"}],["$","meta","7",{"property":"og:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","meta","8",{"property":"og:image:width","content":"1200"}],["$","meta","9",{"property":"og:image:height","content":"630"}],["$","meta","10",{"property":"og:image:alt","content":"Apache Iggy"}],["$","meta","11",{"property":"og:type","content":"website"}],["$","meta","12",{"name":"twitter:card","content":"summary_large_image"}],["$","meta","13",{"name":"twitter:title","content":"404: Page not found | Apache Iggy"}],["$","meta","14",{"name":"twitter:description","content":"Apache Iggy is a persistent message streaming platform written in Rust, supporting QUIC, TCP and HTTP transport protocols, capable of processing millions of messages per second."}],["$","meta","15",{"name":"twitter:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","link","16",{"rel":"icon","href":"/img/favicon.png"}],["$","$L14","17",{}]]}]}],null]}],null]}],"p":"$@15","v":null,"s":"$9"}},"a":"$@16","u":"$@17","b":"FNLg4FtbgCEpIQLUI3ZU9"}
+e:null
+17:true
+9:300
+9:C
+16:0
+7:"$undefined"
+15:"$undefined"
+f:"$undefined"

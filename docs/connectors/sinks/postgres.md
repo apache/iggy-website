@@ -1,0 +1,156 @@
+# Postgres Sink
+
+> Store messages from Iggy topics in a PostgreSQL table, with optional table creation and configurable payload storage.
+
+Rendered page: https://iggy.apache.org/docs/connectors/sinks/postgres/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/connectors/sinks/postgres.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+The PostgreSQL sink connector consumes messages from Iggy topics and stores them in a PostgreSQL table, with optional automatic table creation and configurable payload storage.
+
+This page is a curated subset of the documentation. The canonical reference, including SQL query recipes for each payload format, is the upstream [postgres_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/postgres_sink) in the `apache/iggy` repository.
+
+## Features
+
+- **Automatic Table Creation**: Optionally create the target table on startup
+- **Batch Processing**: Insert messages in configurable batches for performance
+- **Metadata Storage**: Store Iggy message metadata (offset, timestamp, topic, etc.)
+- **Configurable Payload Storage**: Store the payload as raw bytes, native JSONB, or text
+- **Automatic Retries**: Transient database errors are retried with a configurable delay
+- **Connection Pooling**: Efficient database connection management
+
+## Configuration
+
+Use the broker credentials and runtime setup from the [sink guide](https://iggy.apache.org/docs/connectors/sinks/sink#configuration). From the matching 0.9.0/edge repository root, build the plugin:
+
+```bash
+cargo build --release -p iggy_connector_postgres_sink
+```
+
+For a local PostgreSQL instance matching the example credentials:
+
+```bash
+docker run -d --name iggy-postgres -p 127.0.0.1:5432:5432 -e POSTGRES_USER=iggy -e POSTGRES_PASSWORD=iggy -e POSTGRES_DB=iggy postgres:15-alpine
+docker exec iggy-postgres pg_isready -U iggy -d iggy
+```
+
+Wait for the readiness command to report accepting connections. Save this connector file in the runtime's connector directory. Replace the URI for your deployment. Startup opens the SQLx pool and runs `SELECT 1`; it creates the table only when requested.
+
+```toml
+type = "sink"
+key = "postgres-sink"
+enabled = true
+version = 1
+name = "Postgres Sink"
+path = "target/release/libiggy_connector_postgres_sink"
+
+[[streams]]
+stream = "user_events"
+topics = ["events"]
+schema = "json"
+batch_length = 100
+poll_interval = "5ms"
+consumer_group = "postgres-sink"
+
+[plugin_config]
+connection_string = "postgresql://iggy:iggy@localhost:5432/iggy"
+target_table = "iggy_messages"
+auto_create_table = true
+batch_size = 100
+payload_format = "bytea"
+```
+
+Create the Iggy resources and send a message:
+
+```bash
+./target/release/iggy --username iggy --password iggy stream create user_events
+./target/release/iggy --username iggy --password iggy topic create user_events events 1 none 1d
+./target/release/iggy --username iggy --password iggy message send --partition-id 0 user_events events '{"user_id":"42","status":"active"}'
+```
+
+### Plugin config options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `connection_string` | string | required | PostgreSQL connection string |
+| `target_table` | string | required | One table identifier, quoted as a whole; `schema.table` names a literal table containing a dot |
+| `batch_size` | u32 | `100` | Maximum messages per insert statement; `0` behaves as `1` |
+| `max_connections` | u32 | `10` | Max database connections |
+| `auto_create_table` | bool | `false` | Run `CREATE TABLE IF NOT EXISTS`; existing tables are not migrated |
+| `include_metadata` | bool | `true` | Include offset, timestamp, stream, topic and partition columns |
+| `include_checksum` | bool | `true` | Include message checksum |
+| `include_origin_timestamp` | bool | `true` | Include original message timestamp |
+| `payload_format` | string | `"bytea"` | Payload column type: `bytea`, `json` (alias `jsonb`), or `text` |
+| `verbose_logging` | bool | `false` | Log at info level instead of debug |
+| `max_retries` | u32 | `3` | Total attempts per transiently failing insert, including the first; `0` and `1` both allow one attempt |
+| `retry_delay` | string | `"1s"` | Base for linear retry delays; invalid values silently fall back to `1s` |
+
+## Payload Format
+
+The `payload_format` option determines the type of the `payload` column and how the message payload is stored:
+
+| Format | Column Type | Description |
+| ------ | ----------- | ----------- |
+| `bytea` | `BYTEA` | Bytes after stream decoding and transforms (default). Use `schema = "raw"` and no payload-changing transform to preserve original bytes. |
+| `json` / `jsonb` | `JSONB` | Native JSON. Enables JSON operators and GIN indexing. Payload must be valid JSON accepted by PostgreSQL JSONB. |
+| `text` | `TEXT` | UTF-8 text. Payload must be valid UTF-8 accepted by PostgreSQL TEXT. |
+
+Format names are case-insensitive; unrecognized names silently use `bytea`. JSONB accepts objects, arrays and scalars, but PostgreSQL rejects `\u0000` in JSONB and zero bytes in TEXT. JSON decoding and JSONB storage can change the original representation. Message headers are not stored. See [PostgreSQL JSON types](https://www.postgresql.org/docs/15/datatype-json.html) for JSONB restrictions.
+
+With the default `bytea` format, valid UTF-8 JSON payloads can still be queried by converting the bytes: `convert_from(payload, 'UTF8')::jsonb->>'user_id'`. With `json`, the native operators apply directly: `payload->>'user_id'`.
+
+## Table Schema
+
+With `auto_create_table = true` and all three metadata flags enabled, the connector creates the following structure if the table is absent. The `payload` column type follows `payload_format`:
+
+```sql
+CREATE TABLE iggy_messages (
+    id DECIMAL(39, 0) PRIMARY KEY,
+    iggy_offset BIGINT,
+    iggy_timestamp TIMESTAMP WITH TIME ZONE,
+    iggy_stream TEXT,
+    iggy_topic TEXT,
+    iggy_partition_id INTEGER,
+    iggy_checksum BIGINT,
+    iggy_origin_timestamp TIMESTAMP WITH TIME ZONE,
+    payload BYTEA,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+Disabling `include_metadata` omits the five offset/timestamp/stream/topic/partition columns. Checksum and origin timestamp flags work independently. `id`, `payload` and `created_at` are always created. With `auto_create_table = false`, provision a compatible table yourself; startup does not check its existence or schema.
+
+`id` stores the full unsigned 128-bit message ID as a decimal, without stream, topic, partition or offset in the key. Offset and checksum values are cast to signed 64-bit integers, and partition IDs to signed 32-bit integers; values above those signed ranges appear negative. Message and origin timestamps are interpreted as Unix microseconds. Zero becomes the Unix epoch; a timestamp outside the date library's range falls back to the current time. `created_at` is generated by PostgreSQL when inserting.
+
+## Querying the Data
+
+Run these queries with `docker exec -it iggy-postgres psql -U iggy -d iggy`, or your PostgreSQL client:
+
+```sql
+-- Get all messages from a specific stream
+SELECT * FROM iggy_messages WHERE iggy_stream = 'user_events';
+
+-- Read a bytea payload as text (for text/JSON payloads)
+SELECT id, iggy_offset, convert_from(payload, 'UTF8') as payload_text
+FROM iggy_messages
+WHERE iggy_stream = 'user_events';
+```
+
+For a JSONB query example, a TEXT search example, and recommended indexes, see the upstream [postgres_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/postgres_sink).
+
+## Delivery Semantics
+
+Each poll is split into chunks of at most `batch_size` messages. One multi-row `INSERT` writes each chunk; a duplicate primary key, incompatible table, invalid payload or other terminal error rejects that chunk. Later chunks are still attempted. The plugin logs failures, increments its private insertion-error count by the failed chunk size, and returns success after attempting all chunks. Both its processed count and runtime's processed count can therefore include messages that were never stored. Runtime error counts do not expose these insert failures.
+
+Transient insert failures are retried within the chunk. `max_retries` counts total attempts, and waits grow linearly as `retry_delay`, twice that delay, and so on. Retried SQLSTATEs are `40001`, `40P01`, `57P01`, `57P02`, `57P03`, `08000`, `08003` and `08006`; SQLx I/O and pool-acquisition timeouts are also retried. Other errors stop that chunk's retry loop. Startup has no plugin retry loop.
+
+The sink uses plain `INSERT`, with no conflict-ignore or upsert clause. Reusing an ID already in the table rejects the entire chunk, including any new IDs alongside it. There is no transaction covering the complete poll. The runtime auto-commits while polling and does not replay failed chunks; a connection failure can leave the write outcome uncertain. These retries do not provide an end-to-end at-least-once guarantee.
+
+## Performance Considerations
+
+- Use an appropriate `batch_size` for your workload (larger batches give better throughput)
+- Create indexes on frequently queried columns (`iggy_stream`, `iggy_topic`, `created_at`)
+- Set the pool limit with `max_connections`; it does not report pool usage
+- Keep each actual chunk within PostgreSQL's [65,535 query-parameter limit](https://www.postgresql.org/docs/15/limits.html). Each row binds `2 + 5 * include_metadata + include_checksum + include_origin_timestamp` parameters, so the default flags allow at most 7,281 rows per statement. Larger chunks are rejected by SQLx; `batch_length` also limits how many rows reach a poll.

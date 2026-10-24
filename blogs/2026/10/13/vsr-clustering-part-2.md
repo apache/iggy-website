@@ -1,0 +1,214 @@
+# Apache Iggy's migration journey to clustering powered by Viewstamped Replication (part 2)
+
+Published: 2026-10-13
+
+Rendered page: https://iggy.apache.org/blogs/2026/10/13/vsr-clustering-part-2/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/blog/vsr-clustering-part-2.mdx
+
+## Introduction
+
+In [part 1](https://iggy.apache.org/blogs/2026/09/28/vsr-clustering-part-1/) we introduced the cluster: two planes of replication, one Viewstamped Replication group for metadata and one per partition, a static roster, a leader the clients get redirected to, and a set of benchmarks taken on three healthy nodes. We also said, more than once, that the reason to run three nodes is the case where one of them isn't, and then stopped. This is that part. It covers what happens between a node going quiet and the cluster acknowledging its next write: how the backups decide the primary is gone, how they elect its successor without losing anything the old one committed, how a replica that comes back finds out what it missed, and what it does when it has missed too much for a repair to be worth the trouble.
+
+A short recap for those who skipped part 1. Every consensus group in Iggy runs the same protocol: the primary numbers each request and sends a `Prepare` to the backups, a backup appends it to its journal and answers `PrepareOk`, and once two of the three replicas hold the operation it is committed and the client gets its reply. Everything runs on a fixed 10 ms tick, every timeout is a count of ticks, and the view a replica acts in is written to a small superblock before the replica sends a single message about it. That last detail reads like a footnote in part 1. In this part it is load-bearing.
+
+## When the primary goes quiet
+
+A backup has no way to tell a dead primary from a slow one, so it does not try. The primary signals that it is alive by broadcasting its commit point every 500 ms (`commit_broadcast_interval`), whether or not it has committed anything new, and every backup keeps a liveness window, `heartbeat_timeout`, 5 seconds by default, that each broadcast resets. The window is deliberately several broadcasts wide, so one delayed message never trips an election, and when it does run out the backup does the only thing VSR allows it to do: it stops accepting anything from the current view, bumps its view number, writes that number to disk, and tells everyone with a `StartViewChange`. From that moment it has made a promise it cannot take back, not even across a crash, and the rest of this post is about what the cluster does with that promise.
+
+## Electing a successor
+
+Nobody votes on who leads the next view. The primary of view `v` is replica `v % n`, so every replica already knows view 1 belongs to replica 1. The survivors only have to agree that view 0 is over, and what its log was.
+
+```text
+ replica 0            replica 1                      replica 2
+ primary, view 0      next in line (1 % 3)
+     X                    |                              |  5 s, no Commit
+                          |                              |  view = 1 -> superblock
+                          |<------ StartViewChange ------|
+     view = 1 -> superblock                              |
+                          |------- StartViewChange ----->|
+                          |<------- DoViewChange --------|  log_view, op, commit, headers
+     merge, fetch what is missing                        |
+     log_view = 1 -> superblock                          |
+                          |---------- StartView -------->|
+                          |                              |  log_view = 1 -> superblock
+                          |<--------- PrepareOk ---------|
+```
+
+A replica sends `StartViewChange` when its timer fires or when it sees one for a higher view. After hearing from `f` others (one, in a cluster of three) it sends `DoViewChange` with its `log_view` (the last view it saw start), its head op, its commit point and the headers in between. The new primary needs a quorum of them, two of three counting its own, before it merges the logs and sends `StartView`.
+
+`StartViewChange` and `DoViewChange` are resent every 500 ms. If the view hasn't started after five seconds, everyone moves to view 2 and replica 2 gets its turn. These timers aren't randomized. Replicas that time out in the same tick ask for the same view with the same primary, so there's no split vote to break.
+
+Each replica writes its superblock twice per election: `view` before `StartViewChange`, `log_view` before `StartView` or `PrepareOk`. A message that names a view waits for that write, and a replica whose disk refuses it stays silent.
+
+Without that write a restart could undo the election. Say replica 0 was only slow. Replica 2 sends its `DoViewChange` for view 1, crashes, and comes back believing it's in view 0. Replica 0 sends it a `Prepare`, replica 2 acknowledges, and replica 0 commits on two of three and answers the client. Meanwhile replica 1 has started view 1 from a merge that never saw that op. With the view on disk, replica 2 comes back in view 1 and ignores the `Prepare`.
+
+## What survives the view change
+
+Everything a client was told is committed must be in the new view's log, at the same position. The paper guarantees it by putting the sender's whole log in every `DoViewChange`, and admits this "is expensive because the log is big".
+
+Ours carries headers only: 256 bytes per op from the commit point to the head, at most 128, plus two bits per header. *Present* means "I can serve the body". *Nack* means "I never had it". For each op above the commit point the new primary asks whether a client could have been told it committed:
+
+| The two survivors report | Could it have committed? | New view |
+| --- | --- | --- |
+| both hold it | yes | keeps it |
+| one holds it | yes, with the dead primary that's a quorum | keeps it |
+| neither ever saw it | no, one copy isn't a quorum | drops it |
+
+The table assumes both survivors last saw the same view start. If their `log_view`s differ, the later one's log is the authority.
+
+An op is dropped only on a nack quorum: `n - replication quorum + 1` replicas, two of three here. That many nacks leave too few replicas for the op to have committed. If an op can be neither proven dead nor served by anyone, the view doesn't start. Unavailable and saying so beats available and short a reply.
+
+Kept ops commit in the new view under their old numbers. "Holds" depends on the topic: memory for `replicated`, disk for `persisted` (see the [durability docs](https://iggy.apache.org/docs/clustering/durability/)).
+
+## The write we put back
+
+`view % n` doesn't look at logs, so replica 1 can win view 1 without a write it has to keep. Say op 20 was acknowledged by replicas 0 and 2 and the client has its reply. Replica 1 missed the `Prepare`. Replica 0 dies.
+
+Until August that write was lost. The old `DoViewChange` carried only numbers, so replica 1 learned the log ended at op 20, found nothing there in its own journal and truncated it. The fix landed a day before the VSR server became `iggy-server`, so 0.9.0, the first release built on it, never had the bug.
+
+Now the new primary parks the merged log and stays in view change. It asks the replicas that set a present bit for the bodies, checks each against the checksum in the merged header, and sends `StartView` only once its journal holds every op it's about to announce.
+
+The simulator found two bugs in the fix before 0.9.0 shipped. In the first, a replica with a hole below the merged commit point passed that check and was promoted. Eight of the first 220 seeds hit it, with holes of 3 to 31 ops. The check now starts at the lower of the merged commit point and what the replica has applied.
+
+Seed 211 went the other way: the view refused to start over a write that was provably dead. Replica 0 prepared op 56 and crashed for good. Replica 1 had the header without the body, replica 2 had nothing. That's one nack and no copy, so the merge waited for the third replica, which was the dead one:
+
+```text
+replica 0: CRASHED
+replica 1: live | metadata status=ViewChange view=103 log_view=3 commit=55..55 barrier=0 primary=true repair=none
+replica 2: live | metadata status=ViewChange view=103 log_view=3 commit=55..55 barrier=0 primary=false repair=none
+```
+
+`view=103` against `log_view=3` is a hundred views asked for and none started, with one client request retried 266 times. The merge was right to stall on one nack, but it was ignoring evidence it already held. A replica journals a prepare before it acknowledges it, so a header it can't serve above its commit point proves it never acknowledged the op. That now counts as a nack. Op 56 gets two, is dropped, and the view starts.
+
+## Twenty-five view changes
+
+A three-node cluster with 24 partitions runs 25 consensus groups, and each has its own log, its own timers, its own superblock and its own election. Each picks its primary with `view % n` on its own view. A fresh cluster runs everything at view 0, and a new partition starts at the view the metadata group had when its create committed, so node 0 leads all 25.
+
+Killing node 0 therefore starts 25 view changes. A view change merges one log, so 25 logs need 25 merges however the failure is detected. Detection is per group too, which means a shard that stalls on an otherwise healthy node loses only the groups it leads. Killing node 1 or 2 starts no view change at all: 25 groups lose a backup and keep committing on two of three.
+
+The timers expire within half a second of each other, about five seconds after the node dies. From there an idle partition needs two rounds of messages and two superblock writes per replica. One that has to fetch bodies takes longer without holding up the other 24. Every group on a shard wants repair in the same tick, so each shard rations it (3 new repair sessions per tick, 8 in flight) and picks up on the next tick where it stopped. "Killing it for real" has the measured times.
+
+Nothing realigns the groups afterwards. One whose election takes more than five seconds moves on to view 2, which is node 2, while the rest sit on node 1. "What the client sees" covers a client that finds its partition and its metadata on different nodes.
+
+## Coming back
+
+When node 0 comes back, it has missed every write since it died. It has also forgotten writes it acknowledged before that. The protocol starts from the second fact. Every group on the node restores the last view it recorded, gives up any claim to lead, and enters `Recovering`. A recovering replica drops every `Prepare`, sends no `PrepareOk` and ignores `StartViewChange` and `DoViewChange`.
+
+It has to stay out of every quorum. Asked about an op it forgot, it would report it as never seen. Together with the replica that never got the op, that makes two nacks, the quorum from "What survives the view change", and a committed write would be dropped.
+
+What it forgot depends on the plane. Metadata is on disk before a replica sends `PrepareOk`, so a metadata replica loses at most a torn last entry it never acknowledged. A partition keeps its journal in memory, with a WAL behind it, a log on disk that boot replays. Under `replicated`, a replica acknowledges a `Prepare` once the WAL has queued it, without waiting for the disk.
+
+Boot trusts only what the WAL has published. In normal running, it publishes when it syncs: on a new `log_view`, on any write that must be durable, like a `persisted` message, at a checkpoint every 128 MiB and at a clean shutdown. Everything past the last publication is discarded, even bytes already in the segment files:
+
+```text
+WARN journal::partition_journal::segments: discarding unpublished segment bytes beyond the durable WAL frontier group=4294967296 incarnation=2 start_offset=0 durable_bytes=132439280 discarded_bytes=80774848
+```
+
+That partition lost 81 MB of the 213 MB it held, all of it acknowledged to clients. The other two replicas hold it, and repair brings it back. This is one of the spots part 1 promised, where we lean on VSR not needing stable storage: a `replicated` write is acknowledged without waiting for it to be durable on any disk.
+
+Then the replica asks who leads. About a second after boot, every group broadcasts `RequestStartView`, and repeats it every second. Only the current primary answers, and only while it's `Normal` in a view it started itself. The answer is a `StartView` for this one replica: the primary's head op, its commit point and its headers from the commit point to the head. On the metadata plane it also echoes a number the replica picked at boot, so a late answer to its previous life can't roll it back.
+
+Nobody answers during a view change. After four unanswered probes, at about five seconds, the replica stops waiting and starts an ordinary view change into the next view, offering the log it recovered. The group continues from the best log that survived. That's how a cluster gets going again after all three nodes restart at once.
+
+Under `replicated`, it can come back without some acknowledged writes. Every node discarded its own unpublished tail at boot, so what was acknowledged after the newest publication is gone from all three. `replicated` covers one failed node at a time, not three. A `persisted` write survives this, because it's published before it's acknowledged.
+
+Adopting the `StartView` makes the replica a backup in the current view, but not one that counts yet. It drops every `Prepare` that isn't its next op, and acknowledges only ops whose bodies it holds. The group keeps committing on the other two.
+
+Then it repairs. It asks a peer for everything above its commit point, at most 128 prepares a round, and checks each one's checksums before it journals it. A metadata replica asks for a state transfer first, as the next section explains. When the gap is small, repair takes a few seconds, and "Killing it for real" has the numbers.
+
+## When repair runs out
+
+A partition's repair can only hand out what a peer still holds in memory. Each replica keeps a partition's recent prepares in a ring of 65,536 entries or 64 MiB, whichever fills first. With part 1's batches of 250 messages of 1000 bytes, a prepare is 262,512 bytes. The ring then holds 255 of them, 6.4 seconds of a partition taking 40 batches a second. Both caps are settings, and the byte cap goes up to 256 MiB.
+
+That's the second spot where we lean on VSR not needing stable storage. Partition repair never reads a peer's disk. A replica that missed more than its peers remember gets the partition shipped instead.
+
+Nothing measures the gap up front. The replica asks for repair as usual. A peer that no longer has the start of the range answers `RangeEvicted` with the oldest op it still has, then serves from there, 128 prepares a round. Once the range has arrived, the replica checks whether its first batch connects, in offsets, to what it kept on disk. If it doesn't, neither side has the ops in between, and the replica switches to a state transfer.
+
+A partition has no snapshot, so its transfer ships the partition: every retained segment, plus one artifact with the consumer offsets, the next offset to hand out and the dedup entries. It ships all of it, whatever the receiver already has, so the cost grows with retention, and retention has no limit by default. Only the partition's primary serves a transfer, two at a time per shard, in 256 KiB chunks with one in flight.
+
+The receiver checks every file, re-walks every batch and writes each segment to a `.staging` file next to the live ones. The install hard-links the old segments into `.install-backup`, moves the staged ones in and renames the backup to `.install-retired`. That rename makes the install final. A crash before it puts the old segments back at boot.
+
+Repair then asks for what was written during the transfer. If that has already left the peer's ring, the partition needs another transfer. All the while, the replica votes in view changes but withholds `PrepareOk`, so the group commits on two of three with nothing to spare.
+
+Metadata works the other way around. Each node writes its state machine, client table included, to `snapshot.bin` about every 960 ops, and its journal holds about one snapshot's worth. A restarted metadata replica doesn't measure the gap either. It asks the primary for the snapshot as soon as it adopts the view, pulls it in 256 KiB chunks and repairs the rest. A primary with no snapshot yet says so, and the replica repairs everything instead.
+
+## What the client sees
+
+Here is one producer from run 2 in "Killing it for real", on the Rust SDK over TCP, connected to node 0 when it died. Seconds after the kill command:
+
+```text
+0.011  connection reset, node 0 refuses the redial, the client connects to node 1
+0.012  node 1 names node 0 as leader: three redirects, all refused
+0.014  the batch goes to node 1 again, same request number: refused every 50 ms
+4.02   still refused, the client moves on to node 2: refused every 50 ms
+4.7    all 25 groups have a primary again, node 1 leads them
+6.02   the client moves on to node 0, still dead, and is back on node 1
+6.02   no node left to try: TransientNotCommitted
+6.02   the next batch is acknowledged by node 1
+```
+
+The connection is the cheap part. The SDK redials the node it was on, then the address it was given, then the roster it learned while the cluster was healthy. It doesn't log in again. It sends `BindSession` with its client id, its session, a bind secret and the newest metadata op it has seen. Any node binds it from its own copy of the client table, without a consensus round, once its metadata has caught up to that op. A node that hasn't caught up within three seconds refuses.
+
+Part 1 said a reconnect is a new session, so a produce that timed out mid-flight comes back ambiguous rather than replayed. On master the session survives, and the SDK replays the batch under its original request number. The partition's primary deduplicates it: a batch that made it gets its original offset back, and one that didn't commit now.
+
+Finding a node that takes the write is the slow part. Node 1 names the leader from its own metadata view, `view % n`, and that view stays 0 until a survivor's heartbeat timer fires, about 4.6 seconds after the kill. So the client spends its three redirects on a dead node and stays on node 1. Node 1 is a backup, so it refuses the batch with `TransientNotAccepted`.
+
+The SDK resends every 50 ms for two seconds, takes a routing lock, resends for two more seconds and asks for the leader again. Then it walks the roster, two seconds per node. It left node 1 at 4.0 seconds, 0.7 seconds before node 1 became the primary, and node 2 refused it for the next two. At 6.0 it reached node 0, still dead, reconnected to node 1 and gave up, with no node left to try. That budget is fixed: about six seconds from the first refusal, whatever the cluster does in the meantime. Ours ran out 1.3 seconds after the last group was elected.
+
+Once a batch has gone out and no reply has come back, the client can't tell whether it committed. Node 0 may have replicated it before it died, and the new view keeps what node 0 replicated. A refusal from another node can't prove otherwise. So the SDK reports `TransientNotCommitted`, which means the outcome is unknown, even for a batch it wrote after node 0 was gone.
+
+A producer whose heartbeat found the dead connection first never sent its batch to node 0. It gets `TransientNotAccepted`, which means the cluster never took the batch and sending it again is safe. The SDK's `IggyProducer` resends those by itself and stops on `TransientNotCommitted`. Sending a `TransientNotCommitted` batch again yourself can append it twice.
+
+None of our runs needed a second view, so node 1 ended up leading all 25 groups. When one does, a partition's primary can be node 2 while the metadata's is node 1. Our runs never got there, so this part comes from the code. A producer has a single connection. Node 1 refuses its sends, so the walk moves the connection to node 2 after four to six seconds and binds the same session there.
+
+Its next metadata write is refused on node 2 for another four seconds before the client goes back to node 1, and the send after that walks again. Metadata reads are answered on whichever node it's on. A consumer keeps its connection and sends polls and offset commits through a pooled data connection to the partition's primary, under the same session.
+
+The redial is the part that differs by transport. The TCP client tries the node it was on, then the address it was given, then the roster. The WebSocket client walks the roster. The QUIC client redials the node it was on, once a second and without limit by default, so it waits for a dead node to come back. All three bind the same session and walk the roster when a node keeps refusing. The HTTP client talks to one URL and never fails over.
+
+## Killing it for real
+
+All of this ran on the hardware from part 1: three `i4i.4xlarge` nodes and a fourth one for the client, in one availability zone. Every VM synced its clock with chrony to the Amazon Time Sync Service, which reported offsets of a few microseconds. The server and the SDK were built from master at `d3e95f506`, and the server ran its default configuration apart from the three-node cluster and TCP as the only transport.
+
+`iggy-bench` stops at the first error, so we wrote a small producer on the Rust SDK that keeps going and records every send. It runs 24 producers, each with its own connection and its own stream of one partition. Each one sends 40 batches a second of 250 messages of 1000 bytes. That's 240 MB/s under `replicated`, 10 MB/s per partition. Every producer starts on node 0, which leads all 25 groups.
+
+Twenty seconds in, we kill a node with `SIGKILL`. In runs 1 and 3, we start node 0 again 30 seconds later. Times are from the kill command. Node 0 still answered for 8 ms, and the survivors saw its connections drop 10 to 12 ms after the command.
+
+Killing node 0, in seconds after the kill:
+
+| Run | Load | First view change | Last of 25 elected | Producers' error | Next batch acknowledged |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 1 | 240 MB/s | 4.63 | 4.74 | 6.02-6.04 | 6.02-6.04 |
+| 2 | 240 MB/s | 4.64 | 4.74 | 6.02-6.04 | 6.02-6.04 |
+| 3 | 18 MB/s | 4.59 | 4.74 | 6.02-6.34 | 6.02-6.34 |
+
+At 18 MB/s a producer sends every 333 ms, so its failing send started up to a third of a second after the kill.
+
+Then the survivors waited out `heartbeat_timeout`, 5 seconds by default. Only a commit broadcast resets it, not a `Prepare`, and the primary broadcasts a commit every 500 ms. So the wait ran from the last broadcast before the kill, and the view changes started 4.6 to 4.7 seconds after it, not at 5. The metadata group always went first.
+
+The 25 view changes started within 0.15 seconds of each other, some because the other survivor's `StartViewChange` arrived first. Each took about 10 ms from start to elected. Nothing had to be fetched. Prepares travel down part 1's chain, 0 to 1 to 2, and node 1, the first link, is view 1's primary, so it already held every body node 2 did. The repair rationing from "Twenty-five view changes" never came into play.
+
+Each producer lost one send, the first one node 0 didn't answer, and got its error 6.0 seconds after sending it. Its next batch went through at once. From 10 ms after the kill until that error, nothing was acknowledged. Across the three runs, 66 of the 72 lost sends came back as `TransientNotCommitted` and 6 as `TransientNotAccepted`.
+
+Nothing acknowledged was lost either. After run 2 we counted every partition on both survivors. Each held exactly 2,161 batches, as many as its producer had been told were committed. So none of the 24 unknown batches had committed, though the client had no way to know that.
+
+Killing a backup caused no view change and no error, which is the point of running three. With node 2 gone, no send took more than 2 ms. With node 1 gone, five batches took 250 ms. Node 0 had passed their prepares to node 1 just before it died, and sent them again straight to node 2 when its retransmit timer fired (`prepare_retransmit_interval`). The rest of the run had a P99 of 1.16 ms on two nodes, against 1.06 ms before the kill.
+
+The cost is the margin. Until the backup is back, one more failure stops every write.
+
+Coming back is where the time goes. In run 3, node 0 had published nothing before the kill, so boot threw away all 16 MB of each partition. Its groups adopted view 1 about 1.1 seconds after the new process started. Repair then fetched 36 MB per partition, the 16 MB it threw away and 20 MB written while it was down. Of the 24 partitions, 22 were caught up 2.8 seconds after the start and the last two at 3.3 seconds.
+
+The producers barely noticed. Their P99 was 1.1 ms before the kill and 1.0 ms after the restart, and the slowest send took 44 ms.
+
+In run 1 every partition was past the ring. Node 0 had missed about 250 MB per partition while it was down and threw away about 80 MB more at boot. It asked for its first state transfers 4.4 seconds after the new process started. The first one began fetching at 6.6 seconds and installed at 14.3. Under load a transfer took 4 to 15 seconds from its first chunk to its install, 11 at the median, while the ring holds 6.4.
+
+So by the time a partition installed, the writes made meanwhile had usually left the peer's ring again. While the load ran, node 0 made 47 installs across 21 partitions, and after 45 of them the next repair found the peer's ring already past it. Node 1 served every transfer and every repair while it also led all 25 groups. After the restart, the producers' P99 went from 1.4 ms before the kill to 29 ms, and the slowest send took 854 ms.
+
+## Closing words
+
+Losing the node that leads cost our producers six seconds of writes. About 4.6 seconds of that was `heartbeat_timeout`, a tenth of a second was the election, and the rest was the client still looking for the new primary. Each producer also got one error, nearly always one whose outcome it couldn't know. Losing a backup cost next to nothing. Coming back is quick while the gap fits in a peer's memory. When it doesn't, state transfers take over, and under load that path still needs work.
+
+The bigger cost is the one from "Twenty-five view changes": one node leads every group, from the first boot and again after every failover. It takes every write, and losing it stops all 25 groups at once. Next, producers will send each partition's writes straight to its primary, as consumer polls already do, instead of following the metadata leader. After that, new partitions will get their primaries spread across the nodes, so a first failure would stop only the third of the groups that one node leads.
+
+Part 3 blogpost will be about the simulator, which found the two bugs in the fix from "The write we put back". It covers how the simulator runs a whole cluster from a single seed, why every timeout here is a count of ticks, and what else it has found.

@@ -1,0 +1,53 @@
+# Examples
+
+> Working Python examples from the core repository, covering connection strings, message headers and TLS.
+
+Rendered page: https://iggy.apache.org/docs/sdk/python/examples/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/python/examples.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Working examples are available in the [examples/python](https://github.com/apache/iggy/tree/master/examples/python) directory. CI runs the source examples against a source-built server, including a separate TLS pass:
+
+- **getting-started** - producer and consumer with optional TLS via `TcpConfig`
+- **basic** - producer and consumer using connection strings
+- **message-headers** - user headers with `str`, `bytes`, `bool`, `int`, and `float` values, in two variants: `plain-headers` (plain `dict`, the SDK infers wire types) and `typed-headers` (explicit `HeaderKey`/`HeaderValue`)
+
+## Running the examples
+
+These examples target Iggy 0.9.0. Start the server:
+
+```bash
+# Server 0.9.0
+docker run --rm \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -p 8090:8090 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  apache/iggy:0.9.0
+
+# Or from the repository root
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and bootstrap the `iggy`/`iggy` root credentials for new data. Stored credentials are not replaced, and environment credentials override the source command's default-credentials flag. Use `--fresh` only with disposable local replica data.
+
+With Python 3.10 or newer and Rust/Cargo available, run from `examples/python`. `uv` uses the local SDK path in `pyproject.toml`; the pip command below names that path explicitly:
+
+```bash
+# Using uv
+uv sync
+uv run getting-started/producer.py
+uv run getting-started/consumer.py
+
+# Without uv
+python -m venv .venv
+source .venv/bin/activate
+pip install ../../foreign/python .
+python getting-started/producer.py
+python getting-started/consumer.py
+```
+
+For the quick-start code itself, see the [Python SDK intro](https://iggy.apache.org/docs/sdk/python/intro).
