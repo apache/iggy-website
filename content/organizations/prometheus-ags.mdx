@@ -1,0 +1,46 @@
+---
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+name: Prometheus AGS
+website: https://www.prometheusags.ai
+useCaseCategory: Event system for AI agent infrastructure
+description: >-
+  Prometheus AGS, which builds AI solutions for businesses, publishes task
+  lifecycle events and result notifications to Iggy from prometheus_parking_lot,
+  its scheduler for expensive work such as LLM inference. Iggy also carries a
+  task's streamed output, so a reconnecting client resumes with no gap or
+  duplicate.
+logo: /img/organizations/prometheus-ags.png
+logoDark: /img/organizations/prometheus-ags.png
+showText: false
+permissionConfirmed: true
+deploymentStatus: integration
+featured: false
+draft: false
+---
+
+## Maintainer notes
+
+This entry was written from Prometheus AGS' public repository rather than
+submitted by them, and nobody there has confirmed it. The evidence is the
+prometheus-parking-lot-iggy crate in
+[Prometheus-AGS/prometheus-parking-lot-rs](https://github.com/Prometheus-AGS/prometheus-parking-lot-rs),
+published to crates.io on 2026-10-24 as "Apache Iggy lifecycle events and
+mailbox notifications for prometheus_parking_lot", read 2026-10-29.
+
+The logo is taken from the organisation's own public materials: the icon served
+on prometheusags.ai.
