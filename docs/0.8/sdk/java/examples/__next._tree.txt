@@ -1,0 +1,7 @@
+:HL["/_next/static/chunks/0holazlu5780h.css","style"]
+5:[["children",{"s":"__PAGE__","h":160}]]
+4:[["children",{"s":{"n":"slug","t":"oc","k":"sdk/java/examples","s":[]},"h":64,"c":"$Q5"}]]
+3:[["children",{"s":"0.8","h":32,"c":"$Q4"}]]
+2:[["children",{"s":"docs","h":96,"c":"$Q3"}]]
+1:[["children",{"s":"(archive)","h":64,"c":"$Q2"}]]
+0:{"b":"uNRYgfDUti3-7yteQPy02","t":{"t":{"s":"","h":16,"c":"$Q1"}}}

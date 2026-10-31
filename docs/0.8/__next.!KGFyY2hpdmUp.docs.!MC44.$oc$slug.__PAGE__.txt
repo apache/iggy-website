@@ -1,0 +1,60 @@
+5:"$Sreact.fragment"
+6:"/_next/static/chunks/0vov8es4ujaym.js"
+7:"/_next/static/chunks/3dvxc_i7jdz7n.js"
+8:I[39756,["$6","$7"],"default"]
+9:I[37457,["$6","$7"],"default"]
+e:"/_next/static/chunks/1g4w9cpc3zkpi.js"
+f:"/_next/static/chunks/0pg-3l73j6-i4.js"
+10:"/_next/static/chunks/07w_uh2ca3p4h.js"
+11:"/_next/static/chunks/1mwfozxzplnkm.js"
+12:"/_next/static/chunks/07igp-s_v4qmc.js"
+13:"/_next/static/chunks/3msrebch6p9dv.js"
+14:"/_next/static/chunks/187m38v__2j8g.js"
+15:"/_next/static/chunks/2acxnoy-pyob4.js"
+16:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"DocsPage"]
+17:I[22016,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],""]
+18:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"DocsTitle"]
+19:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"DocsDescription"]
+1a:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"DocsBody"]
+1b:I[83901,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"DocsHero"]
+1c:I[83901,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"WhyIggy"]
+1d:I[94157,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"Heading"]
+1e:I[83901,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"StreamHierarchy"]
+1f:"AppendOnlyLogViz"
+20:I[83901,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"$1f"]
+21:I[47873,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"default"]
+2e:"ViewportBoundary"
+2f:I[97367,["$6","$7"],"$2e"]
+30:"MetadataBoundary"
+31:I[97367,["$6","$7"],"$30"]
+32:"$Sreact.suspense"
+33:I[27201,["$6","$7"],"IconMark"]
+b:X
+b:C
+c:X
+d:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$5","c",{"children":[["$","$L16",null,{"toc":[{"depth":2,"url":"#how-iggy-organizes-data","title":"How Iggy organizes data"},{"depth":2,"url":"#the-append-only-log","title":"The append-only log"},{"depth":2,"url":"#key-capabilities","title":"Key capabilities"},{"depth":2,"url":"#ecosystem","title":"Ecosystem"}],"footer":{"items":{"next":{"$id":"introduction/about.mdx","type":"page","name":[["$","span",null,{"className":"me-1 font-normal text-fd-muted-foreground","children":["Introduction",":"]}],"About"],"description":"What Apache Iggy is: a persistent message streaming platform written in Rust, with QUIC, TCP, WebSocket and HTTP transports.","url":"/docs/0.8/introduction/about","$ref":"introduction/about.mdx"}}},"children":[["$","div",null,{"className":"mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-fd-foreground","children":["These are the docs for Apache Iggy 0.8, kept for reference and no longer updated. Server 0.9.0 changed the wire protocol, so 0.8 clients and servers do not work with 0.9.0."," ",["$","$L17",null,{"href":"/docs","className":"font-medium text-fd-primary underline","children":"Read the current docs"}],"."]}],["$","$L18",null,{"children":"Welcome"}],["$","$L19",null,{"children":"Apache Iggy documentation: how Iggy organizes data into streams, topics, partitions and segments, and where to start."}],["$","$L1a",null,{"children":[["$","$L1b",null,{}],"\n",["$","$L1c",null,{}],"\n",["$","$L1d",null,{"as":"h2","id":"how-iggy-organizes-data","children":"How Iggy organizes data"}],"\n",["$","p",null,{"children":["Iggy uses a hierarchical model: ",["$","strong",null,{"children":"streams"}]," contain ",["$","strong",null,{"children":"topics"}],", topics contain ",["$","strong",null,{"children":"partitions"}],", and partitions store messages in ",["$","strong",null,{"children":"segments"}]," on disk. This gives you flexible multi-tenancy, parallel processing, and efficient storage all in one."]}],"\n",["$","$L1e",null,{}],"\n",["$","$L1d",null,{"as":"h2","id":"the-append-only-log","children":"The append-only log"}],"\n",["$","p",null,{"children":["Every partition is an append-only log. Messages are ",["$","strong",null,{"children":"immutable"}]," once written, consumers can read from any offset, and you can replay the entire history at any time."]}],"\n",["$","$L20",null,{}],"\n",["$","$L1d",null,{"as":"h2","id":"key-capabilities","children":"Key capabilities"}],"\n",["$","div",null,{"className":"relative overflow-auto prose-no-margin my-6","children":["$","table",null,{"children":[["$","thead",null,{"children":["$","tr",null,{"children":[["$","th",null,{"children":"Capability"}],["$","th",null,{"children":"Details"}]]}]}],["$","tbody",null,{"children":[["$","tr",null,{"children":[["$","td",null,{"children":["$","strong",null,{"children":"Transport"}]}],["$","td",null,{"children":"TCP, QUIC, WebSocket (custom binary protocol), HTTP (REST)"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","strong",null,{"children":"Performance"}]}],["$","td",null,{"children":"Thread-per-core + io_uring, zero-copy deserialization, custom 4 GiB memory pool"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","strong",null,{"children":"Security"}]}],["$","td",null,{"children":["TLS on all transports, Argon2id hashing, AES-256-GCM encryption, ",["$","$L21",null,{"href":"/docs/0.8/server/security","children":"granular RBAC"}]," with per-stream/per-topic permissions"]}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","strong",null,{"children":"Connectors"}]}],["$","td",null,{"children":[["$","$L21",null,{"href":"/docs/0.8/connectors/introduction","children":"14 sink and 4 source plugins"}]," including PostgreSQL, MongoDB, Elasticsearch, ClickHouse, Apache Iceberg, S3, with data transforms"]}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","strong",null,{"children":"AI Integration"}]}],["$","td",null,{"children":[["$","$L21",null,{"href":"/docs/0.8/ai/mcp","children":"MCP server"}]," with 40+ tools for LLM-driven message streaming management"]}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","strong",null,{"children":"Management"}]}],["$","td",null,{"children":["$L22"," dashboard (embedded or standalone), ","$L23"," with shell completions, Prometheus metrics, OpenTelemetry"]}]]}],"$L24","$L25"]}]]}]}],"\n","$L26","\n","$L27","\n","$L28"]}]]}],["$L29","$L2a","$L2b"],"$L2c"]}],"p":"$@2d","v":null,"s":"$c"}}]]
+4:[["children",{"s":{"n":"slug","t":"oc","k":"","s":[]},"h":64,"d":{"r":["$","$5","c",{"children":[null,["$","$L8",null,{"parallelRouterKey":"children","template":["$","$L9",null,{}]}]]}],"p":"$@a","v":"$b","s":"$c"},"c":"$Qd"}]]
+3:[["children",{"s":"0.8","h":32,"c":"$Q4"}]]
+2:[["children",{"s":"docs","h":96,"c":"$Q3"}]]
+1:[["children",{"s":"(archive)","h":64,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":16,"c":"$Q1"},"h":{"r":["$","$5","h",{"children":[null,["$","$L2f",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L31",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$32",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"0.8 Welcome | Apache Iggy"}],["$","meta","1",{"name":"description","content":"Apache Iggy documentation: how Iggy organizes data into streams, topics, partitions and segments, and where to start."}],["$","meta","2",{"name":"robots","content":"noindex, follow"}],["$","link","3",{"rel":"canonical","href":"https://iggy.apache.org/docs/0.8/"}],["$","meta","4",{"property":"og:title","content":"0.8 Welcome | Apache Iggy"}],["$","meta","5",{"property":"og:description","content":"Apache Iggy documentation: how Iggy organizes data into streams, topics, partitions and segments, and where to start."}],["$","meta","6",{"property":"og:url","content":"https://iggy.apache.org/docs/0.8"}],["$","meta","7",{"property":"og:site_name","content":"Apache Iggy"}],["$","meta","8",{"property":"og:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","meta","9",{"property":"og:image:width","content":"1200"}],["$","meta","10",{"property":"og:image:height","content":"630"}],["$","meta","11",{"property":"og:image:alt","content":"Apache Iggy"}],["$","meta","12",{"property":"og:type","content":"website"}],["$","meta","13",{"name":"twitter:card","content":"summary_large_image"}],["$","meta","14",{"name":"twitter:title","content":"0.8 Welcome | Apache Iggy"}],["$","meta","15",{"name":"twitter:description","content":"Apache Iggy documentation: how Iggy organizes data into streams, topics, partitions and segments, and where to start."}],["$","meta","16",{"name":"twitter:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","link","17",{"rel":"icon","href":"/img/favicon.png"}],["$","$L33","18",{}]]}]}],null]}],null]}],"p":"$@34","v":null,"s":"$c"}},"a":"$@35","u":"$@36","b":"uNRYgfDUti3-7yteQPy02"}
+37:I[97367,["$6","$7"],"OutletBoundary"]
+22:["$","$L21",null,{"href":"/docs/0.8/web_ui/start","children":"Web UI"}]
+23:["$","$L21",null,{"href":"/docs/0.8/cli/start","children":"CLI"}]
+24:["$","tr",null,{"children":[["$","td",null,{"children":["$","strong",null,{"children":"Clustering"}]}],["$","td",null,{"children":["Built on ",["$","$L21",null,{"href":"/docs/0.8/clustering/vsr","children":"Viewstamped Replication (VSR)"}]," consensus; single node by default, multi-node via ",["$","code",null,{"children":"[cluster]"}]," configuration"]}]]}]
+25:["$","tr",null,{"children":[["$","td",null,{"children":["$","strong",null,{"children":"Deployment"}]}],["$","td",null,{"children":["Single binary, ",["$","$L21",null,{"href":"/docs/0.8/server/docker","children":"Docker & Helm"}],", NUMA-aware CPU affinity"]}]]}]
+26:["$","$L1d",null,{"as":"h2","id":"ecosystem","children":"Ecosystem"}]
+27:["$","p",null,{"children":"Iggy is more than just a server. The project includes a full ecosystem of tools:"}]
+28:["$","ul",null,{"children":["\n",["$","li",null,{"children":[["$","strong",null,{"children":["$","$L21",null,{"href":"/docs/0.8/connectors/introduction","children":"Connectors Runtime"}]}]," - dynamically loaded Rust plugins for data integration: 14 sinks and 4 sources. Ingest from PostgreSQL, Elasticsearch or InfluxDB into Iggy, or forward to MongoDB, Elasticsearch, ClickHouse, Apache Iceberg, Quickwit, S3 and more. Built-in data transforms and Prometheus metrics."]}],"\n",["$","li",null,{"children":[["$","strong",null,{"children":["$","$L21",null,{"href":"/docs/0.8/ai/mcp","children":"MCP Server"}]}]," - Model Context Protocol server exposing 40+ tools for LLM integration. Works with Claude Desktop via stdio and HTTP transports."]}],"\n",["$","li",null,{"children":[["$","strong",null,{"children":["$","$L21",null,{"href":"/docs/0.8/web_ui/start","children":"Web UI"}]}]," - SvelteKit dashboard for stream/topic management, message browsing with JSON/string/XML decoders, user management, and real-time terminal."]}],"\n",["$","li",null,{"children":[["$","strong",null,{"children":["$","$L21",null,{"href":"/docs/0.8/cli/start","children":"CLI"}]}]," - full-featured command-line interface with named connection contexts, session-based login, and shell completions."]}],"\n",["$","li",null,{"children":[["$","strong",null,{"children":["$","$L21",null,{"href":"/docs/0.8/sdk/introduction","children":"SDKs"}]}]," - client libraries for 8 languages (Rust, Python, Java, Go, Node.js, C#, C++, PHP), most with runnable examples."]}],"\n",["$","li",null,{"children":[["$","strong",null,{"children":["$","$L21",null,{"href":"/docs/0.8/server/benchmarking","children":"Benchmarking"}]}]," - built-in ",["$","code",null,{"children":"iggy-bench"}]," tool with a Yew/WebAssembly dashboard for performance testing."]}],"\n"]}]
+29:["$","script","script-0",{"src":"/_next/static/chunks/3msrebch6p9dv.js","async":true}]
+2a:["$","script","script-1",{"src":"/_next/static/chunks/187m38v__2j8g.js","async":true}]
+2b:["$","script","script-2",{"src":"/_next/static/chunks/2acxnoy-pyob4.js","async":true}]
+2c:["$","$L37",null,{"children":["$","$32",null,{"name":"Next.MetadataOutlet","children":"$@38"}]}]
+36:true
+c:300
+38:null
+c:C
+35:0
+a:"$undefined"
+34:"$undefined"
+2d:"$undefined"

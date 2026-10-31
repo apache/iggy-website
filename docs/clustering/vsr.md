@@ -1,0 +1,110 @@
+# Viewstamped Replication
+
+> How Apache Iggy replicates data across a cluster with VSR
+
+Rendered page: https://iggy.apache.org/docs/clustering/vsr/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/clustering/vsr.mdx
+
+Docs version: server 0.9.0, Rust SDK 0.11.0, CLI 0.14.0, Node.js SDK 0.10.0, and the Python, Java, Go and C# SDKs at 0.9.0
+
+Apache Iggy replicates clusters with **Viewstamped Replication Revisited (VSR)**. VSR keeps an ordered state machine consistent across replicas and elects a new primary when the current primary fails.
+
+Clustering is built into the standard `iggy-server` binary. There's **no separate build, binary, or Cargo feature**: the same server runs single-node or clustered, and `cluster.enabled` in the configuration decides which one you get. Clustering is **disabled by default**.
+
+Read the [VSR paper used by the project](https://github.com/apache/iggy/blob/master/assets/vsr.pdf) for the protocol specification.
+
+> Iggy hasn't reached a 1.0 production release yet. The cluster protocol and configuration described here can still change between pre-release versions.
+
+## Current implementation
+
+The implementation includes:
+
+- normal operation with quorum commits
+- view changes and deterministic primary selection
+- metadata and partition replication
+- persistent WAL recovery and snapshots
+- replica rejoin with journal repair
+- client sessions, request fencing, and duplicate detection
+- replica authentication and optional TLS
+- leader redirection in the client SDKs
+- deterministic simulation and cross-SDK BDD coverage
+
+The main components are:
+
+| Component | Source | Responsibility |
+| --- | --- | --- |
+| Server | [`core/server`](https://github.com/apache/iggy/tree/master/core/server) | Sharded runtime, listeners, recovery, and request dispatch |
+| Consensus | [`core/consensus`](https://github.com/apache/iggy/tree/master/core/consensus) | VSR state machine, quorum, view changes, and timeouts |
+| Wire protocol | [`core/binary_protocol/src/consensus`](https://github.com/apache/iggy/tree/master/core/binary_protocol/src/consensus) | Fixed-size VSR headers and replica messages |
+| Simulator | [`core/simulator`](https://github.com/apache/iggy/tree/master/core/simulator) | Deterministic failures, delays, and network partitions |
+| Rust SDK | [`core/sdk`](https://github.com/apache/iggy/tree/master/core/sdk) | VSR framing, sessions, retries, and leader redirection |
+
+## Replication model
+
+Iggy splits replication by namespace:
+
+| Plane | Consensus group | Replicated work |
+| --- | --- | --- |
+| Metadata | One group on shard 0 | Streams, topics, users, permissions, consumer groups, and access tokens |
+| Partition | One group per partition | Messages and consumer offsets |
+
+Each group can have a *different* primary. Metadata writes route through the metadata primary. Partition writes route through the primary for that partition.
+
+Reads use the local replicated state where possible. Writes return after the required VSR commit or return a retryable error when the replica is changing view or catching up. See [Client failover](https://iggy.apache.org/docs/clustering/client-failover) for how the SDKs handle both.
+
+## Failure handling
+
+VSR uses three main flows:
+
+1. **Normal operation**: the primary assigns an operation number, sends `Prepare`, and commits after a quorum sends `PrepareOk`.
+2. **View change**: replicas exchange `StartViewChange` and `DoViewChange`, then the new primary sends `StartView`.
+3. **Recovery**: a restarted or lagging replica requests the current view and repairs missing WAL ranges before serving current state.
+
+Three replicas tolerate one unavailable replica; five tolerate two. Larger groups use a capped replication quorum and a growing view-change quorum, so the usual `2f + 1` rule does not apply to every group size. See [Cluster durability](https://iggy.apache.org/docs/clustering/durability#what-an-acknowledgement-means) for the quorum rules. Use **at least three replicas** for one-node fault tolerance. A two-node cluster is useful for development, but it **cannot make progress** after either node fails.
+
+## Wire protocol and SDKs
+
+VSR framing is the *only binary* wire protocol, used by TCP, QUIC, and WebSocket connections. HTTP uses the REST API. Every SDK (Rust, Go, Java, C#, C++, Node.js, Python) speaks it, and every BDD suite runs against the clustered-capable `iggy-server`. Binary clients built before the VSR migration **cannot talk to current servers**.
+
+The Rust SDK needs no feature flags. Depend on the published crate:
+
+```toml
+[dependencies]
+iggy = "0.11.0"
+tokio = { version = "1", features = ["full"] }
+```
+
+or track the repository directly with `iggy = { git = "https://github.com/apache/iggy" }`.
+
+The client API is the same in single-node and cluster mode. This example uses the `iggy` / `iggy` credentials explicitly provisioned in [Getting started](https://iggy.apache.org/docs/introduction/getting-started):
+
+```rust
+use iggy::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<(), IggyError> {
+    let client = IggyClientBuilder::from_connection_string(
+        "iggy://iggy:iggy@127.0.0.1:8090",
+    )?
+    .build()?;
+
+    client.connect().await?;
+
+    let cluster = client.get_cluster_metadata().await?;
+    println!("cluster: {}", cluster.name);
+
+    Ok(())
+}
+```
+
+## Status
+
+VSR started as a parallel `server-ng` implementation behind a `vsr` build feature. That phase is over. The VSR server moved into the mainline `core/server` crate and the `iggy-server` binary, the feature flag is gone, and the legacy server and its wire format were deleted. What this page describes is the only server implementation.
+
+## Next steps
+
+- [Deploy a cluster](https://iggy.apache.org/docs/clustering/deploy): build the binaries and run a three-node cluster
+- [Configuration](https://iggy.apache.org/docs/clustering/configuration): every `[cluster]` setting and its validation rules
+- [Security](https://iggy.apache.org/docs/clustering/security): replica authentication, key rotation, and TLS
+- [Client failover](https://iggy.apache.org/docs/clustering/client-failover): reads, writes, and leader redirection from the client side
