@@ -29,17 +29,22 @@ The SDK provides two layers. The snippets below assume an async Tokio context wi
 
 **High-level API (recommended)** - the easiest way to get started. It handles connection management, auto-batching, consumer group lifecycle, offset commits, retry logic, and reconnection out of the box. Use `IggyClient`, `IggyProducer`, and `IggyConsumer` for the best developer experience.
 
+By default, the SDK retries connections indefinitely. The examples below use `reconnection_retries=0` or `.with_reconnection_max_retries(Some(0))` so `connect()` returns an error after the first failed connection attempt.
+
 ```rust
 use iggy::prelude::*;
 
 // Connect with a connection string
-let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")?;
+let client = IggyClient::from_connection_string(
+    "iggy://iggy:iggy@127.0.0.1:8090?reconnection_retries=0",
+)?;
 client.connect().await?;
 
 // Or use the builder
 let client = IggyClientBuilder::new()
     .with_tcp()
     .with_server_address("127.0.0.1:8090".to_string())
+    .with_reconnection_max_retries(Some(0))
     .build()?;
 client.connect().await?;
 client.login_user("iggy", "iggy").await?;
@@ -86,7 +91,9 @@ use std::str::FromStr;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")?;
+    let client = IggyClient::from_connection_string(
+        "iggy://iggy:iggy@127.0.0.1:8090?reconnection_retries=0",
+    )?;
     client.connect().await?;
 
     // Re-running this example is fine: an existing stream or topic is not an error.

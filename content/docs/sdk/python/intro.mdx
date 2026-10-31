@@ -43,6 +43,8 @@ cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 
 The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and bootstrap the `iggy`/`iggy` root credentials for new data. Stored credentials are not replaced. Environment credentials override the default-credentials flag, so unset them or set them to match the sample. `--fresh` deletes local replica state; use disposable development data. A new standalone server without explicit credentials generates a root password; a new cluster requires explicit credentials.
 
+The producer and consumer examples use `reconnection_retries=0` so `await client.connect()` raises an error after the first failed connection attempt. Without this setting, the SDK retries indefinitely by default.
+
 ### Producer
 
 ```python
@@ -58,7 +60,7 @@ PARTITION_ID = 0
 
 async def main():
     client = IggyClient.from_connection_string(
-        "iggy+tcp://iggy:iggy@127.0.0.1:8090"
+        "iggy+tcp://iggy:iggy@127.0.0.1:8090?reconnection_retries=0"
     )
     await client.connect()
 
@@ -101,7 +103,7 @@ PARTITION_ID = 0
 
 async def main():
     client = IggyClient.from_connection_string(
-        "iggy+tcp://iggy:iggy@127.0.0.1:8090"
+        "iggy+tcp://iggy:iggy@127.0.0.1:8090?reconnection_retries=0"
     )
     await client.connect()
 
