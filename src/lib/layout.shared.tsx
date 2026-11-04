@@ -42,6 +42,7 @@ const sharedLinks: BaseLayoutProps["links"] = [
   { text: "Blogs", url: "/blogs" },
   { text: "Downloads", url: "/downloads" },
   { text: "Powered By", url: "/powered-by" },
+  { text: "Presentations", url: "/presentations" },
   {
     type: "custom",
     on: "nav",
@@ -122,6 +123,7 @@ export function docsOptions(): BaseLayoutProps {
       { text: "Blogs", url: "/blogs" },
       { text: "Downloads", url: "/downloads" },
       { text: "Powered By", url: "/powered-by" },
+      { text: "Presentations", url: "/presentations" },
       {
         type: "custom",
         on: "nav",

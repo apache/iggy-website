@@ -1,0 +1,10 @@
+{
+  "title": "Building Apache Iggy with Rust & io_uring",
+  "shortDescription": "A look inside Apache Iggy's architecture and how Rust plus io_uring unlock sub-ms p99 latency and multi-GB/s throughput.",
+  "presenterName": "Krishna Vishal, Kranti Parisa",
+  "conferenceName": "Rust India",
+  "city": "Bengaluru",
+  "year": "2026",
+  "order": 1,
+  "videoUrl": "https://www.youtube.com/watch?v=rPl5OeAmvJE"
+}
