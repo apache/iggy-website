@@ -39,6 +39,7 @@ const footerSections = [
     links: [
       { text: "Blogs", url: "/blogs" },
       { text: "Downloads", url: "/downloads" },
+      { text: "Presentations", url: "/presentations" },
       { text: "GitHub", url: "https://github.com/apache/iggy" },
       { text: "Benchmarks", url: "https://benchmarks.iggy.apache.org" },
     ],
