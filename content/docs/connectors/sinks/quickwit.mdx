@@ -117,7 +117,7 @@ curl --fail --get http://localhost:7280/api/v1/events/search --data-urlencode 'q
 | `verbose_logging` | `false` | Log received/submitted document counts at info instead of debug |
 | `max_retries` | `3` | Total HTTP attempts including the first; `0` and `1` both allow one attempt |
 | `retry_delay` | `"1s"` | Base exponential delay for HTTP retries and readiness probes |
-| `retry_max_delay` | `"5s"` | Cap for calculated HTTP retry delays; a valid `Retry-After` on HTTP 429 overrides it |
+| `retry_max_delay` | `"5s"` | Cap for calculated HTTP retry delays. A valid `Retry-After` on HTTP 429 or any 5xx can exceed it, up to one hour |
 | `max_open_retries` | `10` | Total attempts per readiness check including the first; `0` and `1` both allow one attempt |
 | `open_retry_max_delay` | `"30s"` | Cap for calculated readiness retry delays |
 | `timeout` | `"30s"` | Timeout per HTTP attempt; retries and their waits can make an operation take longer |
@@ -148,6 +148,6 @@ The strict mapping above accepts only mapped fields and requires `timestamp`. To
 
 The sink calls `POST /api/v1/<index_id>/ingest?commit=auto`. HTTP success means submission for indexing, not search visibility or acceptance of every document. The sink checks the status and does not inspect per-document rejection counts in the response. See the [Quickwit ingest API](https://quickwit.io/docs/reference/rest-api#ingest-api).
 
-HTTP 429, 5xx and network failures can retry. Calculated waits use exponential backoff with jitter and the configured cap; a valid `Retry-After` on 429 replaces that wait. Other HTTP statuses stop that request's retry loop. Readiness has its separate attempt budget. There is no circuit breaker or sink deduplication key, so retrying an accepted request can produce duplicates. `max_retries = 1` disables the sink's HTTP retry loop.
+HTTP 429, 5xx and network failures can retry. Calculated waits use exponential backoff with jitter and the configured cap. An integer-seconds `Retry-After` on a 429 or any 5xx can lengthen the calculated wait past `retry_max_delay`, up to one hour, but never shortens it. HTTP-date and unparsable values fall back to the calculated wait. Other HTTP statuses stop that request's retry loop. Readiness has its separate attempt budget. There is no circuit breaker or sink deduplication key, so retrying an accepted request can produce duplicates. `max_retries = 1` disables the sink's HTTP retry loop.
 
 An individual serialized document exceeding 8 MiB, including its newline, is logged and skipped. Other documents and later chunks are still attempted, and the last error is returned. Successful chunks are not rolled back. The runtime logs/counts plugin callback errors and continues without replaying the failed batch; it auto-commits while polling. A failed callback can therefore coexist with stored documents, and a successful callback can include documents rejected by Quickwit. Runtime processed counts do not prove successful indexing. The sink provides no end-to-end at-least-once guarantee.
