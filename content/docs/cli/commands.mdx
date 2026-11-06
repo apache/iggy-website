@@ -18,6 +18,7 @@ Commands:
   ping             ping iggy server
   me               get current client info
   options          list the options a resource's create command accepts
+  metadata         metadata change log operations
   stats            get iggy server statistics
   snapshot         collect iggy server troubleshooting data
   pat              personal access token operations
@@ -37,13 +38,13 @@ Commands:
 Conventions used throughout:
 
 - Commands that address an existing stream, topic, user, or consumer group accept its numeric ID or name (for example, `iggy topic get dev events`). Numeric IDs identify the same resources only when those are the IDs assigned by the server. The numeric stream/topic IDs inside permission specifications are an exception: names are not accepted there.
-- Subcommands have single-letter aliases too: `c` (create), `d` (delete), `g` (get), `l` (list), `u` (update), `p` (purge). So `iggy s l` is `iggy stream list`.
+- Subcommands have single-letter aliases too: `c` (create), `d` (delete), `g` (get), `l` (list), `u` (update). So `iggy s l` is `iggy stream list`.
 - Every `list` command accepts `-l, --list-mode <table|list>` (default: `table`).
-- `-q, --quiet` suppresses ordinary status output; `stats` still prints its result, and `pat create` still prints an unstored token. Interactive password changes also print their confirmation. `-d, --debug <file>` writes verbose logs to a file.
+- `-q, --quiet` suppresses ordinary status output. `stats` still prints its result, and `pat create` still prints an unstored token. Interactive password changes also print their confirmation. `-d, --debug <file>` writes verbose logs to a file.
 
 ## stream
 
-Manage streams, the top-level containers for topics. Subcommands: `create`, `delete`, `update`, `get`, `list`, `purge`. The legacy creation flags `stream create -s`, `topic create -t`, and `consumer-group create -g` are accepted but ignored; IDs are always assigned by the server.
+Manage streams, the top-level containers for topics. Subcommands: `create`, `delete`, `update`, `get`, `list`. The legacy creation flags `stream create -s`, `topic create -t`, and `consumer-group create -g` are accepted but ignored. IDs are always assigned by the server.
 
 ```bash
 # Create a stream (the server assigns the ID)
@@ -52,10 +53,9 @@ iggy stream create dev
 # List, inspect, rename
 iggy stream list
 iggy stream get dev
-iggy stream update dev development
+iggy stream update dev --name development
 
 # Remove all messages in every topic of the stream
-iggy stream purge development
 
 # Delete the stream
 iggy stream delete development
@@ -63,39 +63,38 @@ iggy stream delete development
 
 ## topic
 
-Manage topics within a stream. Subcommands: `create`, `delete`, `update`, `get`, `list`, `purge`. These examples require an existing `dev` stream.
+Manage topics within a stream. Subcommands: `create`, `delete`, `update`, `get`, `list`. These examples require an existing `dev` stream.
 
 ```text
 iggy topic create [OPTIONS] <STREAM_ID> <NAME> <PARTITIONS_COUNT> <COMPRESSION_ALGORITHM> [MESSAGE_EXPIRY]...
 iggy topic update [OPTIONS] <STREAM_ID> <TOPIC_ID> <NAME> <COMPRESSION_ALGORITHM> [MESSAGE_EXPIRY]...
 ```
 
-Compression is a **required positional**: `none` or `gzip`; it is stored as topic metadata, but compression is not applied. Expiry is a human-readable duration (`7d`, `1day 12h`, `unlimited`). Omitting expiry at creation selects no expiration.
+Compression is a **required positional**: `none` or `gzip`. It is stored as topic metadata, but compression is not applied. Expiry is a human-readable duration (`7d`, `1day 12h`, `unlimited`). Omitting expiry at creation selects no expiration.
 
 For updates, supply expiry and `--max-topic-size` explicitly. Omitted values are sent as `server_default` (zero): the server retains the previous expiry/size fields but reports zero in their option entries. See [Topic options](/docs/server/topic-options) for this inconsistency.
 
 | Flag | Description |
 |------|-------------|
-| `-t, --topic-id <ID>` | Accepted at creation but ignored; the server assigns the ID |
-| `-m, --max-topic-size <SIZE>` | Retention size, e.g. `15GB`, `unlimited` (default: `server_default`; unlimited at creation) |
+| `-t, --topic-id <ID>` | Accepted at creation but ignored. The server assigns the ID |
+| `-m, --max-topic-size <SIZE>` | Retention size, e.g. `15GB`, `unlimited` (default: `server_default`. Unlimited at creation) |
 | `--durability <POLICY>` | Message completion policy: `replicated` (default) or `persisted` (create only) |
 | `--consumer-offset-durability <POLICY>` | Independent offset-store/delete policy: `replicated` (default) or `persisted` (create only) |
-| `--set <KEY=VALUE>` | Additional server-side option, repeatable (create only) |
+| `--set <KEY=VALUE>` | Server-side option, repeatable. Updates accept only updatable keys. |
 
 ```bash
 # 2 partitions, no compression, 7 day retention
 iggy topic create dev events 2 none 7d
 
-# Extra creation options via --set; discover accepted keys with "iggy options topic"
+# Extra creation options via --set. Discover accepted keys with "iggy options topic"
 iggy topic create dev metrics 4 gzip 30d --set segment_size=128MiB
 
 iggy topic list dev
 iggy topic get dev events
 
-# Update: name and compression are required positionals, in that order
-iggy topic update dev metrics metrics gzip 60d --max-topic-size unlimited
+# Update only the named settings
+iggy topic update dev metrics --message-expiry 60d --max-topic-size unlimited
 
-iggy topic purge dev metrics
 iggy topic delete dev metrics
 ```
 
@@ -122,7 +121,7 @@ iggy segment delete dev events 1 3
 
 ## message
 
-Send and poll messages. Subcommands: `send`, `poll`, `flush`; the server does not implement `flush`.
+Send and poll messages. Subcommands: `send` and `poll`. The flush command is removed.
 
 ### message send
 
@@ -133,12 +132,12 @@ iggy message send [OPTIONS] <STREAM_ID> <TOPIC_ID> [MESSAGES]...
 | Flag | Description |
 |------|-------------|
 | `-p, --partition-id <ID>` | Send to a specific partition |
-| `-m, --message-key <KEY>` | Route by a 1-255 byte message key. Binary transports hash it client-side; HTTP resolves it server-side. Mutually exclusive with `--partition-id` |
+| `-m, --message-key <KEY>` | Route by a 1-255 byte message key. Binary transports hash it client-side. HTTP resolves it server-side. Mutually exclusive with `--partition-id` |
 | `-H, --headers <KEY:KIND:VALUE>` | Message headers, comma separated. Kinds: `raw`, `string`, `bool`, `int8`-`int128`, `uint8`-`uint128`, `float32`, `float64` |
 | `--input-file <FILE>` | Send messages from a binary file written by `poll --output-file` |
 
 ```bash
-# Positional messages; quote messages containing spaces
+# Positional messages. Quote messages containing spaces
 iggy message send --partition-id 1 dev events "hello world"
 
 # Partition chosen from the message key
@@ -169,7 +168,7 @@ iggy message poll [OPTIONS] <--offset <OFFSET>|--first|--last|--next> <STREAM_ID
 | Flag | Description |
 |------|-------------|
 | `-m, --message-count <N>` | Number of messages to poll (default: 1) |
-| `-a, --auto-commit` | Submit the current batch's last offset asynchronously before delivering the poll reply; not an acknowledged offset store |
+| `-a, --auto-commit` | Submit the current batch's last offset asynchronously before delivering the poll reply. Not an acknowledged offset store |
 | `-c, --consumer <ID>` | Consumer name or ID to poll as (default: `0`) |
 | `-s, --show-headers` | Include message headers in the output |
 | `--output-file <FILE>` | Append polled messages to a binary file instead of printing |
@@ -190,15 +189,6 @@ iggy topic create dev events-replay 2 none 7d
 iggy message send --input-file backup.bin --partition-id 1 dev events-replay
 ```
 
-### message flush
-
-`message flush` and `-f, --fsync` remain accepted by the CLI, but the server returns `FeatureUnavailable` on binary transports and has no HTTP flush route. This command does not flush data. Select `--durability persisted` when creating the topic to require stable-storage message acknowledgments.
-
-```bash
-# Returns FeatureUnavailable on the default TCP transport
-iggy message flush dev events 1 --fsync
-```
-
 ## user
 
 Manage users and their permissions. Subcommands: `create`, `delete`, `get`, `list`, `name`, `status`, `password`, `permissions`.
@@ -214,7 +204,7 @@ iggy user name reader analytics-reader
 # Activate / deactivate
 iggy user status analytics-reader inactive
 
-# Change password; omit the passwords to be prompted securely
+# Change password. Omit the passwords to be prompted securely
 iggy user password analytics-reader
 # Or supply both passwords directly
 iggy user password analytics-reader Str0ngPass1 N3wPass2
@@ -255,7 +245,7 @@ iggy user permissions operator -g r_str,r_top
 Manage personal access tokens for the authenticated user. Subcommands: `create`, `delete`, `list`.
 
 ```bash
-# Token with 7 day expiry; the value is printed once
+# Token with 7 day expiry. The value is printed once
 iggy pat create ci-token 7d
 
 # Token stored in the platform keyring, usable via -n (see the Getting started page)
@@ -324,7 +314,7 @@ iggy context use production
 
 ## options
 
-Print the server's option catalog for one scope: `topic`, `stream` or `user`, with key kinds, defaults, and bounds. Only the topic catalog has entries, and only `topic create` exposes `--set KEY=VALUE` in the CLI.
+Print the server's option catalog for one scope: `topic`, `stream` or `user`, with key kinds, defaults, and bounds. All three scopes have catalogs. `stream update` and `topic update` accept `--set KEY=VALUE` and `--reset KEY`. A stream key is supplied at creation through `--stream-key-file`.
 
 ```bash
 iggy options topic
@@ -341,7 +331,7 @@ iggy ping -c 5
 
 ## me
 
-Show info about the current connection: client ID, user ID, client address as seen by the server, protocol. Supported on TCP, QUIC and WebSocket; HTTP returns `FeatureUnavailable`.
+Show info about the current connection: client ID, user ID, client address as seen by the server, protocol. Supported on TCP, QUIC and WebSocket. HTTP returns `FeatureUnavailable`.
 
 ```bash
 iggy me
@@ -358,7 +348,7 @@ iggy stats --output json
 
 ## snapshot
 
-Collect server troubleshooting data into an archive, useful for support bundles.
+Collect server troubleshooting data into an archive. This requires `manage_servers` because the archive can include logs and host diagnostics.
 
 | Flag | Description |
 |------|-------------|
@@ -380,3 +370,25 @@ iggy -u iggy login 1h
 iggy session status
 iggy logout
 ```
+
+## metadata
+
+Read or follow the metadata change log. The command needs root or `manage_servers` and prints one JSON page per line:
+
+```bash
+iggy metadata changes
+iggy metadata changes --from latest
+iggy metadata changes --from current --groups streams,topics --follow
+```
+
+`--after` resumes from a returned cursor. `--limit` accepts 1 through 1000 and defaults to 100. `--interval` defaults to one second while following. `--since` and `--until` use microseconds since the epoch. A follower rebuilds from current state when its saved history expires.
+
+## Resource update examples
+
+```bash
+iggy stream update dev --name development
+iggy topic update development events --set message_expiry=7days
+iggy topic update development events --reset message_expiry --reset max_topic_size
+```
+
+Updates preserve omitted fields. Compression and storage options remain fixed at creation. `topic get` displays partition details and explicit and derived options. See [Topic options](/docs/server/topic-options).

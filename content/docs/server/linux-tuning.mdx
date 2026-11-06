@@ -142,4 +142,3 @@ Trial a change with a runtime setting first. Keep the previous value for rollbac
 Collect `vmstat 1`, `iostat -xz 1`, `mpstat -P ALL 1`, pressure counters, and network drop/retransmission counters alongside benchmark results. The iostat and mpstat tools are provided by the sysstat package. Run long enough to include segment flushes, WAL checkpoints, and sustained device limits, rather than measuring only buffered admission.
 
 Iggy's topic `durability` and `consumer_offset_durability` independently default to `replicated`. `persisted` changes completion guarantees, and huge pages or sysctl settings do not replace it. Poll auto-commit remains asynchronous. Record both policies, replication-group size, payload and batch sizes, warmup, CPU allocation, and the exact host changes with each benchmark result.
-

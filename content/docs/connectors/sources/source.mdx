@@ -52,7 +52,7 @@ With the local configuration provider, each source connector has a TOML file in 
 
 **Main runtime config (connectors.toml, in the repository root):**
 
-Use the matching 0.9.0/edge checkout and broker from the [quick start](/docs/connectors/introduction#quick-start). Its broker must use the credentials below. Create the `connectors` directory, then save these two configuration files there and in the repository root as labeled.
+Use the matching 0.10.0 checkout and broker from the [quick start](/docs/connectors/introduction#quick-start). Its broker must use the credentials below. Create the `connectors` directory, then save these two configuration files there and in the repository root as labeled.
 
 ```toml
 [iggy]
@@ -86,7 +86,7 @@ topic = "example_topic"
 schema = "json"
 batch_length = 100
 linger_time = "5ms"
-# batch_length and linger_time are optional; the runtime defaults are 1000 and "5ms".
+# batch_length and linger_time are optional. The runtime defaults are 1000 and "5ms".
 
 # Custom configuration for the source connector, deserialized to type T from `plugin_config` field
 [plugin_config]
@@ -135,7 +135,7 @@ Also, when implementing the source connector, make sure to use the `source_conne
 
 And finally, each source should have its own, custom configuration, which is passed along with the unique plugin ID and optional state via expected `new()` method.
 
-The reference crate is [core/connectors/sources/random_source](https://github.com/apache/iggy/tree/master/core/connectors/sources/random_source). Use its `Cargo.toml` from the matching checkout, including `[lib] crate-type = ["cdylib", "lib"]` and its workspace dependency features. The Rust blocks in this sample implementation section combine into `src/lib.rs`; the trait above is an API reference and is not part of that file.
+The reference crate is [core/connectors/sources/random_source](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sources/random_source). Use its `Cargo.toml` from the matching checkout, including `[lib] crate-type = ["cdylib", "lib"]` and its workspace dependency features. The Rust blocks in this sample implementation section combine into `src/lib.rs`. The trait above is an API reference and is not part of that file.
 
 Start with the imports, then define the internal state and the public source connector along with its configuration.
 
@@ -237,7 +237,7 @@ The reference manifest supplies these dependencies:
 - tokio
 - tracing
 
-The implementation also uses `humantime`, `rand`, `simd-json`, and `uuid`. The reference crate uses `rmp-serde` directly in its tests; the production state helpers come from the SDK.
+The implementation also uses `humantime`, `rand`, `simd-json`, and `uuid`. The reference crate uses `rmp-serde` directly in its tests. The production state helpers come from the SDK.
 
 Before we make use of the `Source` trait, let's define the internal payload of the message that will be produced (e.g. as if it was pulled from some external database or so).
 
@@ -305,9 +305,9 @@ impl RandomSource {
 }
 ```
 
-Now implement `Source` for `RandomSource`. Each `poll()` waits for `interval`, builds a batch without exceeding `max_count`, and stages a candidate checkpoint. The runtime sends the batch, saves its optional checkpoint, and calls `on_batch_result()`. Only `Ack` commits the in-memory count; `Nack` discards the candidate. After restart, `new()` receives the last persisted checkpoint. Once the limit is reached, polls return empty messages and no new state.
+Now implement `Source` for `RandomSource`. Each `poll()` waits for `interval`, builds a batch without exceeding `max_count`, and stages a candidate checkpoint. The runtime sends the batch, saves its optional checkpoint, and calls `on_batch_result()`. Only `Ack` commits the in-memory count. `Nack` discards the candidate. After restart, `new()` receives the last persisted checkpoint. Once the limit is reached, polls return empty messages and no new state.
 
-The SDK permits only one batch in flight. Returning an error from `on_batch_result()` stops polling; returning an error from `poll()` logs the error and continues the polling loop. A source that tracks a cursor or performs destructive upstream work must implement the callback instead of relying on its default no-op.
+The SDK permits only one batch in flight. Returning an error from `on_batch_result()` stops polling. Returning an error from `poll()` logs the error and continues the polling loop. A source that tracks a cursor or performs destructive upstream work must implement the callback instead of relying on its default no-op.
 
 ```rust
 #[async_trait]
@@ -392,7 +392,7 @@ The runtime forwards the encoded payload, optional message ID and headers. Altho
 
 It's also important to note, that the supported format(s) might vary depending on the connector implementation. For example, you might use `JSON` as the payload format, which can be then easily parsed and processed by downstream components such as data transforms, but at the same time, you could support the other formats and let the user decide which one to use.
 
-The destination `schema` selects the `StreamEncoder`. A decode, transform or encoding error rejects the entire source batch, leaves its checkpoint uncommitted and produces `Nack`; the runtime logs and counts the error. An intentional filter result (`Ok(None)`) may drop selected messages without rejecting the batch.
+The destination `schema` selects the `StreamEncoder`. A decode, transform or encoding error rejects the entire source batch, leaves its checkpoint uncommitted and produces `Nack`. The runtime logs and counts the error. An intentional filter result (`Ok(None)`) may drop selected messages without rejecting the batch.
 
 Build the matching plugin, runtime and CLI from the repository root:
 
@@ -415,4 +415,4 @@ IGGY_CONNECTORS_SOURCE_RANDOM_ENABLED=true IGGY_CONNECTORS_CONFIG_PATH=connector
 
 And that's all, enjoy using the source connector!
 
-On a side note, if you'd like to process the messages consumed from the Iggy stream instead, you can implement your own **[Sink connector](https://github.com/apache/iggy/tree/master/core/connectors/sinks)** too :)
+On a side note, if you'd like to process the messages consumed from the Iggy stream instead, you can implement your own **[Sink connector](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks)** too :)

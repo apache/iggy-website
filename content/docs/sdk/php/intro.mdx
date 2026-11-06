@@ -3,7 +3,7 @@ title: PHP SDK
 description: "The experimental PHP SDK, a native extension wrapping the Rust SDK, and how to build it from source."
 ---
 
-The Iggy PHP SDK is a native PHP extension built in Rust with [ext-php-rs](https://github.com/davidcole1340/ext-php-rs). It wraps the Rust SDK and exposes a synchronous `Iggy\Client`: each call drives the extension's internal Tokio runtime and blocks the calling PHP thread until the operation completes. The source code is available on [GitHub](https://github.com/apache/iggy/tree/master/foreign/php).
+The Iggy PHP SDK is a native PHP extension built in Rust with [ext-php-rs](https://github.com/davidcole1340/ext-php-rs). It wraps the Rust SDK and exposes a synchronous `Iggy\Client`: each call drives the extension's internal Tokio runtime and blocks the calling PHP thread until the operation completes. The source code is available on [GitHub](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/php).
 
 The extension is experimental. It's defined as the `apache/iggy-php` composer package (`php-ext` type). To use it today, build it from the repository source.
 
@@ -34,23 +34,23 @@ On macOS the library is `libiggy_php.dylib`.
 
 ## Quick start
 
-The sample below targets Iggy 0.9.0 on `127.0.0.1:8090`. Start the server:
+The sample below targets Iggy 0.10.0 on `127.0.0.1:8090`. Start the server:
 
 ```bash
-# Server 0.9.0
+# Server 0.10.0
 docker run --rm \
   --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
   -p 8090:8090 \
   -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
   -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
-  apache/iggy:0.9.0
+  apache/iggy:0.10.0
 
 # Or from the repository root
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and bootstrap the `iggy`/`iggy` root credentials for a new data directory. Existing stored credentials are not replaced. For the source command, ensure `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` are unset or match the sample; environment values take precedence over the flag. `--fresh` removes the local replica state, so use it only for disposable development data.
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and bootstrap the `iggy`/`iggy` root credentials for a new data directory. Existing stored credentials are not replaced. For the source command, ensure `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` are unset or match the sample. Environment values take precedence over the flag. `--fresh` removes the local replica state, so use it only for disposable development data.
 
 For binary transports, credentials in the connection string take effect on `connect()`. HTTP requires `loginUser()` explicitly. Alternatively, construct the client with a plain address (`new \Iggy\Client('127.0.0.1:8090')`) and call `loginUser('iggy', 'iggy')` explicitly.
 
@@ -82,49 +82,40 @@ foreach (range(1, 10) as $i) {
 }
 $client->sendMessages($stream, $topic, 0, $messages);
 
-$polled = $client->pollMessages($stream, $topic, 0, PollingStrategy::first(), 10, true);
-foreach ($polled as $message) {
+$polled = $client->pollMessages(
+    $stream, $topic, 0, 1, PollingStrategy::first(), new \Iggy\PollOptions(count: 10)
+);
+foreach ($polled->messages as $message) {
     echo "Offset: {$message->offset()}, Payload: {$message->payload()}", PHP_EOL;
 }
 ```
 
 ## Consumer groups
 
-`consumerGroup()` returns an `Iggy\Consumer` that creates and joins the group by default. The partition argument is ignored for consumer groups; the server assigns partitions. After the quickstart has sent ten messages, these two loops consume five each. Both wait for messages until their limit is reached:
+`consumerGroup()` creates and joins a group by default. It reads assigned partitions and stores no offsets unless you select a policy or commit checkpoints. This example processes five messages:
 
 ```php
 <?php
 
 $consumer = $client->consumerGroup(
-    'php-consumer',
-    $stream,
-    $topic,
-    0,
-    \Iggy\PollingStrategy::next(),
-    10,
-    \Iggy\AutoCommit::disabled(),
+    'php-consumer', $stream, $topic, \Iggy\PollingStrategy::next(),
 );
-
-$limit = 5;
-$consumer->consumeMessages(
-    function (\Iggy\ReceiveMessage $message) use ($consumer): void {
-        echo $message->payload(), PHP_EOL;
-        $consumer->storeOffset($message->offset(), $message->partitionId());
-    },
-    $limit,
-);
-
-$consumed = 0;
-foreach ($consumer->iterMessages() as $message) {
-    echo $message->payload(), PHP_EOL;
-    $consumer->storeOffset($message->offset(), $message->partitionId());
-    if (++$consumed === $limit) {
-        break;
-    }
+try {
+    $consumer->consumeMessages(
+        function (\Iggy\ReceiveMessage $message) use ($consumer): void {
+            echo $message->payload(), PHP_EOL;
+            $consumer->commit($message->checkpoint());
+        },
+        5,
+    );
+} finally {
+    $consumer->shutdown();
 }
 ```
 
-`AutoCommit::when()` may queue an offset commit before the callback runs. To gate commits on the callback succeeding, use `AutoCommit::disabled()` and call `storeOffset()` after the work succeeds, as above.
+`consumeMessages()` requires a finite limit. A callback exception ends the run. With automatic commits after processing, the failed message stays uncounted. `PollOptions` carries the commit policy. Use `CommitPolicy::manual()`, `CommitPolicy::onRead()` or `CommitPolicy::auto(...)`.
+
+`reader()` reads batches from explicit partitions. `groupReader()` reads an existing group's assignment. Close a reader with `close()`. A timeout on `next(timeout_micros)` returns null and keeps a later batch available for the next call.
 
 ## API notes
 
@@ -137,13 +128,17 @@ foreach ($consumer->iterMessages() as $message) {
 - TLS uses the Rust SDK connection-string format, for example `iggy+tcp://user:pass@host:port?tls=true&tls_domain=localhost&tls_ca_file=/path/to/ca.pem`.
 - The extension owns a lazy global Tokio runtime. Don't call `pcntl_fork()` after the first Iggy call: the child inherits file descriptors but not the runtime's worker threads.
 
-## Current status
+## Resource options and recovery
 
-`Iggy\Client` currently exposes stream and topic create/get/delete, message sending and polling, consumer groups with offset management, `ping()`, `loginUser()`, and raw binary requests (`sendBinaryRequest()`). Other administration surfaces (users, permissions, personal access tokens, partitions) aren't exposed yet.
+`createStream($name, $encryption_key)` accepts the standard padded base64 of a 32-byte stream key. `createTopic` accepts named creation arguments, including `replication_factor`. Stream and topic updates change only named fields and reset keys. `describeOptions()` lists each catalog. User and PAT administration are not exposed as typed PHP methods in this release. Reads expose encryption fingerprints, never key material.
+
+`getMetadataChanges()` follows the metadata log. `sendBinaryRequestToReplica()` sends supported non-replicated commands to a selected node. See [Metadata changes](/docs/sdk/metadata-changes).
+
+Retained mutation errors expose an operation ID. Use `resolveOperation()` on the same client to retry its retained identity, or `abandonOperation()` to accept the unknown result and release local state. A lost committing poll throws `FetchProgressUncertain` and blocks progress for the partition until abandonment.
 
 ## Examples
 
-Working examples are available in the [examples/php](https://github.com/apache/iggy/tree/master/examples/php) directory. They read `IGGY_CONNECTION_STRING` for a binary transport with credentials. Otherwise they connect over TCP using `IGGY_HOST` and `IGGY_PORT`, then log in with the literal `IGGY_USERNAME` and `IGGY_PASSWORD` values:
+Working examples are available in the [examples/php](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/php) directory. They read `IGGY_CONNECTION_STRING` for a binary transport with credentials. Otherwise they connect over TCP using `IGGY_HOST` and `IGGY_PORT`, then log in with the literal `IGGY_USERNAME` and `IGGY_PASSWORD` values:
 
 ```bash
 # From the repository root

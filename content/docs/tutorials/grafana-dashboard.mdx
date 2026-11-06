@@ -18,7 +18,7 @@ Create a directory with these files.
 ```yaml
 services:
   iggy:
-    image: apache/iggy:0.9.0
+    image: apache/iggy:0.10.0
     cap_add:
       - SYS_NICE
     security_opt:
@@ -35,7 +35,7 @@ services:
       - IGGY_NODE_ADVERTISED_ADDRESS=localhost
       - IGGY_QUIC_ENABLED=false
       - IGGY_WEBSOCKET_ENABLED=false
-      # Needed on Docker Desktop, which does not support NUMA binding.
+Apache Iggy 0.10.0 skips memory binding on a single-NUMA-node topology. The older Docker Desktop workaround is no longer required for that case. Use `IGGY_SHARDING_CPU_ALLOCATION=all` when you explicitly want CPU pinning without NUMA memory binding.
       - IGGY_SHARDING_CPU_ALLOCATION=all
     ports:
       - "8090:8090"

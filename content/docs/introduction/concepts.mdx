@@ -29,14 +29,13 @@ You address the log by **offset**, the position of the record in the log. Offset
 
 ## Stream
 
-While we could put an equal sign between the log and the stream, they are not the same, at least in a case of Iggy streaming server.
-The stream is a logical concept, and you might think of it as a **namespace**. For example, you could have a single stream for the whole system, or multiple streams e.g. representing the different environments, such as `dev`, `staging` and `production`. The stream is identified by its unique ID. The stream can have zero or more topics assigned, which results in the records being published to the specific topics that belong to the particular stream.
+While we could put an equal sign between the log and the stream, they are not the same, at least in a case of Iggy streaming server. The stream is a logical concept, and you might think of it as a **namespace**. For example, you could have a single stream for the whole system, or multiple streams e.g. representing the different environments, such as `dev`, `staging` and `production`. The stream is identified by its unique ID. The stream can have zero or more topics assigned, which results in the records being published to the specific topics that belong to the particular stream.
 
 ## Topic
 
 The topic is also the logical concept, which is a part of the stream. The topic is identified by its ID, which is unique within its stream. You could think of topic as an entity being responsible for storing the specific type of the records. For example, you could have a topic for the user events, and another topic for the order events, etc.
 
-The messages are not being stored in the topic directly, but rather in the **partitions**, which are assigned to the topic. The topic can have one or more partitions assigned, that could help achieve higher parallelism and throughput. The topic can also have a **retention policy**. Expiry removes whole sealed segments after their newest message has expired, subject to the stored consumer-offset barrier; it does not delete each message immediately at its expiry time. See [topic options](/docs/server/topic-options) for expiry and size-limit behavior. Topics also support maximum size limits and per-topic storage options (`segment_size`, `durability`, `consumer_offset_durability`, and flush thresholds) set at creation, plus a `compression_algorithm` option (a placeholder today: no compression is applied yet). Both [durability policies](/docs/server/durability) independently default to `replicated`.
+The messages are not being stored in the topic directly, but rather in the **partitions**, which are assigned to the topic. The topic can have one or more partitions assigned, that could help achieve higher parallelism and throughput. The topic can also have a **retention policy**. Expiry removes whole sealed segments after their newest message has expired, subject to the stored consumer-offset barrier. It does not delete each message immediately at its expiry time. See [topic options](/docs/server/topic-options) for expiry and size-limit behavior. Topics also support maximum size limits and per-topic storage options (`segment_size`, `durability`, `consumer_offset_durability`, and flush thresholds) set at creation, plus a `compression_algorithm` option (a placeholder today: no compression is applied yet). Both [durability policies](/docs/server/durability) independently default to `replicated`.
 
 ## Partition
 
@@ -63,7 +62,7 @@ Consumers can poll the messages in multiple ways:
 - **By offset** - start reading from the specified offset. The client tracks its own position.
 - **By timestamp** - start reading from the first message at or after the given timestamp.
 - **First / Last** - start from the beginning or the end of the partition.
-- **Next** - continue from the consumer offset stored on the server side. The server tracks the cursor. On the primary, `auto_commit: true` submits an offset update before the poll response is delivered, without waiting for that update to commit. Follower polls do not advance it. This alone guarantees neither at-most-once nor at-least-once processing. For processing-before-commit ordering, explicitly store the offset after processing, using `store_consumer_offset()` in the Rust SDK.
+- **Next** - continue after the consumer offset stored on the server. `CommitPolicy::OnRead` submits progress with the poll and can advance it before application processing. Use manual checkpoint commits after successful processing when that ordering is required. See [Deferred polling](/docs/sdk/deferred-polling).
 
 ## Consumer groups
 
@@ -80,7 +79,7 @@ The Rust SDK's `IggyMessageHeader::to_bytes()` representation is 64 bytes, with 
 | Field | Bytes | Type | Description |
 |-------|-------|------|-------------|
 | checksum | 0-8 | u64 | xxHash3 integrity checksum |
-| id | 8-24 | u128 | Client-supplied 128-bit ID; generated as UUIDv4 when omitted by the Rust SDK |
+| id | 8-24 | u128 | Client-supplied 128-bit ID. Generated as UUIDv4 when omitted by the Rust SDK |
 | offset | 24-32 | u64 | Increasing offset within the partition |
 | timestamp | 32-40 | u64 | Server-assigned timestamp |
 | origin_timestamp | 40-48 | u64 | Client-provided timestamp |
@@ -91,3 +90,9 @@ The Rust SDK's `IggyMessageHeader::to_bytes()` representation is 64 bytes, with 
 In the SDK message representation, the header is followed by payload bytes and then optional user-header bytes.
 
 To see how the server schedules these concepts across CPU cores and stores them on disk, head over to [architecture](/docs/introduction/architecture).
+
+## Primaries, copies and checkpoints
+
+A partition primary orders writes for that partition. Different partitions can have different primaries. `replication_factor` determines how many nodes store each partition. Metadata has its own primary and spans the full cluster.
+
+A checkpoint records a processed position with its partition history and ownership generation. A continuation carries the next read position with the same context. These prevent an old read or commit from silently applying to a recreated partition. See [Multi-leader partitions](/docs/clustering/multi-leader) and [Deferred polling](/docs/sdk/deferred-polling).

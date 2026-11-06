@@ -3,7 +3,7 @@ title: Examples
 description: "Runnable Go examples from the core repository, and how to start a server they can connect to."
 ---
 
-A runnable getting-started example lives in the [examples/go](https://github.com/apache/iggy/tree/master/examples/go) directory of the core repository. Its `go.mod` carries a `replace` directive pointing at the in-repo SDK, so the example always builds against the SDK source in the same checkout. The examples are exercised in CI via `scripts/run-examples-from-readme.sh --language go`.
+A runnable getting-started example lives in the [examples/go](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/go) directory of the core repository. Its `go.mod` carries a `replace` directive pointing at the in-repo SDK, so the example always builds against the SDK source in the same checkout. The examples are exercised in CI via `scripts/run-examples-from-readme.sh --language go`.
 
 ## Starting the server
 
@@ -17,7 +17,7 @@ cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 
 ## Getting started
 
-The [producer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/producer/main.go) creates `sample-stream` and `sample-topic` (if missing) and sends 5 batches of 10 messages to partition `0`. The [consumer](https://github.com/apache/iggy/blob/master/examples/go/getting-started/consumer/main.go) polls them from offset `0` and exits after 5 batches. Stream, topic, and partition IDs are **0-based**. These repository examples use numeric stream and topic IDs `0`, so create no other streams or topics before running the producer on the fresh server. Run the producer first.
+The [producer](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/examples/go/getting-started/producer/main.go) creates `sample-stream` and `sample-topic` (if missing) and sends 5 batches of 10 messages to partition `0`. The [consumer](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/examples/go/getting-started/consumer/main.go) polls them from offset `0` and exits after 5 batches. Stream, topic, and partition IDs are **0-based**. These repository examples use numeric stream and topic IDs `0`, so create no other streams or topics before running the producer on the fresh server. Run the producer first.
 
 Run both from the `examples/go` directory:
 
@@ -26,7 +26,7 @@ go run ./getting-started/producer/main.go
 go run ./getting-started/consumer/main.go
 ```
 
-Each consumer reads partition `0` independently, starting from offset `0` or the earliest retained message. Running several consumers reads the same messages; these examples do not join a consumer group.
+Each consumer reads partition `0` independently, starting from offset `0` or the earliest retained message. Running several consumers reads the same messages. These examples do not join a consumer group.
 
 Both binaries accept the same flags:
 

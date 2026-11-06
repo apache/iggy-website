@@ -34,6 +34,7 @@ Identifies a consumer or a consumer group in message and offset commands:
 
 - `kind = 1`: consumer.
 - `kind = 2`: consumer group.
+- `kind = 3`: externally managed group offsets. This kind cannot poll or join native consumer groups.
 
 ## Optional partition id
 
@@ -53,11 +54,11 @@ How `SendMessages` picks the target partition:
 [kind: u8][length: u8][value: 0-255 bytes]
 ```
 
-- `Balanced`: `kind = 1`, `length = 0`, no value. The server resolves the partition at admission with a per-node round-robin counter.
+- `Balanced`: `kind = 1`, `length = 0`, no value. The binary client resolves it to an explicit partition before sending.
 - `PartitionId`: `kind = 2`, `length = 4`, value is a u32 partition id.
 - `MessagesKey`: `kind = 3`, `length = 1..255`, value is a routing key hashed to a partition.
 
-The Rust binary SDK resolves balanced and key routing client-side and sends `kind = 2`. SDKs can also send the other wire strategies for server-side resolution.
+The Rust binary SDK resolves balanced and key routing client-side and sends `kind = 2`. The binary server requires explicit partition routing. The HTTP API can resolve the other strategies.
 
 ## Polling strategy
 
@@ -104,17 +105,17 @@ Fields pair up: first the key, then the value. Keys and values can both use the 
 
 ## Options block
 
-`CreateStream`, `UpdateStream`, `CreateTopic`, `UpdateTopic`, `CreateUser`, and `UpdateUser` end with a key-value **options block** that reuses the user-headers TLV encoding. The block runs from its start to the end of the payload (no length prefix, and the validator requires exact consumption) and may be empty.
+`CreateStream`, `CreateTopic`, `CreateUser` and `UpdateResource` end with a key-value **options block** that reuses the user-headers TLV encoding. The block runs from its start to the end of the payload (no length prefix, and the validator requires exact consumption) and may be empty.
 
 On top of the TLV walk, options enforce: string keys only (kind 2, valid UTF-8), no duplicate keys, at most 1024 entries, and at most 100000 bytes total.
 
 Semantics:
 
-- **Create** requests resolve absent keys to server defaults and persist the effective values. An update using a zero retention sentinel can make `GetTopic` option values disagree with its fixed expiry/size fields; see [update semantics](/docs/server/topic-options).
+- **Create** requests resolve absent keys to server defaults and persist the effective values. Updates use explicit reset keys to restore defaults. Zero retention sentinels do not reset a value. See [update semantics](/docs/server/topic-options).
 - **Update** requests are patches: keys absent from the block are left alone, never reset. A client built before a key existed cannot erase it.
 - Unknown keys are rejected at the wire edge, never silently skipped.
 
-The catalog is discoverable at runtime with `DESCRIBE_OPTIONS` (code 13), payload `[scope: u8]` with scope `1` = topic, `2` = stream, `3` = user (HTTP: `GET /options/topic`). Today only topics have keys. The stream and user catalogs are empty, and any key sent for them is rejected. The topic catalog (`segment_size`, `durability`, `consumer_offset_durability`, `message_expiry`, `max_topic_size`, and the rest) with defaults and constraints is documented on the [Topic options](/docs/server/topic-options) page. `UpdateTopic` accepts only `compression_algorithm`, `message_expiry`, and `max_topic_size`. Both durability policies and the storage-layout knobs are create-only.
+The catalog is discoverable with DescribeOptions, code 13, using scope 1 for topics, 2 for streams and 3 for users. All three catalogs have entries. Stream keys are create-only and secret. Stream and topic names and user identity/status can be updated. Topic retention fields can be reset, while compression and storage policies are fixed at creation. See [Topic options](/docs/server/topic-options) and [Stream options](/docs/server/stream-options).
 
 ## Compression
 
@@ -125,4 +126,18 @@ The `compression_algorithm` value used by topic options:
 | 1, `none` | No compression (default) |
 | 2, `gzip` | Gzip |
 
-Any other value is rejected. The option is a **placeholder today**: the value is validated, persisted, and echoed back, but it does not enable automatic payload compression or decompression. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers) in the Iggy repo.
+Any other value is rejected. The option is a **placeholder today**: the value is validated, persisted, and echoed back, but it does not enable automatic payload compression or decompression. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/message-headers) in the Iggy repo.
+
+## Partition context
+
+A served partition context is 24 bytes:
+
+```text
+[incarnation: u64][owner_generation: u64][metadata_op: u64]
+```
+
+The incarnation identifies the partition history. The owner generation identifies group ownership and is zero for ordinary consumers. The metadata operation establishes the minimum metadata needed to interpret the context. Poll replies, continuations and checkpoints preserve these fields.
+
+## Option catalog flags
+
+DescribeOptions entries report mutability and visibility. Bit 0 means updatable, bit 1 resettable, bit 2 secret, bit 3 read-only and bit 4 critical. A critical key must be understood before a node serves the resource. Unknown client option keys are rejected.
