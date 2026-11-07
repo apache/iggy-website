@@ -5,7 +5,7 @@ description: "Mutate, filter and convert messages as they pass through the conne
 
 Transforms mutate, filter, or convert messages as they flow through the connector runtime. They run inside the runtime process, not inside the plugins. For source connectors they're applied after the plugin's messages are decoded and before producing to Iggy. For sink connectors, after consuming from Iggy and before handing the messages to the plugin.
 
-A transform receives each decoded message and returns either the (possibly modified) message, or nothing - in which case the message is dropped from the batch. A transform can also return an error. A source rejects the whole batch and its checkpoint on a transform error; a sink drops the affected message and continues processing the batch.
+A transform receives each decoded message and returns either the (possibly modified) message, or nothing - in which case the message is dropped from the batch. A transform can also return an error. A source rejects the whole batch and its checkpoint on a transform error. A sink drops the affected message and continues processing the batch.
 
 ## Configuration
 
@@ -178,13 +178,13 @@ strict_mode = false
 
 Optional keys: `schema_path`, `root_table_name`, `field_mappings`. JSON encoding uses a generic key/value representation, so its output is not a buffer for an arbitrary generated table type. FlatBuffer-to-JSON returns buffer metadata and base64 bytes, not decoded table fields.
 
-`schema_path`, `include_paths`, and `preserve_unknown_fields` have no effect. `root_table_name` only labels decoding metadata. `verify_buffers` checks the minimum buffer length (four bytes), not a schema-aware verifier; `buffer_size_hint` sets the initial encoder capacity. `pretty_json`, `include_metadata`, and `strict_mode` have no effect.
+`schema_path`, `include_paths`, and `preserve_unknown_fields` have no effect. `root_table_name` only labels decoding metadata. `verify_buffers` checks the minimum buffer length (four bytes), not a schema-aware verifier. `buffer_size_hint` sets the initial encoder capacity. `pretty_json`, `include_metadata`, and `strict_mode` have no effect.
 
 The input payload variant must match `source_format`. The default `flat_buffer` stream decoder already returns JSON metadata, so it does not supply `Payload::FlatBuffer` to a following reverse transform.
 
 ## avro_convert
 
-Converts JSON to a raw Avro datum and Avro data to JSON. The schema can be given inline (`schema_json`) or as a file (`schema_path`); the inline schema takes precedence. This example can be added to the Random source with `streams.schema = "avro"`:
+Converts JSON to a raw Avro datum and Avro data to JSON. The schema can be given inline (`schema_json`) or as a file (`schema_path`). The inline schema takes precedence. This example can be added to the Random source with `streams.schema = "avro"`:
 
 ```toml
 [transforms.avro_convert]
@@ -206,9 +206,9 @@ include_metadata = false
 strict_mode = false
 ```
 
-Optional keys: `schema_path`, `schema_json`, `field_mappings`. JSON encoding and Avro-to-JSON decoding require a schema; input values must match its field types. The wire payload is one raw Avro datum, not an Avro object container file. Decoding rejects trailing bytes.
+Optional keys: `schema_path`, `schema_json`, `field_mappings`. JSON encoding and Avro-to-JSON decoding require a schema. Input values must match its field types. The wire payload is one raw Avro datum, not an Avro object container file. Decoding rejects trailing bytes.
 
-`field_mappings` renames input JSON fields or fields decoded from Avro. Text input is not field-mapped. Text-to-Avro parses JSON before encoding; Raw-to-Avro rewraps existing bytes without validating them. Avro-to-Text emits base64 and Avro-to-Raw preserves the bytes. All three `conversion_options` keys are accepted but have no effect. Unsupported conversion pairs pass their input through unchanged.
+`field_mappings` renames input JSON fields or fields decoded from Avro. Text input is not field-mapped. Text-to-Avro parses JSON before encoding. Raw-to-Avro rewraps existing bytes without validating them. Avro-to-Text emits base64 and Avro-to-Raw preserves the bytes. All three `conversion_options` keys are accepted but have no effect. Unsupported conversion pairs pass their input through unchanged.
 
 To consume raw Avro records in a sink, configure `schema = "avro"` and `avro_schema_json` or `avro_schema_path` in its `[[streams]]` entry. The runtime decodes the datum into JSON before running transforms. A following `avro_convert` with `source_format = "avro"` would therefore receive the wrong payload variant.
 

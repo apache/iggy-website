@@ -5,11 +5,11 @@ description: "Scrape the server's Prometheus metrics: the token the endpoint nee
 
 The server exports Prometheus metrics on its HTTP API at `/metrics`. Both the HTTP API and the metrics endpoint are on by default. See [`[http.metrics]`](/docs/server/configuration#httpmetrics) to change the path or turn it off.
 
-This page covers the server's own metrics. The connectors runtime has a separate endpoint with its own metric names; see [Connectors observability](/docs/connectors/observability).
+This page covers the server's own metrics. The connectors runtime has a separate endpoint with its own metric names. See [Connectors observability](/docs/connectors/observability).
 
 ## Get a token for the scraper
 
-`/metrics` needs a bearer token, like every other read on the HTTP API. Any logged-in user can scrape it; there's no separate monitoring permission. Prometheus can't log in, so create a personal access token and put it in the scrape config:
+`/metrics` needs a bearer token, like every other read on the HTTP API. Any logged-in user can scrape it and gets the aggregate gauges. The per-topic series need the `read_servers` or `manage_servers` permission. There's no separate monitoring permission. Prometheus can't log in, so create a personal access token and put it in the scrape config:
 
 ```bash
 iggy pat create prometheus 90d
@@ -42,10 +42,16 @@ curl -s -H "Authorization: Bearer <token>" http://localhost:3000/metrics | grep 
 ## What to alert on
 
 - **`frame_drops_total{variant="forward_client_send"}`.** Any increase means a client never got a reply to a request. Most other `frame_drops_total` variants are retried or repaired automatically. This series only appears after the first drop, so on a healthy server it won't be in the scrape at all. Write the alert so that a missing series counts as no drops.
-- **`stats_rollup_underflows_total`.** It goes up when a stream, topic or partition total would have dropped below zero and was held at zero instead. A few during deletes, purges or restores are expected. A steady rise at other times is worth a look.
+- **`stats_rollup_underflows_total`.** It goes up when a stream, topic or partition total would have dropped below zero and was held at zero instead. A few during deletes or restores are expected. A steady rise at other times is worth a look.
 
 ## Grafana and OpenTelemetry
 
 Add Prometheus as a data source in Grafana, then build panels from the metric names above.
 
-The server doesn't export metrics over OTLP. To bring them into an OpenTelemetry pipeline, scrape `/metrics` with the collector's Prometheus receiver, using the same bearer token. Server export of logs and traces over OTLP isn't available yet; see [`[telemetry]`](/docs/server/configuration#telemetry).
+The server doesn't export metrics over OTLP. To bring them into an OpenTelemetry pipeline, scrape `/metrics` with the collector's Prometheus receiver, using the same bearer token. Server export of logs and traces over OTLP isn't available yet. See [`[telemetry]`](/docs/server/configuration#telemetry).
+
+## Topic usage and replica progress
+
+`topic_size_bytes`, `topic_messages` and `topic_max_size_bytes` use `stream` and `topic` labels. The size-cap series is absent for unlimited topics. Renamed or deleted topics disappear from the next scrape. Retention can keep more bytes than the configured cap, so a usage ratio is not a hard storage boundary.
+
+Replica counters can lag a successful send until a prepare or commit broadcast updates them. Compare node-local observations with routing and view-change events before treating a transient difference as data loss. Repair-ring metrics report retained batch bytes and released-entry accounting, not total process memory.

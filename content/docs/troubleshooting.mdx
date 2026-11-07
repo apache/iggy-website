@@ -59,19 +59,11 @@ Kernel 5.15 is too old (need >= 5.19)
 
 **Fix:** upgrade the host kernel to 5.19 or newer. Under WSL2, run `wsl --update`. Containers use the host's kernel, so it's the host that needs upgrading. See [System requirements](/docs/server/introduction#system-requirements).
 
-## Lost the root password
+## Missing root credentials
 
-**What you see:** you started the server without setting credentials, and you don't know the root password.
+A fresh standalone server refuses to start without root credentials. Set both `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` before first boot, or use `--with-default-root-credentials` for a disposable development instance. The server no longer generates a password.
 
-**Cause:** if `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` aren't set and `--with-default-root-credentials` isn't used, the server generates a random root password on first start and logs it once:
-
-```text
-WARN shard-0 server::boot::credentials: Generated root user password: <password>
-```
-
-It isn't logged again on later starts, because the credentials are only created when the data directory is new.
-
-**Fix:** set `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` before the first start, or use `--with-default-root-credentials` for development. If the password is already lost, deleting the data directory resets it, but that also deletes all data, so only do it on a development instance.
+A cluster replica without credentials waits for the root account to arrive through replication. Provision the same initial credentials on all replicas so any promoted node can initialize it. Once root is stored, environment changes do not reset its password. Do not delete a data directory to change an existing password.
 
 ## "Already exists" error when running the CLI again
 
@@ -90,18 +82,14 @@ The name is missing from the message because of a known bug where error details 
 
 **Fix:** nothing needs fixing. The stream exists and can be used as it is. Check with `iggy stream list` before creating it if you're running a setup script more than once.
 
-## Client connects, then hangs at login
+## Client cannot complete login
 
-**What you see:** the client connects, then hangs with no error, while the server logs the connection being accepted and then dropped.
+Make sure that the client matches the server's protocol. Server 0.10.0 uses protocol 0.12.0 and rejects incompatible clients during login. A malformed old client can report a disconnect rather than a useful compatibility error.
 
-**Cause:** the SDK and the server are from different releases. Clients from before 0.9.0 can't talk to a 0.9.0 server, and the login waits forever instead of failing ([#4262](https://github.com/apache/iggy/issues/4262)).
+Use Rust SDK 0.12.0 or Python SDK 0.10.0 with this server. See [Server compatibility](/docs/sdk/introduction#server-compatibility) for the other languages. Also make sure that credentials match the stored account, not just the current bootstrap environment.
 
-**Fix:** use the SDK version that matches your server. For the 0.9.0 server that's the `iggy` crate 0.11.0 for Rust and `apache-iggy` 0.9.0 for Python. See [Server compatibility](/docs/sdk/introduction#server-compatibility) for every SDK.
+## NUMA memory binding fails
 
-## Server won't start on Docker Desktop
+Apache Iggy 0.10.0 skips memory binding when the detected topology has one NUMA node. On a multi-node topology, container policy or host restrictions can still reject memory binding.
 
-**What you see:** with 0.9.0 on Docker Desktop, every shard logs `Failed to bind memory` and the server exits with `failed to bind shard 0 memory to its NUMA node`.
-
-**Cause:** the server binds each shard's memory to a NUMA node, and Docker Desktop's Linux VM rejects that. The same happens on WSL2 and other hosts with a single NUMA node.
-
-**Fix:** add `-e IGGY_SHARDING_CPU_ALLOCATION=all` to the `docker run` command. Each shard is still pinned to its own core; only the memory binding is skipped, and on a single NUMA node it does nothing useful. This is fixed in the next release.
+Set `IGGY_SHARDING_CPU_ALLOCATION=all` when CPU pinning without NUMA memory binding fits the deployment. Inspect the host topology and allowed CPU set before changing production placement. See [Linux tuning](/docs/server/linux-tuning#cpu-placement-and-numa).

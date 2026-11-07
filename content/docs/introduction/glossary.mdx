@@ -9,7 +9,7 @@ A one-line definition of each term, with a link to the page that explains it.
 
 **Auto-commit.** An option on a poll. The server saves the consumer's position as it returns the messages, before the consumer has processed them. See [Polling messages](/docs/introduction/concepts#polling-messages).
 
-**Connection string.** A single value such as `iggy://user:password@localhost:8090` that tells a client how to connect. The Rust SDK and the SDKs that wrap it (Python, C++ and PHP) accept one. See [Connection strings](/docs/sdk/connection-strings).
+**Connection string.** A single value such as `iggy://user:password@localhost:8090` that tells a client how to connect. All SDKs accept connection strings, with language-specific schemes and options. See [Connection strings](/docs/sdk/connection-strings).
 
 **Consumer.** A client that reads messages on its own rather than as part of a consumer group. Its position is kept separately from every other consumer's.
 
@@ -42,3 +42,11 @@ A one-line definition of each term, with a link to the page that explains it.
 **User headers.** Optional key and value pairs sent with a message, kept separate from the payload. See [Serialising messages](/docs/introduction/serialising-messages).
 
 **VSR.** Viewstamped Replication, the protocol Apache Iggy uses to keep replicas in step. See [Viewstamped Replication](/docs/clustering/vsr).
+
+**Deferred polling.** A read that waits on the server for messages or a deadline. A grouped fetch reads several partitions of one primary.
+
+**Checkpoint.** A position that can be committed after processing. It retains the partition incarnation and consumer ownership generation.
+
+**Partition incarnation.** The identity of one partition history. Deleting and recreating a partition changes it.
+
+**Replication factor.** The number of nodes that store each partition of a topic. Set it at topic creation.

@@ -5,9 +5,9 @@ description: "A first program with the Python SDK: create a stream and topic, se
 
 ## Before we start
 
-This tutorial uses the Python SDK's low-level API (`IggyClient`) directly, so you can see each step. It needs Python 3.10 or newer. On Linux the server needs kernel 5.19 or newer; macOS has no kernel requirement. See [System requirements](/docs/server/introduction#system-requirements).
+This tutorial uses the Python SDK's low-level API (`IggyClient`) directly, so you can see each step. It needs Python 3.11 or newer. On Linux the server needs kernel 5.19 or newer. MacOS has no kernel requirement. See [System requirements](/docs/server/introduction#system-requirements).
 
-The producer and consumer below match the [getting-started examples](https://github.com/apache/iggy/tree/master/examples/python/getting-started) in the repository.
+The producer and consumer below match the [getting-started examples](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/python/getting-started) in the repository.
 
 ## Starting the server
 
@@ -18,19 +18,19 @@ docker run --rm \
   -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
   -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
-  apache/iggy:0.9.0
+  apache/iggy:0.10.0
 ```
 
 `IGGY_TCP_ADDRESS` and `IGGY_NODE_ADVERTISED_ADDRESS` are needed because the server binds `127.0.0.1` inside the container by default, which the published port can't reach. The Rust tutorial's [Starting the Iggy server](/docs/introduction/getting-started#starting-the-iggy-server) section explains each flag.
 
-On Docker Desktop, 0.9.0 can fail to start with `failed to bind shard 0 memory to its NUMA node`. If you hit this, add `-e IGGY_SHARDING_CPU_ALLOCATION=all` to the command above.
+Apache Iggy 0.10.0 skips memory binding on a single-NUMA-node topology. The older Docker Desktop workaround is no longer required for that case. Use `IGGY_SHARDING_CPU_ALLOCATION=all` when you explicitly want CPU pinning without NUMA memory binding.
 
 Install the SDK in a virtual environment:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install apache-iggy
+pip install apache-iggy==0.10.0
 ```
 
 ## Producer
@@ -40,7 +40,7 @@ Save this as `producer.py`:
 ```python
 import asyncio
 
-from apache_iggy import IggyClient
+from apache_iggy import IggyClient, TopicOptions
 from apache_iggy import SendMessage as Message
 
 STREAM_NAME = "sample-stream"
@@ -62,7 +62,7 @@ async def main():
         await client.create_topic(
             stream=STREAM_NAME,
             name=TOPIC_NAME,
-            partitions_count=1,
+            options=TopicOptions(partitions_count=1),
         )
 
     messages = [Message(f"message-{i}") for i in range(10)]
@@ -94,7 +94,7 @@ Save this as `consumer.py`:
 ```python
 import asyncio
 
-from apache_iggy import Consumer, IggyClient, PollingStrategy
+from apache_iggy import CommitPolicy, Consumer, IggyClient, PollingStrategy, PollOptions
 
 STREAM_NAME = "sample-stream"
 TOPIC_NAME = "sample-topic"
@@ -115,11 +115,10 @@ async def main():
         consumer=Consumer.Single("sample-consumer"),
         partition_id=PARTITION_ID,
         polling_strategy=PollingStrategy.Next(),
-        count=10,
-        auto_commit=True,
+        options=PollOptions(count=10, commit=CommitPolicy.OnRead()),
     )
 
-    for message in polled_messages:
+    for message in polled_messages.messages:
         payload = message.payload().decode("utf-8")
         print(f"Offset: {message.offset()}, Payload: {payload}")
 
@@ -146,7 +145,7 @@ Offset: 9, Payload: message-9
 
 ## Consumer group
 
-A consumer group lets several copies of a consumer share a topic's partitions, with each message going to only one of them. Groups need a binary transport (TCP, QUIC or WebSocket); HTTP doesn't support them.
+A consumer group lets several copies of a consumer share a topic's partitions, with each message going to only one of them. Groups need a binary transport (TCP, QUIC or WebSocket). HTTP doesn't support them.
 
 Save this as `consumer_group.py`:
 

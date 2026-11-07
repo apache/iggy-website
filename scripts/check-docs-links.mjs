@@ -34,6 +34,7 @@ import { join, relative } from "path";
 const TREES = [
   { root: "content/docs", base: "/docs" },
   { root: "content/docs-0.8", base: "/docs/0.8" },
+  { root: "content/docs-0.9", base: "/docs/0.9" },
 ];
 
 function walk(dir) {

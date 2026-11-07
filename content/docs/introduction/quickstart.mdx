@@ -5,7 +5,7 @@ description: "Run the Iggy server and send and receive your first message with t
 
 This page gets a server running and a message sent and received, in one file. To build separate producer and consumer applications step by step, see [Getting started](/docs/introduction/getting-started). For other languages, see the [SDK section](/docs/sdk/introduction).
 
-On Linux the server needs kernel 5.19 or newer. macOS has no kernel requirement, but Docker Desktop on 0.9.0 needs one extra setting. See [System requirements](/docs/server/introduction#system-requirements).
+Apache Iggy 0.10.0 skips memory binding on a single-NUMA-node topology. The older Docker Desktop workaround is no longer required for that case. Use `IGGY_SHARDING_CPU_ALLOCATION=all` when you explicitly want CPU pinning without NUMA memory binding.
 
 ## Start the server
 
@@ -16,7 +16,7 @@ docker run --rm \
   -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
   -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
-  apache/iggy:0.9.0
+  apache/iggy:0.10.0
 ```
 
 See [Docker & Helm](/docs/server/docker) for what each option does.
@@ -28,7 +28,7 @@ Create a project and add the SDK and the async runtime:
 ```bash
 cargo new iggy-quickstart
 cd iggy-quickstart
-cargo add iggy
+cargo add iggy@0.12.0
 cargo add tokio --features macros,rt-multi-thread
 ```
 
@@ -44,11 +44,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client.connect().await?;
 
     // Re-running this example is fine: an existing stream or topic is not an error.
-    match client.create_stream("my-stream").await {
+    match client.create_stream("my-stream", &StreamCreateOptions::default()).await {
         Ok(_) | Err(IggyError::StreamNameAlreadyExists(_)) => {}
         Err(e) => return Err(e.into()),
     }
-    // Every topic knob rides `TopicCreateOptions`; fields left as `None`
+    // Every topic knob rides `TopicCreateOptions`. Fields left as `None`
     // resolve against the server's defaults at admission.
     match client
         .create_topic(
@@ -81,11 +81,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .poll_messages(
             &"my-stream".try_into()?,
             &"my-topic".try_into()?,
-            Some(0),
+            0,
             &Consumer::default(),
             &PollingStrategy::next(),
-            10,
-            true,
+            PollOptions {
+                count: 10,
+                commit: CommitPolicy::OnRead,
+                ..PollOptions::default()
+            },
         )
         .await?;
 

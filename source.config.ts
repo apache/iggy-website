@@ -36,6 +36,10 @@ export const docs08 = defineDocs({
   dir: "content/docs-0.8",
 });
 
+export const docs09 = defineDocs({
+  dir: "content/docs-0.9",
+});
+
 export const blogPosts = defineCollections({
   type: "doc",
   dir: "content/blog",

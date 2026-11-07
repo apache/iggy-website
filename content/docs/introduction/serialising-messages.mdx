@@ -5,7 +5,7 @@ description: "Choose a format for your message payloads, and send more than one 
 
 The server stores each message payload as bytes without interpreting it, so you choose the format: plain text, JSON, Protobuf or anything else. This page shows how to send more than one kind of message to the same topic, so the consumer knows how to decode each one.
 
-The examples are in Rust and come from the [examples](https://github.com/apache/iggy/tree/master/examples/rust) in the Apache Iggy repository.
+The examples are in Rust and come from the [examples](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust) in the Apache Iggy repository.
 
 ## One kind of message
 
@@ -19,7 +19,7 @@ Wrap each message in an envelope that names its type, and send the envelope as J
 { "message_type": "order_confirmed", "payload": "{\"order_id\":42,\"price\":99.5}" }
 ```
 
-The consumer decodes the envelope, reads `message_type`, then decodes the inner payload as that type. This works with any client, but every message is decoded twice, and the inner payload is a JSON string inside the envelope. See the [message-envelope example](https://github.com/apache/iggy/tree/master/examples/rust/src/message-envelope).
+The consumer decodes the envelope, reads `message_type`, then decodes the inner payload as that type. This works with any client, but every message is decoded twice, and the inner payload is a JSON string inside the envelope. See the [message-envelope example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/message-envelope).
 
 ## A type field in a header
 
@@ -59,9 +59,9 @@ match message_type {
 }
 ```
 
-This is the better choice for Protobuf or any other binary format, because the payload doesn't have to fit inside JSON. See the [message-type example](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers/message-type).
+This is the better choice for Protobuf or any other binary format, because the payload doesn't have to fit inside JSON. See the [message-type example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/message-headers/message-type).
 
-Header values don't have to be strings. They can also be numbers, booleans or raw bytes, so you can add things like a trace ID next to the type, as the [typed-headers example](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers/typed-headers) shows. The [message-compression example](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers/message-compression) uses a header in the same way to record how the payload was compressed.
+Header values don't have to be strings. They can also be numbers, booleans or raw bytes, so you can add things like a trace ID next to the type, as the [typed-headers example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/message-headers/typed-headers) shows. The [message-compression example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/message-headers/message-compression) uses a header in the same way to record how the payload was compressed.
 
 ## Size limits
 
