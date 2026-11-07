@@ -1,0 +1,3906 @@
+# Apache Iggy documentation: SDK
+
+These docs describe server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0. This file joins every page in the SDK section. For the other sections, see https://iggy.apache.org/llms.txt. For all sections in one file, see https://iggy.apache.org/llms-full.txt.
+
+---
+
+# Introduction
+
+> The official Iggy client SDKs, their packages and registries, and the transports each one supports.
+
+Rendered page: https://iggy.apache.org/docs/sdk/introduction/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/introduction.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+Iggy provides official client SDKs in multiple languages. The **Rust SDK** is the most feature-complete, offering both a high-level API (with auto-batching, consumer groups, offset management, retry logic) and a low-level API for direct protocol operations.
+
+| Language | Package | Registry | Transport | Connection string |
+|----------|---------|----------|-----------|-------------------|
+| Rust | [iggy](https://crates.io/crates/iggy) | crates.io | TCP, QUIC, HTTP, WebSocket | Yes |
+| Python | [apache-iggy](https://pypi.org/project/apache-iggy/) | PyPI | TCP, QUIC, HTTP, WebSocket | Yes (PyO3 wrapper) |
+| Java | [iggy](https://mvnrepository.com/artifact/org.apache.iggy/iggy) | Maven Central | TCP, HTTP | Yes |
+| Node.js | [apache-iggy](https://www.npmjs.com/package/apache-iggy) | npm | TCP | Yes |
+| Go | [iggy-go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) | pkg.go.dev | TCP | Yes |
+| C# | [Apache.Iggy](https://www.nuget.org/packages/Apache.Iggy/) | NuGet | TCP, HTTP | Yes |
+| C++ | [iggy-cpp](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/cpp) | GitHub (WIP) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
+| PHP | [apache/iggy-php](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/php) | GitHub (source) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
+| Swift | [Iggy](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/swift) | Swift Package Manager | TCP with optional TLS | Yes |
+
+Python, C++, and PHP wrap the Rust SDK, so they inherit all transport protocols when using connection strings. Java and C# implement TCP and HTTP natively. Go and Node.js currently support TCP *only*.
+
+The Rust SDK is always the first to receive new features.
+
+## Server compatibility
+
+Server 0.10.0 uses binary protocol 0.12.0. Upgrade clients and server together. There is no fallback to the 0.9 protocol. These are the component versions prepared for the upcoming release. Until publication, build the matching source release candidate.
+
+| Component | Server 0.10.0 | Server 0.9.0 |
+| --- | --- | --- |
+| Rust SDK (`iggy`) | `0.12.0` | `0.11.0` |
+| CLI (`iggy-cli`) | `0.15.0` | `0.14.0` |
+| Python SDK (`apache-iggy`) | `0.10.0` | `0.9.0` |
+| Java SDK (`org.apache.iggy:iggy`) | `0.10.0` | `0.9.0` |
+| Node.js SDK (`apache-iggy`) | `0.11.0` | `0.10.0` |
+| Go SDK (`github.com/apache/iggy/foreign/go`) | `v0.10.0` | `v0.9.0` |
+| C# SDK (`Apache.Iggy`) | `0.10.0` | `0.9.0` |
+| Swift SDK | `0.2.0` | Not included |
+| C++ SDK | `0.2.0`, source | Source |
+| PHP SDK | `0.2.0`, source | Source |
+
+C++ and PHP are included in the source archive. Swift uses the root Swift Package Manager manifest. See [Upgrading](https://iggy.apache.org/docs/server/upgrading) before replacing an existing deployment.
+
+## Prerequisites
+
+The examples below use the `iggy`/`iggy` root credentials. For a new local development instance, with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides, use:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+`--fresh` **wipes this replica's local data directory**. In a cluster, it can recover stored credentials from another replica. The environment takes precedence over the default-credentials flag, and bootstrap settings do not replace recovered credentials. This setup is for *development only*. Use a disposable data directory. See [Connection Strings](https://iggy.apache.org/docs/sdk/connection-strings) for the authentication details.
+
+## Connection string
+
+Every SDK has connection-string support. Accepted schemes, credentials and options differ by language. Java currently accepts username/password TCP strings with `tls` and `tls_ca_file` only. They provide a compact way to configure the client, including the transport protocol, credentials, server address, and options.
+
+**Format:**
+
+```text
+iggy://username:password@host:port[?options]
+```
+
+**Transport selection** via scheme:
+
+| Scheme | Transport |
+|--------|-----------|
+| `iggy://` | TCP (default) |
+| `iggy+tcp://` | TCP |
+| `iggy+quic://` | QUIC |
+| `iggy+http://` | HTTP |
+| `iggy+ws://` | WebSocket |
+
+**Personal Access Token** authentication: any credential without a colon is treated as a PAT. Server-minted tokens carry no prefix, so paste the token exactly as returned:
+
+```text
+iggy://<personal-access-token>@host:port
+```
+
+**Examples:**
+
+The Rust snippets assume an async Tokio context. HTTP requires an explicit login after construction. Connection-string credentials are applied automatically only by the binary transports.
+
+```rust
+use iggy::prelude::*;
+
+// Rust - TCP with default options
+let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")?;
+
+// Rust - QUIC
+let client = IggyClient::from_connection_string("iggy+quic://iggy:iggy@127.0.0.1:8080")?;
+
+// Rust - TCP with options
+let client = IggyClient::from_connection_string(
+    "iggy://iggy:iggy@127.0.0.1:8090?nodelay=true&reconnection_retries=unlimited&heartbeat_interval=5s"
+)?;
+```
+
+```python
+from apache_iggy import IggyClient
+
+client = IggyClient.from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")
+```
+
+The option keys differ per transport and unknown keys are rejected as **hard errors**. See [Connection Strings](https://iggy.apache.org/docs/sdk/connection-strings) for the full per-transport option tables, defaults, and default ports.
+
+## Common operations
+
+The Rust SDK exposes these operations through traits on `IggyClient`. Availability and method names vary across foreign SDKs and transports:
+
+- **SystemClient** - ping, stats, snapshot
+- **StreamClient** - create, get, list, update, delete streams
+- **TopicClient** - create, get, list, update, delete topics
+- **PartitionClient** - create, delete partitions
+- **SegmentClient** - delete segments
+- **MessageClient** - send, poll messages
+- **ConsumerOffsetClient** - get, store, delete consumer offsets
+- **ConsumerGroupClient** - create, get, list, delete consumer groups
+- **UserClient** - create, get, list, update, delete users, change password, update permissions
+- **PersonalAccessTokenClient** - create, list, delete PATs
+- **ClusterClient** - cluster metadata
+
+## Polling strategies
+
+When polling messages, you can choose from several strategies (Rust method names are shown):
+
+| Strategy | Description |
+|----------|-------------|
+| `offset(n)` | Start from a specific offset |
+| `timestamp(t)` | Start at or after the given broker append timestamp |
+| `first()` | Start from the earliest available message |
+| `last()` | Read the tail ending at the committed offset, up to the requested count |
+| `next()` | Continue after the stored consumer offset, or start at zero if none is stored |
+
+## Partitioning strategies
+
+When sending messages, you can control partition routing (Rust method names are shown):
+
+| Strategy | Description |
+|----------|-------------|
+| `partition_id(n)` | Send to a specific partition |
+| `balanced()` | Round-robin across partitions |
+| `messages_key(key)` | Hash-based routing by key |
+
+The Rust SDK resolves these strategies before sending a binary request. The HTTP API can resolve the strategy on the server. Binary clients route to the selected partition primary.
+
+## Read and recovery APIs
+
+Use [deferred polling](https://iggy.apache.org/docs/sdk/deferred-polling) to wait for messages. A partition reader groups partitions by primary, and a consumer hands messages to the application one at a time. `PollOptions` defines the count, wait, byte budget and commit policy. Manual commits are the shared default.
+
+Resource creation accepts typed options. Updates use patches that change only supplied fields and can reset supported defaults. See [Topic options](https://iggy.apache.org/docs/server/topic-options) and [Stream options](https://iggy.apache.org/docs/server/stream-options).
+
+SDKs also expose [metadata changes](https://iggy.apache.org/docs/sdk/metadata-changes) and raw requests to a selected replica. Recovery APIs differ. Swift does not expose retained mutation resolution or pending mutation limits. It has abandonment for uncertain committing reads. Read each language guide before implementing retries after an uncertain write.
+
+---
+
+# Connection Strings
+
+> The canonical reference for Iggy connection strings, covering every scheme, credential form and option.
+
+Rendered page: https://iggy.apache.org/docs/sdk/connection-strings/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/connection-strings.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+A connection string configures an Iggy client in a single line: transport, credentials, server address, and options. This page is the canonical reference for every scheme, credential form, and option key.
+
+The tables below describe the Rust SDK and its Python, C++ and PHP bindings. Native Go, Node.js, C# and Swift clients also accept TCP connection strings. Java supports a smaller subset, described below.
+
+## Format
+
+```text
+iggy[+transport]://credentials@host:port[?option=value&option=value]
+```
+
+The host and port are **always required**. Use a hostname, IPv4 address or bracketed IPv6 address such as `[::1]:8090`. Options are appended as `key=value` pairs separated by `&`. Scheme names and option keys are case-sensitive.
+
+The parser does not percent-decode credentials or option values. Reserved separators such as `:` and `@` cannot be escaped inside a username or password. Use a PAT for credentials that contain them. Duplicate option keys use the last value. Boolean options enable only for the literal `true`. Use `false` to disable them.
+
+**Unknown option keys are hard errors.** The parser rejects the whole string with `InvalidConnectionString` instead of ignoring the key, so a typo fails fast rather than silently falling back to a default.
+
+## Transport selection
+
+The scheme picks the transport. Each transport has its own default server port:
+
+| Scheme | Transport | Default server port |
+|--------|-----------|---------------------|
+| `iggy://` | TCP (default) | 8090 |
+| `iggy+tcp://` | TCP | 8090 |
+| `iggy+quic://` | QUIC | 8080 |
+| `iggy+http://` | HTTP | 3000 |
+| `iggy+ws://` | WebSocket | 8092 |
+
+## Credentials
+
+Two forms are accepted:
+
+**Username and password**, separated by a colon. Both parts must be non-empty:
+
+```text
+iggy://username:password@127.0.0.1:8090
+```
+
+**Personal Access Token**: any credential without a colon is treated as a PAT. Server-minted tokens are plain base64 strings with no prefix, so paste the token exactly as the server returned it:
+
+```text
+iggy://<personal-access-token>@127.0.0.1:8090
+```
+
+**Do not prepend anything** to the token. Strings like `iggypat-...` appear only in Iggy's own test code. A real token with a prefix added will fail to log in.
+
+The examples use `iggy`/`iggy`. For a new local development instance, with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides, use:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+The environment takes precedence over the flag. Stored or recovered root credentials are not replaced by bootstrap settings. `--fresh` deletes this replica's local data. In a cluster it can recover committed state, including credentials, from another replica. Use this reset only for disposable development data. A fresh standalone server requires credentials. Provision root credentials on every replica for a new cluster.
+
+TCP, QUIC, and WebSocket apply connection-string credentials during `connect()`. HTTP requires an explicit login, as described below.
+
+## Duration values
+
+Options typed as durations take human-readable values such as `5s`, `500ms`, or `1m`, unless a table below says the value is a plain number. Heartbeat and reconnection intervals must be greater than zero. The reconnection cooldown can be zero.
+
+## TCP options
+
+| Key | Description | Default |
+|-----|-------------|---------|
+| `tls` | Enable TLS (`true`/`false`) | `false` |
+| `tls_domain` | Name for TLS validation. When empty, use the dialed hostname or IP | empty |
+| `tls_ca_file` | PEM file of trusted CA certificates, replacing the built-in roots | none |
+| `reconnection_retries` | Retry passes over known endpoints after the initial pass, or `unlimited` | `unlimited` |
+| `reconnection_interval` | Base of exponential backoff with full jitter, capped at ten seconds | `1s` |
+| `reestablish_after` | Stable connection duration that resets retry backoff | `5s` |
+| `heartbeat_interval` | Duration between heartbeats | `5s` |
+| `nodelay` | Enable `TCP_NODELAY` (`true`/`false`) | `false` |
+
+```text
+iggy://iggy:iggy@127.0.0.1:8090?tls=true&tls_domain=localhost&tls_ca_file=core/certs/iggy_ca_cert.pem&reconnection_retries=5&heartbeat_interval=3s&nodelay=true
+```
+
+With `tls=true`, TCP always validates the server certificate. Without `tls_ca_file`, it uses the built-in Mozilla roots. An explicit CA file can trust a private CA. The example above runs from the repository root against a TLS-enabled listener using the test certificate and key in `core/certs/iggy_cert.pem` and `core/certs/iggy_key.pem`. Those certificates are for local testing. See [Security](https://iggy.apache.org/docs/server/security) for TLS configuration.
+
+## QUIC options
+
+The QUIC reconnection keys **differ from TCP**: `reconnection_max_retries` (not `reconnection_retries`) and `reconnection_reestablish_after` (not `reestablish_after`). Using the TCP names in a QUIC string is a hard error.
+
+| Key | Description | Default |
+|-----|-------------|---------|
+| `response_buffer_size` | Maximum bytes read for one response | Protocol maximum record reply size |
+| `max_concurrent_bidi_streams` | Maximum concurrent peer-initiated bidirectional streams | `10000` |
+| `datagram_send_buffer_size` | Datagram send buffer size in bytes | `100000` |
+| `initial_mtu` | Initial UDP payload size in bytes, clamped to at least `1200` | `1200` |
+| `send_window` | Send window size in bytes | `100000` |
+| `receive_window` | Connection receive window size in bytes | `100000` |
+| `keep_alive_interval` | Keep-alive interval in milliseconds. `0` disables it | `5000` |
+| `max_idle_timeout` | Idle timeout in milliseconds. `0` leaves Quinn's `30000` ms default | `10000` |
+| `validate_certificate` | Validate the server certificate (`true`/`false`) | `false` |
+| `heartbeat_interval` | Duration between heartbeats | `5s` |
+| `reconnection_max_retries` | Number of reconnection attempts, or `unlimited` | `unlimited` |
+| `reconnection_interval` | Duration between reconnection attempts | `1s` |
+| `reconnection_reestablish_after` | Stable connection duration that resets retry backoff | `5s` |
+
+```text
+iggy+quic://iggy:iggy@127.0.0.1:8080?validate_certificate=false&reconnection_max_retries=5
+```
+
+QUIC certificate validation is disabled by default. When enabled, it uses the platform verifier and the connection-string configuration's server name, `localhost`. For a different certificate name, use the Rust QUIC configuration builder's `with_server_name()` method. Values above QUIC's 62-bit limit for `max_concurrent_bidi_streams`, `receive_window`, or `max_idle_timeout` are rejected with `InvalidConfiguration`.
+
+## WebSocket options
+
+| Key | Description | Default |
+|-----|-------------|---------|
+| `heartbeat_interval` | Duration between heartbeats | `5s` |
+| `reconnection_retries` | Number of reconnection attempts, or `unlimited` | `unlimited` |
+| `reconnection_interval` | Duration between reconnection attempts | `1s` |
+| `reestablish_after` | Stable connection duration that resets retry backoff | `5s` |
+| `read_buffer_size` | Read buffer size in bytes | `131072` |
+| `write_buffer_size` | Target write buffer size in bytes | `131072` |
+| `max_write_buffer_size` | Maximum write buffer size in bytes. Must exceed `write_buffer_size` | `usize::MAX` |
+| `max_message_size` | Maximum incoming WebSocket message size in bytes | `67108864` |
+| `max_frame_size` | Maximum incoming frame payload size in bytes | `16777216` |
+| `accept_unmasked_frames` | Has no effect on client connections | `false` |
+| `tls` | Enable TLS (`true`/`false`) | `false` |
+| `tls_domain` | Name for TLS validation. When empty, use the connected IP | empty |
+| `tls_ca_file` | PEM file of trusted CA certificates when validation is enabled | none |
+| `tls_validate_certificate` | Validate the server certificate (`true`/`false`) | `false` |
+
+```text
+iggy+ws://iggy:iggy@127.0.0.1:8092?heartbeat_interval=5s&max_message_size=1048576
+```
+
+WebSocket TLS does not validate the server certificate unless `tls_validate_certificate=true`. With validation enabled, `tls_ca_file` replaces the built-in Mozilla roots. Size limits cannot be removed through connection strings. Use the WebSocket configuration object for an unlimited message or frame size.
+
+## HTTP options
+
+| Key | Description | Default |
+|-----|-------------|---------|
+| `heartbeat_interval` | Duration between heartbeats | `5s` |
+| `retries` | Maximum retries for transient request failures | `3` |
+
+```text
+iggy+http://iggy:iggy@127.0.0.1:3000?retries=5
+```
+
+The HTTP scheme constructs a plain `http://` API URL. Use the Rust HTTP builder's `with_api_url()` for HTTPS. HTTP parses the credential field but does not log in with it. In Rust, call `login_user()` or `login_with_personal_access_token()` explicitly before protected requests.
+
+## Usage
+
+In Rust, construct clients inside a Tokio runtime, which QUIC needs even before `connect()`. The following snippet assumes an async function returning `Result<_, IggyError>` and the matching [Rust SDK setup](https://iggy.apache.org/docs/sdk/rust/intro).
+
+```rust
+use iggy::prelude::*;
+
+// TCP with default options
+let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")?;
+
+// QUIC
+let client = IggyClient::from_connection_string("iggy+quic://iggy:iggy@127.0.0.1:8080")?;
+
+// WebSocket
+let client = IggyClient::from_connection_string("iggy+ws://iggy:iggy@127.0.0.1:8092")?;
+
+// HTTP
+let client = IggyClient::from_connection_string("iggy+http://iggy:iggy@127.0.0.1:3000")?;
+client.login_user("iggy", "iggy").await?;
+```
+
+```python
+from apache_iggy import IggyClient
+
+client = IggyClient.from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")
+```
+
+When you need settings a connection string cannot express (client-side encryption, a custom `Partitioner`, and similar), start from `IggyClientBuilder::from_connection_string()` and extend the builder on top.
+
+## Pending-operation limits
+
+Rust binary transport strings accept `max_pending_operations` and `max_pending_operation_bytes`. Defaults are 256 operations and 67108864 bytes. Both must be positive. The byte budget includes frozen headers and bodies, so it must fit the largest mutation you need to send.
+
+Committing fetches use a separate pool with the same configured limits. That pool stores target metadata, not reply bodies, and retains unknown progress across sessions. Exhausting a limit rejects or delays further work according to the operation path. See [Client failover](https://iggy.apache.org/docs/clustering/client-failover).
+
+## Native SDK differences
+
+Java accepts only TCP schemes, username/password credentials, `tls` and `tls_ca_file`. It rejects PAT connection strings and other options. Go's `client.ParseConnectionString` returns options for `client.WithTcp`. Node.js constructors accept a string except `SimpleClient`, which wraps an existing raw client. C# exposes its connection-string factory described in the [C# guide](https://iggy.apache.org/docs/sdk/csharp/guide).
+
+Swift accepts the TCP option names, but checks and then ignores pending mutation limits because it has no retained mutation pool. Its reconnect interval is a full pause between endpoint rounds. Node.js accepts `reestablish_after` for format compatibility without applying a Node equivalent. Do not assume one SDK's parser and timing behavior across all languages.
+
+---
+
+# Deferred Polling
+
+> Wait for messages, read several partitions and choose when to store consumer offsets.
+
+Rendered page: https://iggy.apache.org/docs/sdk/deferred-polling/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/deferred-polling.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+Deferred polling lets the server wait for messages before answering a read. The read returns when enough messages are available or its wait ends. A quiet partition does not need a repeated request loop.
+
+## Choose read limits
+
+`PollOptions` separates read limits from the polling strategy and consumer identity. A strategy selects the starting position, such as a specific offset or the next stored offset.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `count` | 1000 | Maximum messages in one read |
+| `max_wait` | Zero | Zero returns immediately. A positive duration enables waiting |
+| `min_count` | 1 | Messages needed to finish the wait early, from 1 through `count` |
+| `max_bytes` | 1 MiB | Reply budget, including binary metadata and batch framing |
+| `commit` | Manual | When to store the returned position |
+
+These are the shared poll defaults. High-level consumers can select a positive wait by default. The SDK derives a request timeout from the wait plus 10 seconds. The wire protocol permits waits up to 600 seconds, but the server caps them at `sharding.deferred_poll_max_wait`, 30 seconds by default.
+
+A reply can contain fewer than `min_count` messages when the wait ends. The first message can exceed `max_bytes` and return alone, so a large message does not prevent progress. Treat the byte budget as a batching limit, not an absolute allocation guarantee.
+
+## Read several partitions
+
+A partition reader groups targets by their current primary and uses FetchMessages. Each fetch applies `count`, `min_count` and `max_bytes` across its targets together. The reader can keep several fetches active. It can return a partition with messages without waiting for a quiet partition first.
+
+A group consumer uses its assigned partitions. Assignment changes and primary changes require a refresh before further reads. Use the SDK reader or consumer to manage this state. A raw fetch caller must also supply the route and ownership information required by the protocol.
+
+## Choose when to commit
+
+| Policy | Behavior |
+| --- | --- |
+| Manual | The application stores checkpoints after successful processing |
+| On read | The server submits the last returned offset as part of the read |
+| Automatic | A reader or consumer tracks progress and stores it by interval or message count |
+
+A one-shot poll rejects an automatic policy because it has no continuing processing state. On-read commits can precede application processing. A failover before offset replication can also deliver the last batch again. Use manual commits or automatic commits after processing when messages must be processed before their offsets advance.
+
+The Rust automatic policy defaults to every 10,000 messages or five seconds, whichever happens first, after processing. It also stores progress on close, shutdown and partition revocation. Processing counts when the application requests the next item, a handler succeeds, or the reader closes. Marked progress supports applications that finish work concurrently. Do not close a reader as if processing succeeded after a failed handler.
+
+## Cancellation and uncertain results
+
+Cancellation removes a parked request when the server receives it. If a committing poll loses its reply, the client cannot assume that its offset stayed unchanged. SDK recovery tracks the uncertain operation and blocks conflicting work until the application resolves or abandons it. Abandoning permits later work but does not undo an offset that already committed.
+
+## HTTP reads
+
+Use `GET /streams/{stream_id}/topics/{topic_id}/messages/deferred` for a deferred read without offset commits. A read that sets `auto_commit=true` must use `POST` on that path. The server rejects a committing `GET`.
+
+Raw HTTP defaults differ from `PollOptions`: count is 10, wait is one second, and request timeout is 11 seconds. Minimum count is one and the byte budget is 1 MiB.
+
+The query uses `wait_us`, `min_count`, `max_bytes` and `request_timeout_us` alongside the normal consumer, partition, strategy and count fields. A positive wait needs at least one second between the wait and request timeout. Configure a proxy timeout long enough to receive the reply.
+
+## Server capacity
+
+The [sharding configuration](https://iggy.apache.org/docs/server/configuration#sharding) bounds parked requests, per-session requests, disk reads and completion delivery. HTTP requests without a binary session count against their user. Capacity exhaustion can return a retryable error. Keep retries within a bounded application deadline.
+
+---
+
+# Idempotent Producers
+
+> Prevent duplicate appends of a retried producer batch and understand the limits of that guarantee.
+
+Rendered page: https://iggy.apache.org/docs/sdk/idempotent-producers/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/idempotent-producers.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+An idempotent producer lets a partition recognize a batch it already accepted. Each batch carries a producer ID, epoch and sequence. This identity survives a reconnect under a new client session. It is separate from the ID field of an individual message.
+
+## Rust producer
+
+The Rust high-level producer supports opt-in idempotence on binary transports:
+
+```rust
+use iggy::prelude::*;
+use std::str::FromStr;
+
+let producer = client.producer("orders", "created")?.idempotent().build();
+producer.init().await?;
+producer.send_one(IggyMessage::from_str("order-created")?).await?;
+producer.shutdown().await;
+```
+
+The fragment assumes a connected `IggyClient` in an async function. Initialization obtains the producer ID. The producer selects each chunk's partition and sends chunks for that partition in sequence. The default producer does not enable this mode.
+
+Do not treat a message ID as a deduplication key. Recreating a producer or submitting the same business event as a new batch is not the same as retrying the original producer batch. Consumers still need application-level handling for repeated work.
+
+## Kafka gateway
+
+Set `IGGY_KAFKA_IDEMPOTENT_PRODUCERS=true` on the Kafka gateway to enable its idempotent producer path. The bridge must also be enabled. The default is false. Without this switch, a Kafka producer can obtain an ID but its retries do not receive the batch deduplication guarantee.
+
+The gateway does not support transactions. Idempotent appends do not make application processing and offset commits one atomic operation. See [Kafka gateway](https://iggy.apache.org/docs/gateways/kafka).
+
+## Retained producer history
+
+Each partition retains the last five batches of each producer and at most 4096 producers. A producer idle for 24 hours can expire. A retry outside this retained history can append a duplicate. These limits also apply to the gateway and source connector paths.
+
+## Compatibility and recovery
+
+Upgrade every reader of the topic to a compatible 0.10 client before writing producer-aware batches. The batch format contains additional producer fields. The older SDKs cannot safely decode it.
+
+Session retry protection and producer idempotence solve different problems. A client can retain an uncertain request and resolve it using its original identity. Ending that session can remove receipt access. An idempotent producer adds batch identity at the partition level, but does not turn an uncertain application operation into a confirmed success.
+
+---
+
+# Metadata Changes
+
+> Follow resource and activity changes, retain a position and rebuild after history expires.
+
+Rendered page: https://iggy.apache.org/docs/sdk/metadata-changes/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/metadata-changes.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The metadata change log records public results of committed metadata operations. It includes resource changes, permissions, sessions and consumer group membership. Reading it requires root or the global `manage_servers` permission.
+
+## Select a starting point
+
+| Start | Use |
+| --- | --- |
+| Earliest | Read the oldest retained changes |
+| Latest | Establish a position at the current end |
+| After | Continue after a saved cursor |
+| Current | Read pages of current state before following changes |
+
+A cursor identifies a position in this log. Save the returned `next` value after applying the corresponding records. Cursor text starts with `mc1_`. Current-state page tokens start with `cs1_`. Treat both as opaque values and use the SDK parsers.
+
+Queries can select resource or activity groups. Current-state queries must include parent groups, such as streams when topics are selected. Limits range from 1 through 1000. Time bounds are not valid with Latest or Current starts.
+
+## Handle each response
+
+| Status | Action |
+| --- | --- |
+| Ok | Apply records or current items and save the returned position |
+| Behind | Wait and retry without advancing the position |
+| Expired | Rebuild because the requested history is no longer retained |
+| Reset | Rebuild because the cursor belongs to a different history |
+
+A rebuild reads Current pages, then follows changes from the returned anchor. Keep the rebuilt state private until a change page reports no more records and reaches at least the last current page's `head_op`. A sequence of current pages alone does not establish that the mirror caught up.
+
+Unknown record kinds retain their codes and raw bodies. Stop without advancing the cursor when the application cannot apply a record. Skipping it can leave a mirror inconsistent. Key material is never exposed in stream records. Their public options contain only the key source and fingerprints.
+
+## SDK methods
+
+| SDK | Method |
+| --- | --- |
+| Rust | `get_metadata_changes` |
+| Python | `get_metadata_changes` |
+| Node.js | `system.getMetadataChanges` |
+| Go | `GetMetadataChanges` |
+| Java | `getMetadataChanges` on the system client |
+| C# | `GetMetadataChangesAsync` |
+| C++ | `GetMetadataChanges` |
+| PHP | `getMetadataChanges` |
+| Swift | `getMetadataChanges` |
+
+The [Python implementation example](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/foreign/python/README.md#metadata-changes) shows follow and rebuild loops. The other SDK source guides show their equivalent typed queries.
+
+## Retention and node freshness
+
+`metadata.change_log_resource_capacity` defaults to 65536 records. `metadata.change_log_activity_capacity` defaults to 16384 records. Each budget also limits record bodies to 128 MiB. A busy activity log does not evict resource history. Nodes can retain different depths.
+
+A node can lag behind the metadata primary. A cursor that is valid elsewhere can receive Behind from that node. Wait or use a node that has caught up. Expired and Reset require rebuilding, not a loop over the same stale position.
+
+---
+
+# Intro
+
+> The Rust SDK, the primary and most complete Iggy client, and where its source lives.
+
+Rendered page: https://iggy.apache.org/docs/sdk/rust/intro/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/rust/intro.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The Rust SDK is the primary and most feature-complete client for Iggy. It is available on [crates.io](https://crates.io/crates/iggy) and the source code is part of the [core repository](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/sdk).
+
+Run from your application crate to add the published SDK:
+
+```bash
+cargo add iggy@0.12.0
+```
+
+Use an SDK release compatible with your server. For unreleased changes, build both from the same checkout. The [Getting Started](https://iggy.apache.org/docs/introduction/getting-started) guide shows the source dependency setup.
+
+## Prerequisites
+
+The examples below log in with `iggy`/`iggy`. For a new local development instance, with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides, use:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+`--fresh` **wipes this replica's local data directory**. Environment credentials take precedence over the flag, and bootstrap settings do not replace recovered credentials. In a cluster, a fresh replica can recover credentials from peers. Use disposable development data. A fresh server requires explicit credentials or the development flag.
+
+## High-level vs low-level API
+
+The SDK provides two layers. The snippets below assume an async Tokio context with a `Result` return type.
+
+**High-level API (recommended)** - the easiest way to get started. It handles connection management, auto-batching, consumer group lifecycle, offset commits, retry logic, and reconnection out of the box. Use `IggyClient`, `IggyProducer`, and `IggyConsumer` for the best developer experience.
+
+```rust
+use iggy::prelude::*;
+
+// Connect with a connection string
+let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")?;
+client.connect().await?;
+
+// Or use the builder
+let client = IggyClientBuilder::new()
+    .with_tcp()
+    .with_server_address("127.0.0.1:8090".to_string())
+    .build()?;
+client.connect().await?;
+client.login_user("iggy", "iggy").await?;
+```
+
+**Low-level API** - direct access to individual protocol operations. Useful when you need fine-grained control over every request, or when building custom abstractions on top.
+
+The high-level API is built on top of the low-level one, so you can always drop down when needed.
+
+## Connection string
+
+The connection string is the simplest way to configure the client. It supports all four transport protocols:
+
+```text
+iggy://user:pass@host:port              (TCP, default)
+iggy+tcp://user:pass@host:port          (TCP, explicit)
+iggy+quic://user:pass@host:port         (QUIC)
+iggy+http://user:pass@host:port         (HTTP)
+iggy+ws://user:pass@host:port           (WebSocket)
+```
+
+TCP, QUIC, and WebSocket apply connection-string credentials on `connect()`. HTTP requires an explicit login and supports ordinary consumers only.
+
+Options can be appended as query parameters:
+
+```text
+iggy://iggy:iggy@127.0.0.1:8090?nodelay=true&heartbeat_interval=5s
+iggy://iggy:iggy@127.0.0.1:8090?reconnection_retries=unlimited&heartbeat_interval=5s
+```
+
+Personal Access Tokens are also supported. Any credential without a colon is treated as a PAT. Paste the token exactly as the server returned it, with **no prefix**:
+
+```text
+iggy://<personal-access-token>@127.0.0.1:8090
+```
+
+See [Connection Strings](https://iggy.apache.org/docs/sdk/connection-strings) for the full per-transport option tables and defaults.
+
+## Quick example
+
+```rust
+use iggy::prelude::*;
+use std::str::FromStr;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")?;
+    client.connect().await?;
+
+    // Re-running this example is fine: an existing stream or topic is not an error.
+    match client.create_stream("my-stream", &StreamCreateOptions::default()).await {
+        Ok(_) | Err(IggyError::StreamNameAlreadyExists(_)) => {}
+        Err(e) => return Err(e.into()),
+    }
+    // Every topic knob rides `TopicCreateOptions`. Fields left as `None`
+    // resolve against the server's defaults at admission.
+    match client
+        .create_topic(
+            &"my-stream".try_into()?,
+            "my-topic",
+            &TopicCreateOptions {
+                partitions_count: Some(1),
+                message_expiry: Some(IggyExpiry::NeverExpire),
+                ..TopicCreateOptions::default()
+            },
+        )
+        .await
+    {
+        Ok(_) | Err(IggyError::TopicNameAlreadyExists(_, _)) => {}
+        Err(e) => return Err(e.into()),
+    }
+
+    let msg = IggyMessage::from_str("hello world")?;
+    client
+        .send_messages(
+            &"my-stream".try_into()?,
+            &"my-topic".try_into()?,
+            &Partitioning::partition_id(0),
+            &mut [msg],
+        )
+        .await?;
+    println!("Message sent");
+
+    let polled = client
+        .poll_messages(
+            &"my-stream".try_into()?,
+            &"my-topic".try_into()?,
+            0,
+            &Consumer::default(),
+            &PollingStrategy::next(),
+            PollOptions {
+                count: 10,
+                commit: CommitPolicy::OnRead,
+                ..PollOptions::default()
+            },
+        )
+        .await?;
+
+    for message in &polled.messages {
+        let payload = std::str::from_utf8(&message.payload)?;
+        println!("Offset: {}, Payload: {}", message.header.offset, payload);
+    }
+
+    Ok(())
+}
+```
+
+Partition IDs are **0-based**: the first partition of a topic is partition `0`. The consumer uses the default consumer identity and requests auto-commit. Its offset can advance before application processing finishes. Use explicit offset storage after successful processing when that distinction matters.
+
+For the full getting started tutorial, see [Getting Started](https://iggy.apache.org/docs/introduction/getting-started). For the high-level producer/consumer builders, see [High-level SDK](https://iggy.apache.org/docs/sdk/rust/high-level-sdk) and [Stream Builder](https://iggy.apache.org/docs/sdk/rust/stream-builder).
+
+---
+
+# Examples
+
+> The Rust SDK examples in the core repository, and how to start a server to run them against.
+
+Rendered page: https://iggy.apache.org/docs/sdk/rust/examples/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/rust/examples.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+In the core repository, you can find the following [examples](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src) using the Rust SDK.
+
+Build the SDK and server from the same checkout for unreleased changes. Start the server from the repository root in a separate terminal. The examples use `iggy`/`iggy`. For a new local instance with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+Environment credentials take precedence over the flag, and bootstrap settings do not replace recovered credentials. `--fresh` deletes this replica's local data. Use disposable development data. A new standalone server without explicit credentials generates a root password. A new cluster requires explicit credentials.
+
+The examples are cargo example targets of the `iggy_examples` crate. Run them from the **repository root** with `cargo run --example <name>` so relative certificate paths resolve. Run each producer before its consumer. Some examples create fixed names and require fresh data when repeated. The getting-started consumer also expects stream and topic IDs `0`, so run that pair first on a fresh server. Partition IDs are **0-based**, but balanced producers and consumer groups can use multiple partitions.
+
+- **[Getting started](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/getting-started)** - the basic example which is discussed in the [getting started](https://iggy.apache.org/docs/introduction/getting-started) guide.
+
+  ```bash
+  cargo run --example getting-started-producer
+  cargo run --example getting-started-consumer
+  ```
+
+- **[Basic](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/basic)** - producer and consumer using the low-level `Client` trait with CLI args for transport selection (TCP/QUIC/HTTP/WebSocket).
+
+  ```bash
+  cargo run --example basic-producer
+  cargo run --example basic-consumer
+  ```
+
+- **[New SDK](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/new-sdk)** - an introduction to the high-level SDK as discussed in the [dedicated guide](https://iggy.apache.org/docs/sdk/rust/high-level-sdk).
+
+  ```bash
+  cargo run --example new-sdk-producer
+  cargo run --example new-sdk-consumer
+  ```
+
+- **[Stream builder](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/stream-builder)** - examples using the `IggyStream`, `IggyStreamProducer`, and `IggyStreamConsumer` builder APIs as discussed in the [stream builder guide](https://iggy.apache.org/docs/sdk/rust/stream-builder).
+
+  ```bash
+  cargo run --example stream-basic
+  cargo run --example stream-producer
+  cargo run --example stream-consumer
+  cargo run --example stream-producer-config
+  cargo run --example stream-consumer-config
+  ```
+
+- **[Message envelope](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/message-envelope)** - the example of how to send a message with a custom envelope e.g. to differentiate between different types of messages.
+
+  ```bash
+  cargo run --example message-envelope-producer
+  cargo run --example message-envelope-consumer
+  ```
+
+- **[Message headers](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/message-headers)** - the example of how to send a message with custom headers (typed headers, message type discrimination, client-side compression).
+
+  ```bash
+  cargo run --example message-headers-type-producer
+  cargo run --example message-headers-type-consumer
+  cargo run --example message-headers-compression-producer
+  cargo run --example message-headers-compression-consumer
+  cargo run --example typed-headers-producer
+  cargo run --example typed-headers-consumer
+  ```
+
+- **[Multi-tenant](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/multi-tenant)** - the larger example of how to structure your application to support multiple tenants (separated by the unique streams) with the different users, permissions, topics etc.
+
+  ```bash
+  cargo run --example multi-tenant-producer
+  cargo run --example multi-tenant-consumer
+  ```
+
+- **[TCP TLS](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/tcp-tls)** - TLS-encrypted TCP connections with custom CA certificates. Stop the plain server and start a TLS-enabled server from the repository root:
+
+  ```bash
+  IGGY_TCP_TLS_ENABLED=true \
+  IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
+  IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
+  cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+  ```
+
+These certificates are for local testing. Then run:
+
+  ```bash
+  cargo run --example tcp-tls-producer
+  cargo run --example tcp-tls-consumer
+  ```
+
+- **[Sink data producer](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/sink-data-producer)** - generating random JSON records in bulk batches for sink connector testing.
+
+  ```bash
+  cargo run --example sink-data-producer
+  ```
+
+---
+
+# High-level SDK
+
+> IggyProducer and IggyConsumer: batching, consumer groups and offset commits without the boilerplate.
+
+Rendered page: https://iggy.apache.org/docs/sdk/rust/high-level-sdk/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/rust/high-level-sdk.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+`IggyProducer` batches writes and `IggyConsumer` reads messages through a partition reader. Both share the client's routing, session and recovery behavior. The consumer manages group membership and tracks checkpoints. Select when it stores those checkpoints through `PollOptions`.
+
+The snippets assume an async function with a `Result` return type and the `iggy`, Tokio and `futures-util` dependencies. Use the [Rust SDK setup](https://iggy.apache.org/docs/sdk/rust/intro) and a development server with the sample credentials.
+
+## Connection string
+
+Instead of providing the configuration for the client, you can use the connection string. It's a string that contains all the necessary information to connect to the Iggy API, and it works with all four transports:
+
+```text
+iggy://iggy:iggy@127.0.0.1:8090             (TCP, default)
+iggy+tcp://iggy:iggy@127.0.0.1:8090         (TCP, explicit)
+iggy+quic://iggy:iggy@127.0.0.1:8080        (QUIC)
+iggy+http://iggy:iggy@127.0.0.1:3000        (HTTP)
+iggy+ws://iggy:iggy@127.0.0.1:8092          (WebSocket)
+```
+
+Which can be used to create the client like this:
+
+```rust
+use futures_util::StreamExt;
+use iggy::prelude::*;
+use std::str::FromStr;
+
+let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090")?;
+client.connect().await?;
+```
+
+HTTP requires an explicit login after construction. Consumer groups require a binary transport. Use an ordinary consumer with an explicit partition over HTTP.
+
+Options are appended as query parameters. For TCP:
+
+```text
+iggy://iggy:iggy@127.0.0.1:8090?reconnection_retries=5&reconnection_interval=5s&reestablish_after=10s&heartbeat_interval=3s&nodelay=true
+```
+
+The option keys differ per transport (for example QUIC uses `reconnection_max_retries` and `reconnection_reestablish_after` where TCP uses `reconnection_retries` and `reestablish_after`). Unknown keys are rejected as hard errors. See [Connection Strings](https://iggy.apache.org/docs/sdk/connection-strings) for the full per-transport option tables and defaults.
+
+Unless you need client-side encryption, a custom `Partitioner`, or other settings outside the connection-string options, you should be good to go with the connection string. On the other hand, you can always make use of `IggyClientBuilder::from_connection_string()` to extend the options on top of the provided connection string.
+
+The `IggyClient` internally wraps its transport in an `IggyRwLock`, but the client itself does not implement `Clone`. Share an `Arc<IggyClient>` across tasks. Cloning the `Arc` keeps the same client and connection. Typically, it's a good idea to create a separate connection for producing and consuming, but it's not a requirement.
+
+## Producer
+
+The producer is a high-level abstraction that allows you to send messages to the topic. It's quite simple to use and doesn't require you to handle the offsets, partitions or any other low-level details. To begin with, you can simply invoke `client.producer()` to get the `IggyProducerBuilder` allowing you to configure the producer. Let's take a look at the basic example:
+
+```rust
+let producer = client
+    .producer("my-stream", "my-topic")?
+    .direct(
+        DirectConfig::builder()
+            .batch_length(1000)
+            .linger_time(IggyDuration::from_str("5ms")?)
+            .build(),
+    )
+    .partitioning(Partitioning::balanced())
+    .build();
+producer.init().await?;
+```
+
+The direct producer splits each `send()` call into requests of at most 1000 messages. For sequential calls, the 5 ms linger setting delays a call until at least 5 ms after the previous successful send. It does not buffer messages between calls or delay individual chunks within a call. Choose `background` to buffer sends on worker tasks. `balanced` routes requests round-robin across partitions. By default, `init()` creates a missing stream and topic, requiring the corresponding permissions.
+
+Finally, you can use the `send()` method to send the messages to the topic. The producer **never needs to be a mutable binding**: both `init()` and `send()` take `&self`, so a plain `let producer` is enough for its whole life. Here's how you can send the messages:
+
+```rust
+let messages = vec![IggyMessage::from_str("hello")?, IggyMessage::from_str("world")?];
+producer.send(messages).await?;
+```
+
+Of course, you can provide the message headers, custom binary serialization etc. as it's the same `IggyMessage` type as the one used in the low-level API (use `IggyMessage::builder()` to set headers or a custom ID). The producer will take care of the rest, including the retries, partitioning, batching etc.
+
+Besides `send()`, the producer also offers `send_one(message)`, `send_with_partitioning(messages, partitioning)` to override the partitioning per call, and `send_to(stream, topic, messages, partitioning)` to target a different stream and topic.
+
+### Background producer configuration
+
+The `background` mode buffers messages and sends them from shard workers, trading latency for throughput and backpressure control. `BackgroundConfig::builder()` exposes:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `num_shards` | `1` | Number of shard workers running in parallel |
+| `sharding` | `OrderedSharding` | Routes each send to a worker. `OrderedSharding` keeps a stream/topic pair on one sequential worker. `BalancedSharding` round-robins across workers for maximum throughput and can reorder sends |
+| `linger_time` | `1ms` | How long a shard may wait before flushing an incomplete batch |
+| `batch_size` | 1 MiB | Per-worker flush threshold in bytes. `0` disables this trigger |
+| `batch_length` | `1000` | Per-worker flush threshold in **queued sends**, not individual messages. `0` disables this trigger |
+| `failure_mode` | `Block` | Behavior when the byte budget is exhausted: `Block`, `BlockWithTimeout(duration)`, or `FailImmediately` |
+| `max_buffer_size` | 32 MiB | Budget for message bytes buffered or in flight across all workers. `0` disables this budget |
+| `max_in_flight` | `1` | Maximum concurrent writes across workers. Each worker remains sequential. `0` uses the semaphore's maximum capacity |
+| `error_callback` | `LogErrorCallback` | Async callback invoked on errors the producer cannot recover from |
+
+`batch_size` and `batch_length` are flush triggers checked after adding a send. The final send can take the buffer past the byte threshold. The linger deadline starts when an empty buffer receives a send. The first trigger reached causes a flush. Each worker also has a bounded queue, which can make dispatch wait independently of `failure_mode`. A send larger than the entire byte budget fails under every backpressure mode. Nonzero `max_buffer_size` and `max_in_flight` values must not exceed `tokio::sync::Semaphore::MAX_PERMITS`. Constructing the dispatcher with a larger value panics.
+
+Stop all senders, then call `producer.shutdown().await` to drain background queues and wait for writes and error callbacks. Dropping the producer without shutdown can lose buffered messages. Shutdown does not turn failed writes into successful ones. The default error callback logs and drops failed sends.
+
+### Send confirmations
+
+Every send method returns a `SendMessagesResponse` carrying the commit confirmations of the chunks the send was split into. The list is **empty** whenever the server sends no confirmation payload, and always for a `background` producer, which hands the messages to a dispatcher and returns before the send happens. Branch on `confirmations.is_empty()` instead of indexing. A retried chunk may already have been committed by an earlier attempt, so a confirmation offset does not imply uniqueness. Direct-send completion follows the topic's [durability policy](https://iggy.apache.org/docs/server/durability).
+
+## Consumer
+
+A consumer group reads its assigned partitions. A standalone consumer requires an explicit `.partitions(...)` list. The builder uses `PollingStrategy::next()`, a five-second server wait, up to 1000 messages and a 1 MiB reply. It stores no offsets by default.
+
+```rust
+let mut consumer = client
+    .consumer_group("my-consumer-group", "my-stream", "my-topic")?
+    .poll_options(PollOptions {
+        count: 1000,
+        commit: CommitPolicy::Manual,
+        ..PollOptions::wait(IggyDuration::from_str("5s")?)
+    })
+    .build();
+consumer.init().await?;
+
+while let Some(received) = consumer.next().await {
+    let received = received?;
+    println!("{}", std::str::from_utf8(&received.message.payload)?);
+    consumer.commit(received.checkpoint()).await?;
+}
+consumer.shutdown().await?;
+```
+
+Import `futures_util::StreamExt` to use `next()`. The mutable consumer drives reads and retries when polled. A checkpoint keeps the partition history and ownership that delivered the message. Committing it after recreation or an ownership change is refused. Process messages before committing their checkpoints.
+
+### Consumer configuration
+
+| Method | Default | Behavior |
+| --- | --- | --- |
+| `poll_options(...)` | Five-second wait, manual commit | Read limits and commit policy |
+| `partitions(...)` | Required for standalone consumer | Explicit partition IDs. Refused for a group |
+| `prefetch_bytes(...)` | 16 MiB | Encoded bytes reserved for buffered and in-flight replies |
+| `prefetch_messages(...)` | 16000, or the larger poll count | Reserved messages |
+| `polling_strategy(...)` | `next()` | Start of a partition without a position |
+| `create_consumer_group_if_not_exists()` | Enabled | Create the group before joining |
+| `polling_retry_interval(...)` | One second | Delay after a refused read |
+| `init_retries(...)` | Disabled | Retry missing stream or topic during initialization |
+| `allow_replay()` | Disabled | Permit reads at or below stored progress |
+| `offset_drain_timeout(...)` | Five seconds | Shutdown budget for automatic stores |
+
+Group membership is managed by the reader. The old `auto_join_consumer_group`, `poll_interval`, `batch_length` and enum-based auto-commit consumer configuration are replaced by the current reader and `PollOptions` API.
+
+### Automatic commits
+
+To store progress after successful processing, use:
+
+```rust
+let options = PollOptions {
+    commit: CommitPolicy::Auto(AutoCommit::default()),
+    ..PollOptions::wait(IggyDuration::ONE_SECOND)
+};
+```
+
+The default automatic policy stores every 10,000 messages or five seconds, after processing. `CommitAfter::Delivery` counts a yielded message immediately. `CommitAfter::Marked` counts checkpoints that the application marks. A handler failure leaves its message uncounted when using processing-based commits.
+
+`CommitPolicy::OnRead` submits offsets with the read and can advance them before processing. The consumer refuses this policy with a client-side encryptor because decryption can fail after the store. Use manual or automatic commits instead.
+
+Always await `consumer.shutdown()` before dropping it. Shutdown flushes automatic progress, adjusts on-read progress to delivered messages, and leaves the group. It is not a substitute for successful application processing. See [Deferred polling](https://iggy.apache.org/docs/sdk/deferred-polling) for the shared contract.
+
+### Read errors
+
+`ReadError` identifies the failed partition and contains its underlying error. Recoverable read failures are retried. A history change, uncertain read or undecodable message can stop a partition. Inspect the error before calling `seek(partition_id, strategy)` to select a new start. A `skip` continuation lets an application deliberately move past a record it cannot decode.
+
+An uncertain committing read can require `abandon_operation` before seeking. Abandon does not undo a store. The [source consumer example](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/examples/rust/src/new-sdk/consumer/main.rs) shows explicit recovery choices.
+
+## Idempotent producer
+
+An idempotent producer prevents duplicate appends when the same producer batch is retried. Enable it with `.idempotent()` before `build()` and call `init()` to obtain a producer ID. The default is disabled, and this mode requires a binary transport.
+
+```rust
+let producer = client
+    .producer("my-stream", "my-topic")?
+    .idempotent()
+    .build();
+producer.init().await?;
+producer.send_one(IggyMessage::from_str("hello")?).await?;
+producer.shutdown().await;
+```
+
+Each chunk carries a producer ID, epoch and per-partition sequence. This is separate from message IDs and session retry protection. Upgrade all topic readers to compatible 0.10 clients before writing these batches. See [Idempotent producers](https://iggy.apache.org/docs/sdk/idempotent-producers) for limits.
+
+## Raw requests
+
+`send_binary_request(code, payload)` sends a raw request through a binary transport. `send_binary_request_to_replica(code, payload, replica_id)` targets a replica. Session-management commands remain restricted so a raw call cannot replace the client's session state. HTTP returns `FeatureUnavailable` for binary calls.
+
+`send_http_request(method, path, body)` sends an HTTP request and returns its raw body. Binary transports return `FeatureUnavailable` for that call. Use typed APIs for commands whose route, ownership or recovery identity the SDK must manage.
+
+---
+
+# Stream Builder
+
+> Configure a Rust producer and consumer by stream and topic names.
+
+Rendered page: https://iggy.apache.org/docs/sdk/rust/stream-builder/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/rust/stream-builder.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The stream builder creates an `IggyProducer`, an `IggyConsumer`, or both from configuration objects. It uses the same APIs described in [High-level SDK](https://iggy.apache.org/docs/sdk/rust/high-level-sdk). Stream and topic names identify the resources. The 0.10 API does not take stream or topic IDs in these configuration objects.
+
+## Build a producer
+
+This complete example uses a local server with the development credentials. The producer creates missing resources during initialization. Existing topics keep their configuration.
+
+```rust
+use iggy::prelude::*;
+use std::str::FromStr;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = IggyProducerConfig::builder()
+        .stream_name("test_stream")
+        .topic_name("test_topic")
+        .topic_partitions_count(3)
+        .batch_length(100)
+        .linger_time(IggyDuration::from_str("5ms")?)
+        .partitioning(Partitioning::balanced())
+        .build();
+
+    let (client, producer) = IggyStreamProducer::with_client_from_url(
+        "iggy://iggy:iggy@127.0.0.1:8090",
+        &config,
+    ).await?;
+    producer.send_one(IggyMessage::from_str("Hello World")?).await?;
+    producer.shutdown().await;
+    client.shutdown().await?;
+    Ok(())
+}
+```
+
+`batch_length` limits messages in a direct request. `linger_time` sets the minimum gap between sequential direct sends. It does not buffer separate calls. Use the high-level producer's background mode when you need a buffer.
+
+`with_topic_durability(Durability::Persisted)` selects the policy when the builder creates a topic. It does not change an existing topic. Client-side `encryptor` configuration is separate from [stream encryption](https://iggy.apache.org/docs/server/stream-options).
+
+## Build a consumer
+
+The consumer uses a group by default. This example creates the group, reads messages and commits each checkpoint after printing its payload. Add `futures-util` to use `StreamExt`.
+
+```rust
+use futures_util::StreamExt;
+use iggy::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = IggyConsumerConfig::builder()
+        .stream_name("test_stream")
+        .topic_name("test_topic")
+        .create_stream_if_not_exists(false)
+        .create_topic_if_not_exists(false)
+        .consumer_name("test_consumer")
+        .consumer_kind(ConsumerKind::ConsumerGroup)
+        .partitions_count(3)
+        .poll_options(PollOptions::wait(IggyDuration::ONE_SECOND))
+        .polling_strategy(PollingStrategy::next())
+        .polling_retry_interval(NonZeroIggyDuration::ONE_SECOND)
+        .init_retries(5)
+        .init_interval(NonZeroIggyDuration::ONE_SECOND)
+        .build();
+    let (client, mut consumer) = IggyStreamConsumer::with_client_from_url(
+        "iggy://iggy:iggy@127.0.0.1:8090",
+        &config,
+    ).await?;
+
+    while let Some(received) = consumer.next().await {
+        let received = received?;
+        println!("{}", std::str::from_utf8(&received.message.payload)?);
+        consumer.commit(received.checkpoint()).await?;
+    }
+    consumer.shutdown().await?;
+    client.shutdown().await?;
+    Ok(())
+}
+```
+
+A standalone consumer uses `ConsumerKind::Consumer`. Select its partitions with `with_partitions`. The default configuration selects partition zero. Group consumers use the server assignment instead. `ExternalGroup` represents externally managed offsets and cannot poll.
+
+`PollOptions` defaults to manual commits. `CommitPolicy::Auto(AutoCommit::default())` stores progress after processing every 10,000 messages or five seconds. `CommitPolicy::OnRead` stores with the read, before application processing. Read the [commit contract](https://iggy.apache.org/docs/sdk/deferred-polling) before selecting a policy.
+
+## Share an existing client
+
+`IggyStreamProducer::build(&client, &producer_config)` and `IggyStreamConsumer::build(&client, &consumer_config)` reuse a connected client. To build both, combine the configuration:
+
+```rust
+let config = IggyStreamConfig::new(consumer_config, producer_config);
+let (producer, consumer) = IggyStream::build(&client, &config).await?;
+```
+
+`IggyStream::with_client_from_connection_string` also creates the client. Its result contains the client, producer and consumer. Resource creation flags remain explicit on the consumer configuration.
+
+## Defaults and buffering
+
+`IggyConsumerConfig::default()` names `test_stream`, `test_topic` and `test_consumer`. It uses a group, `next()`, a five-second deferred wait and manual commits. It retries initialization five times at three-second intervals. It does not create a missing stream or topic by default.
+
+The reader reserves up to 16 MiB and 16000 messages for buffered and in-flight replies. If the poll count is larger, that count is the default message reservation. Configure `prefetch_bytes` and `prefetch_messages` to bound read-ahead independently of each fetch.
+
+The [stream-builder examples](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/stream-builder) cover producer, consumer and combined configurations. The [source consumer configuration](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/sdk/src/stream_builder/config/config_iggy_consumer.rs) defines each builder field.
+
+---
+
+# Python SDK
+
+> The Python SDK, a PyO3 wrapper around the Rust SDK, and how to install it.
+
+Rendered page: https://iggy.apache.org/docs/sdk/python/intro/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/python/intro.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The Iggy Python SDK is a client library that allows you to interact with the Iggy API from your Python application. It is built as a PyO3 wrapper around the Rust SDK, which means it supports TCP, QUIC, HTTP, and WebSocket transports via connection strings. The package is available on [PyPI](https://pypi.org/project/apache-iggy/) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/python).
+
+The wheel bundles the Rust SDK, whose binary transports speak the current Iggy wire protocol without falling back to older formats. Use an SDK release compatible with your server. For unreleased changes, build the SDK and server from the same source checkout. The published wheel can lag source API changes.
+
+## Installation
+
+Python 3.11 or newer is required. Install the published package in a virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install apache-iggy==0.10.0
+```
+
+For the source version described here, install from the repository root with Rust and Cargo available:
+
+```bash
+pip install ./foreign/python
+```
+
+## Quick start
+
+The samples below target Iggy 0.10.0 on `127.0.0.1:8090`:
+
+```bash
+# Server 0.10.0
+docker run --rm \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -p 8090:8090 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  apache/iggy:0.10.0
+
+# Or from the same repository root as the SDK
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and bootstrap the `iggy`/`iggy` root credentials for new data. Stored credentials are not replaced. Environment credentials override the default-credentials flag, so unset them or set them to match the sample. `--fresh` deletes local replica state. Use disposable development data. A fresh server requires explicit credentials or the development flag.
+
+### Producer
+
+```python
+import asyncio
+
+from apache_iggy import IggyClient, TopicOptions
+from apache_iggy import SendMessage as Message
+
+STREAM_NAME = "sample-stream"
+TOPIC_NAME = "sample-topic"
+PARTITION_ID = 0
+
+
+async def main():
+    client = IggyClient.from_connection_string(
+        "iggy+tcp://iggy:iggy@127.0.0.1:8090"
+    )
+    await client.connect()
+
+    # Re-running this example is fine: only create what is missing.
+    if await client.get_stream(STREAM_NAME) is None:
+        await client.create_stream(name=STREAM_NAME)
+
+    if await client.get_topic(STREAM_NAME, TOPIC_NAME) is None:
+        await client.create_topic(
+            stream=STREAM_NAME,
+            name=TOPIC_NAME,
+            options=TopicOptions(partitions_count=1),
+        )
+
+    messages = [Message(f"message-{i}") for i in range(10)]
+
+    await client.send_messages(
+        stream=STREAM_NAME,
+        topic=TOPIC_NAME,
+        partitioning=PARTITION_ID,
+        messages=messages,
+    )
+    print(f"Sent {len(messages)} message(s)")
+    await client.shutdown()
+
+
+asyncio.run(main())
+```
+
+### Consumer
+
+```python
+import asyncio
+
+from apache_iggy import CommitPolicy, Consumer, IggyClient, PollingStrategy, PollOptions
+
+STREAM_NAME = "sample-stream"
+TOPIC_NAME = "sample-topic"
+PARTITION_ID = 0
+
+
+async def main():
+    client = IggyClient.from_connection_string(
+        "iggy+tcp://iggy:iggy@127.0.0.1:8090"
+    )
+    await client.connect()
+
+    # Next() resumes this named consumer after its stored offset. Auto-commit
+    # can store the offset before application processing finishes.
+    polled_messages = await client.poll_messages(
+        stream=STREAM_NAME,
+        topic=TOPIC_NAME,
+        consumer=Consumer.Single("sample-consumer"),
+        partition_id=PARTITION_ID,
+        polling_strategy=PollingStrategy.Next(),
+        options=PollOptions(count=10, commit=CommitPolicy.OnRead()),
+    )
+
+    for message in polled_messages.messages:
+        payload = message.payload().decode("utf-8")
+        print(f"Offset: {message.offset()}, Payload: {payload}")
+    await client.shutdown()
+
+
+asyncio.run(main())
+```
+
+## Beyond the basics
+
+- **TLS**: use `TcpConfig` with `tls_enabled` and `tls_ca_file`, or the TLS options in a [connection string](https://iggy.apache.org/docs/sdk/connection-strings). The certificate must match `tls_domain`, which defaults to the dialed host. The [getting-started example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/python/getting-started) shows the full setup.
+- **Consumer groups**: `await client.consumer_group(...)` returns an `IggyConsumer` that creates and joins the group by default and commits offsets according to the `commit` policy in `poll_options`, which defaults to manual commits. Groups require a binary transport. HTTP supports ordinary consumers only.
+- **User headers**: `SendMessage(data, user_headers=...)` accepts a plain `dict` with `str`, `bytes`, `bool`, `int`, or `float` values. `HeaderKey`/`HeaderValue` give explicit control over the wire type. See the [message-headers examples](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/python/message-headers).
+- **Topic options**: `create_topic(..., options=TopicOptions(...))` accepts typed options. `TopicOptions.raw` accepts extra keys as `dict[str, str]`, validated by the server. `client.describe_options("topic")` lists the keys a server accepts.
+- **Administration**: user and permission management. Personal access tokens can be used for login via `AutoLogin.personal_access_token(...)` in the connection config. PAT management isn't exposed yet.
+
+## Examples
+
+Working examples are available in the [examples/python](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/python) directory. See [Examples](https://iggy.apache.org/docs/sdk/python/examples) for the list and how to run them.
+
+---
+
+# Examples
+
+> Working Python examples from the core repository, covering connection strings, message headers and TLS.
+
+Rendered page: https://iggy.apache.org/docs/sdk/python/examples/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/python/examples.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+Working examples are available in the [examples/python](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/python) directory. CI runs the source examples against a source-built server, including a separate TLS pass:
+
+- **getting-started** - producer and consumer with optional TLS via `TcpConfig`
+- **basic** - producer and consumer using connection strings
+- **message-headers** - user headers with `str`, `bytes`, `bool`, `int`, and `float` values, in two variants: `plain-headers` (plain `dict`, the SDK infers wire types) and `typed-headers` (explicit `HeaderKey`/`HeaderValue`)
+
+## Running the examples
+
+These examples target Iggy 0.10.0. Start the server:
+
+```bash
+# Server 0.10.0
+docker run --rm \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -p 8090:8090 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  apache/iggy:0.10.0
+
+# Or from the repository root
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and bootstrap the `iggy`/`iggy` root credentials for new data. Stored credentials are not replaced, and environment credentials override the source command's default-credentials flag. Use `--fresh` only with disposable local replica data.
+
+With Python 3.11 or newer and Rust/Cargo available, run from `examples/python`. `uv` uses the local SDK path in `pyproject.toml`. The pip command below names that path explicitly:
+
+```bash
+# Using uv
+uv sync
+uv run getting-started/producer.py
+uv run getting-started/consumer.py
+
+# Without uv
+python -m venv .venv
+source .venv/bin/activate
+pip install ../../foreign/python .
+python getting-started/producer.py
+python getting-started/consumer.py
+```
+
+For the quick-start code itself, see the [Python SDK intro](https://iggy.apache.org/docs/sdk/python/intro).
+
+---
+
+# Java SDK
+
+> The Java SDK, with blocking and CompletableFuture clients over TCP, and which servers they pair with.
+
+Rendered page: https://iggy.apache.org/docs/sdk/java/intro/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/java/intro.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The Iggy Java SDK is a client library for interacting with the Iggy server from Java applications. It provides a blocking client and an async client (based on `CompletableFuture`) over TCP, plus a blocking HTTP client. The artifact is published to [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy) and the source code lives in [foreign/java](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/java).
+
+## Server compatibility
+
+This documentation targets server **0.10.0** and SDK **0.10.0**. The TCP transport speaks the VSR (Viewstamped Replication) wire protocol. The Java artifact `0.8.0` uses the older protocol. When working from source, build the SDK and the server from the same repository checkout.
+
+## Installation
+
+Use Java 17 or newer. The SDK is published to Maven Central.
+
+### Maven
+
+Add the dependency under the `project` element in `pom.xml`:
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.apache.iggy</groupId>
+        <artifactId>iggy</artifactId>
+        <version>0.10.0</version>
+    </dependency>
+</dependencies>
+```
+
+### Gradle
+
+```groovy
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.apache.iggy:iggy:0.10.0'
+}
+```
+
+Check [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy) for the latest published version. Snapshot builds are available from the [ASF snapshot repository](https://repository.apache.org/content/repositories/snapshots/).
+
+## Quick start
+
+The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java/src/main/java/org/apache/iggy/examples/gettingstarted). Stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
+
+Start a development server using the [example setup](https://iggy.apache.org/docs/sdk/java/examples#starting-the-server), with `iggy`/`iggy` credentials, then run the producer before the consumer. Bootstrap credentials do not replace recovered credentials.
+
+### Producer
+
+```java
+import org.apache.iggy.client.blocking.tcp.IggyTcpClient;
+import org.apache.iggy.identifier.StreamId;
+import org.apache.iggy.identifier.TopicId;
+import org.apache.iggy.message.Message;
+import org.apache.iggy.message.Partitioning;
+import org.apache.iggy.topic.TopicOptions;
+import java.math.BigInteger;
+import java.util.List;
+
+public class Producer {
+
+    static final String STREAM_NAME = "sample-stream";
+    static final StreamId STREAM_ID = StreamId.of(STREAM_NAME);
+    static final String TOPIC_NAME = "sample-topic";
+    static final TopicId TOPIC_ID = TopicId.of(TOPIC_NAME);
+
+    public static void main(String[] args) {
+        try (var client = IggyTcpClient.builder()
+                .host("127.0.0.1")
+                .port(8090)
+                .credentials("iggy", "iggy")
+                .buildAndLogin()) {
+
+            // Re-running this example is fine: only create what is missing.
+            if (client.streams().getStream(STREAM_ID).isEmpty()) {
+                client.streams().createStream(STREAM_NAME);
+            }
+            if (client.topics().getTopic(STREAM_ID, TOPIC_ID).isEmpty()) {
+                client.topics().createTopic(
+                        STREAM_ID,
+                        TOPIC_NAME,
+                        1L,
+                        TopicOptions.builder().build());
+            }
+
+            Partitioning partitioning = Partitioning.partitionId(0L);
+            for (int i = 0; i < 10; i++) {
+                String payload = "message-" + i;
+                client.messages().sendMessages(
+                        STREAM_ID,
+                        TOPIC_ID,
+                        partitioning,
+                        List.of(Message.of(payload)));
+                System.out.println("Sent: " + payload);
+            }
+        }
+    }
+}
+```
+
+Creation uses `StreamOptions` and `TopicOptions`. Updates use `StreamUpdate`, `TopicUpdate` and `UserUpdate`. Their builders send only named fields and explicit reset keys. Compression and other creation-only options cannot change later.
+
+### Consumer
+
+```java
+import org.apache.iggy.client.blocking.tcp.IggyTcpClient;
+import org.apache.iggy.consumergroup.Consumer;
+import org.apache.iggy.identifier.StreamId;
+import org.apache.iggy.identifier.TopicId;
+import org.apache.iggy.message.Message;
+import org.apache.iggy.message.PolledMessages;
+import org.apache.iggy.message.PollOptions;
+import org.apache.iggy.message.PollingStrategy;
+import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.util.Optional;
+
+public class SampleConsumer {
+
+    static final StreamId STREAM_ID = StreamId.of("sample-stream");
+    static final TopicId TOPIC_ID = TopicId.of("sample-topic");
+
+    public static void main(String[] args) {
+        try (var client = IggyTcpClient.builder()
+                .host("127.0.0.1")
+                .port(8090)
+                .credentials("iggy", "iggy")
+                .buildAndLogin()) {
+
+            BigInteger offset = BigInteger.ZERO;
+            Consumer consumer = Consumer.of(0L);
+
+            while (true) {
+                PolledMessages polledMessages = client.messages().pollMessages(
+                        STREAM_ID,
+                        TOPIC_ID,
+                        0L,
+                        consumer,
+                        PollingStrategy.offset(offset),
+                        PollOptions.defaults().withCount(10));
+
+                if (polledMessages.messages().isEmpty()) {
+                    break;
+                }
+                for (Message message : polledMessages.messages()) {
+                    String payload = new String(message.payload(), StandardCharsets.UTF_8);
+                    System.out.printf("Offset: %d, Payload: %s%n", message.header().offset(), payload);
+                    offset = message.header().offset().add(BigInteger.ONE);
+                }
+            }
+        }
+    }
+}
+```
+
+The consumer reads partition `0` independently and stops on an empty poll. Its cursor starts at offset `0` or the earliest retained message each time it runs. `autoCommit` is disabled, so this sample does not store its progress on the server.
+
+## Client types and configuration
+
+`org.apache.iggy.Iggy` is the unified entrypoint for building clients. `Iggy.tcpClientBuilder().blocking()` returns the same builder as `IggyTcpClient.builder()` used above.
+
+```java
+import org.apache.iggy.Iggy;
+
+// Blocking TCP client
+var client = Iggy.tcpClientBuilder()
+    .blocking()
+    .host("localhost")
+    .port(8090)
+    .credentials("iggy", "iggy")
+    .buildAndLogin();
+
+// Async TCP client (CompletableFuture-based)
+var asyncClient = Iggy.tcpClientBuilder()
+    .async()
+    .host("localhost")
+    .port(8090)
+    .credentials("iggy", "iggy")
+    .buildAndLogin()
+    .join();
+
+// Blocking HTTP client
+var httpClient = Iggy.httpClientBuilder()
+    .blocking()
+    .url("http://localhost:3000")
+    .credentials("iggy", "iggy")
+    .buildAndLogin();
+```
+
+Close clients when finished: `client.close()`, `asyncClient.close().join()`, and `httpClient.close()`. The HTTP close method declares `IOException`.
+
+The TCP builder also accepts TLS and resilience options. Start the [TLS development server](https://iggy.apache.org/docs/sdk/java/examples#running-the-examples) and run this fragment with `examples/java` as the working directory:
+
+```java
+import java.time.Duration;
+import org.apache.iggy.Iggy;
+import org.apache.iggy.config.RetryPolicy;
+
+var client = Iggy.tcpClientBuilder()
+    .blocking()
+    .host("localhost")
+    .port(8090)
+    .enableTls()
+    .tlsCertificate("../../core/certs/iggy_ca_cert.pem")
+    .connectionTimeout(Duration.ofSeconds(10))
+    .requestTimeout(Duration.ofSeconds(30))
+    .retryPolicy(RetryPolicy.exponentialBackoff())
+    .credentials("iggy", "iggy")
+    .buildAndLogin();
+```
+
+Beyond streams, topics, and messages, the client exposes consumer groups, partitions, users, and personal access tokens through `client.consumerGroups()`, `client.partitions()`, `client.users()`, and `client.personalAccessTokens()`. The SDK's custom exception types inherit from `IggyException`. Failed futures can wrap them in `CompletionException` when joined.
+
+## Deferred reads and recovery
+
+`PollOptions.waitFor(Duration.ofSeconds(5))` enables deferred polling. `CommitPolicy.manual()` is the default. A reader or consumer also accepts `CommitPolicy.auto(...)`. One-shot polls reject automatic policies. The async client exposes a partition reader through `client.reader(...)`. A blocking wrapper is available as `org.apache.iggy.client.blocking.reader.PartitionReader`.
+
+TCP retains uncertain mutation identities. Keep the client and use `resolveOperation` or `abandonOperation` when an exception reports a retained operation. An uncertain committing poll blocks progress for its partition until abandonment. HTTP supports standalone consumers and deferred reads, but not consumer group membership.
+
+The TCP builders accept `fromConnectionString`. Only `iggy://` and `iggy+tcp://`, username/password credentials, `tls` and `tls_ca_file` are supported. PAT connection strings and additional options are rejected. The builder also exposes shutdown quiet-period configuration for applications that need prompt close.
+
+`getMetadataChanges` follows metadata history, and raw requests can target a named replica. See [Metadata changes](https://iggy.apache.org/docs/sdk/metadata-changes) and [Client failover](https://iggy.apache.org/docs/clustering/client-failover).
+
+## Examples
+
+Runnable examples covering the async client, message headers and envelopes, multi-tenant setups, and TLS live in [examples/java](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java). See the [examples page](https://iggy.apache.org/docs/sdk/java/examples) for how to run them.
+
+---
+
+# Examples
+
+> Runnable Java examples from the core repository, built with Gradle, and how to start a server for them.
+
+Rendered page: https://iggy.apache.org/docs/sdk/java/examples/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/java/examples.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+Runnable examples live in the [examples/java](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java) directory of the core repository as a standalone Gradle project. The project builds against the in-repo SDK (via an `includeBuild` substitution), so the examples always match the SDK source in the same checkout. Java 17 or newer is required. The included `gradlew` wrapper downloads the pinned Gradle version on first run.
+
+## Starting the server
+
+These examples target server **0.10.0** and speak the VSR (Viewstamped Replication) wire protocol. Build the SDK and server from the same checkout for unreleased changes. The examples log in as `iggy`/`iggy`. From the repository root, start a disposable development server with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+`--fresh` **wipes this replica's local data directory** (`local_data` by default). Environment credentials take precedence over the flag, and bootstrap settings do not replace recovered credentials. A fresh cluster replica can recover credentials from peers. This setup is intended only for development and testing.
+
+## Running the examples
+
+Run each example from the `examples/java` directory with its Gradle task. Run the producer before its consumer. The ordinary consumers keep their cursor in memory and start from offset `0` or the earliest retained message on each run. The multi-tenant consumer uses consumer groups and server-managed offsets.
+
+- **[gettingstarted](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java/src/main/java/org/apache/iggy/examples/gettingstarted)** - basic blocking producer and consumer, the best starting point.
+
+  ```bash
+  ./gradlew runGettingStartedProducer
+  ./gradlew runGettingStartedConsumer
+  ```
+
+- **[messageheaders](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java/src/main/java/org/apache/iggy/examples/messageheaders)** - message metadata via custom header keys and values, with a `message_type` header selecting the application handler.
+
+  ```bash
+  ./gradlew runMessageHeadersProducer
+  ./gradlew runMessageHeadersConsumer
+  ```
+
+- **[messageenvelope](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java/src/main/java/org/apache/iggy/examples/messageenvelope)** - JSON envelope pattern for polymorphic message handling (order events wrapped in envelopes for type identification).
+
+  ```bash
+  ./gradlew runMessageEnvelopeProducer
+  ./gradlew runMessageEnvelopeConsumer
+  ```
+
+- **[multitenant](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java/src/main/java/org/apache/iggy/examples/multitenant)** - multi-tenant isolation: per-tenant streams, users with stream-specific permissions, and concurrent producers and consumers across tenants.
+
+  ```bash
+  ./gradlew runMultiTenantProducer
+  ./gradlew runMultiTenantConsumer
+  ```
+
+- **[sinkdataproducer](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java/src/main/java/org/apache/iggy/examples/sinkdataproducer)** - high-volume data generation (100 batches of 1000 to 1099 messages) with realistic records, for testing and benchmarking.
+
+  ```bash
+  ./gradlew runSinkDataProducer
+  ```
+
+- **[streambuilder](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java/src/main/java/org/apache/iggy/examples/streambuilder)** - a combined producer and consumer in a single class. It deletes its `test_stream` stream after the run.
+
+  ```bash
+  ./gradlew runStreamBasic
+  ```
+
+- **[async](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java/src/main/java/org/apache/iggy/examples/async)** - the async client: `CompletableFuture` chaining, submitting multiple sends without blocking, backpressure, error recovery with exponential backoff, and thread pool separation.
+
+  ```bash
+  ./gradlew runAsyncProducer
+  ./gradlew runAsyncConsumer
+  ```
+
+- **[tcptls](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java/src/main/java/org/apache/iggy/examples/tcptls)** - TLS-encrypted TCP connections with CA certificate verification. Requires a TLS-enabled server. Run this server command from the repository root:
+
+  ```bash
+  IGGY_TCP_TLS_ENABLED=true \
+  IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
+  IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
+  cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+  ```
+
+The same data and credential prerequisites apply. These certificates are for development only. Return to `examples/java` for the client commands. Their CA path is relative to that directory.
+
+  ```bash
+  ./gradlew runTcpTlsProducer
+  ./gradlew runTcpTlsConsumer
+  ```
+
+## Blocking vs. async
+
+Use the blocking client for scripts, CLI tools, integration tests, and anywhere sequential code is easier to reason about. Use the async client for high throughput, reactive applications, and composing non-blocking requests with `CompletableFuture`. The async client runs I/O on Netty event loop threads: never block them with `.join()`, `.get()`, `Thread.sleep()`, or blocking I/O inside `thenApply`/`thenAccept`. Offload blocking work with `thenApplyAsync(fn, executor)`. The [examples/java README](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/examples/java/README.md) covers these async patterns in detail.
+
+---
+
+# Go SDK
+
+> The Go SDK, a blocking client speaking the VSR wire protocol over TCP, and which servers it pairs with.
+
+Rendered page: https://iggy.apache.org/docs/sdk/go/intro/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/go/intro.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The Iggy Go SDK is a client library for interacting with the Iggy server from Go applications. It is a blocking client that speaks the VSR (Viewstamped Replication) wire protocol over TCP, with or without TLS. The package is available on [pkg.go.dev](https://pkg.go.dev/github.com/apache/iggy/foreign/go) and the source code lives in [foreign/go](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/go).
+
+## Server compatibility
+
+The SDK and the server must speak the same wire protocol. Tagged releases up to `v0.8.0` predate VSR (and the current API) and pair only with servers of the same era. The current SDK speaks VSR only. This page targets server `0.10.0`. Use a compatible SDK release or edge version. When working from source, build the SDK and the server from the same repository checkout.
+
+## Installation
+
+The current source requires Go 1.25 or newer. Run these commands from your application module:
+
+```bash
+go get github.com/apache/iggy/foreign/go
+```
+
+To pin the release that matches server 0.10.0:
+
+```bash
+go get github.com/apache/iggy/foreign/go@v0.10.0
+```
+
+For unreleased changes, use the local SDK replacement shown in the [repository examples](https://iggy.apache.org/docs/sdk/go/examples). A published edge tag need not contain every change in your checkout.
+
+## Quick start
+
+The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/go/getting-started). Stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
+
+Run the server from the repository root with disposable development data and no root credential overrides:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+`--fresh` **wipes this replica's local data directory**. `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` take precedence over the flag. Bootstrap settings do not replace recovered credentials, including credentials recovered from cluster peers. The snippets use `iggy`/`iggy`. Run the producer before the consumer.
+
+### Producer
+
+```go
+package main
+
+import (
+	"context"
+	"errors"
+	"log"
+
+	"github.com/apache/iggy/foreign/go/client"
+	"github.com/apache/iggy/foreign/go/client/tcp"
+	iggcon "github.com/apache/iggy/foreign/go/contracts"
+	ierror "github.com/apache/iggy/foreign/go/errors"
+)
+
+func main() {
+	cli, err := client.NewIggyClient(
+		client.WithTcp(tcp.WithServerAddress("127.0.0.1:8090")),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err := cli.Close(); err != nil {
+			log.Printf("Error closing client: %v", err)
+		}
+	}()
+
+	ctx := context.Background()
+	if err := cli.Connect(ctx); err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err := cli.LoginUser(ctx, "iggy", "iggy"); err != nil {
+		log.Fatal(err)
+	}
+
+	// Re-running this example is fine: an existing stream or topic is not an error.
+	if _, err := cli.CreateStream(ctx, "sample-stream", nil); err != nil &&
+		!errors.Is(err, ierror.ErrStreamNameAlreadyExists) {
+		log.Fatal(err)
+	}
+
+	streamId, err := iggcon.NewIdentifier("sample-stream")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err := cli.CreateTopic(
+		ctx,
+		streamId,
+		"sample-topic",
+		nil,
+	); err != nil && !errors.Is(err, ierror.ErrTopicNameAlreadyExists) {
+		log.Fatal(err)
+	}
+
+	topicId, err := iggcon.NewIdentifier("sample-topic")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	message, err := iggcon.NewIggyMessage([]byte("Hello from Go!"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err := cli.SendMessages(
+		ctx,
+		streamId,
+		topicId,
+		iggcon.None(),
+		[]iggcon.IggyMessage{message},
+	); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("Message sent")
+}
+```
+
+`CreateTopic` accepts `*iggcon.TopicOptions`. A nil value selects server defaults. `CreateStream` accepts `*iggcon.StreamOptions`. `UpdateTopic`, `UpdateStream` and `UpdateUser` accept typed patches. `DescribeOptions` lists the keys and mutability flags.
+
+### Consumer
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/apache/iggy/foreign/go/client"
+	"github.com/apache/iggy/foreign/go/client/tcp"
+	iggcon "github.com/apache/iggy/foreign/go/contracts"
+)
+
+func main() {
+	cli, err := client.NewIggyClient(
+		client.WithTcp(tcp.WithServerAddress("127.0.0.1:8090")),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err := cli.Close(); err != nil {
+			log.Printf("Error closing client: %v", err)
+		}
+	}()
+
+	ctx := context.Background()
+	if err := cli.Connect(ctx); err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err := cli.LoginUser(ctx, "iggy", "iggy"); err != nil {
+		log.Fatal(err)
+	}
+
+	streamId, err := iggcon.NewIdentifier("sample-stream")
+	if err != nil {
+		log.Fatal(err)
+	}
+	topicId, err := iggcon.NewIdentifier("sample-topic")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	offset := uint64(0)
+	partitionId := uint32(0)
+	consumer := iggcon.DefaultConsumer()
+
+	for {
+		polled, err := cli.PollMessages(
+			ctx,
+			streamId,
+			topicId,
+			partitionId,
+			consumer,
+			iggcon.OffsetPollingStrategy(offset),
+			iggcon.WaitPollOptions(5*time.Second),
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if len(polled.Messages) == 0 {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+
+		for _, message := range polled.Messages {
+			fmt.Printf("Offset: %d, Payload: %s\n",
+				message.Header.Offset, string(message.Payload))
+			offset = message.Header.Offset + 1
+		}
+	}
+}
+```
+
+The consumer reads partition `0` independently and keeps its offset only in memory. Restarting reads from offset `0` again, or the earliest retained message if older messages were removed.
+
+Uncompressed payloads and user headers alias the reply buffer, so retaining their slices pins the whole reply. Copy those bytes to retain only the message you need. S2 decompression allocates a separate payload buffer.
+
+## TLS
+
+Replace the quick-start client constructor with the following TCP options. Start the TLS server as shown on the [examples page](https://iggy.apache.org/docs/sdk/go/examples#tls). The development CA path below is relative to `examples/go`:
+
+```go
+cli, err := client.NewIggyClient(
+	client.WithTcp(
+		tcp.WithServerAddress("localhost:8090"),
+		tcp.WithTLS(
+			tcp.WithTLSCAFile("../../core/certs/iggy_ca_cert.pem"),
+			tcp.WithTLSDomain("localhost"),
+		),
+	),
+)
+```
+
+`tcp.WithTLSValidateCertificate` controls certificate validation. The client also accepts `client.WithLogger` for a custom `*slog.Logger` and runs a built-in heartbeat loop (every 5 seconds by default) once connected.
+
+## Delivery semantics
+
+`SendMessages` returns the placements reported by the server. An uncertain mutation retains its frozen request and original identity. Reconnection binds the existing session before attempting a new registration. `ResolveOperation` retries the retained identity, and `AbandonOperation` releases local state without undoing the server result. Keep the same client for recovery. A fresh send after losing receipt access can duplicate work.
+
+Crash durability follows the topic's `durability` policy: `replicated` confirms replication, while `persisted` also waits for the required replicas to persist the message data. See [Durability](https://iggy.apache.org/docs/server/durability). An empty confirmation list is a valid success but does not by itself prove that new messages were appended.
+
+## Consumer groups
+
+The client exposes `CreateConsumerGroup`, `JoinConsumerGroup`, `LeaveConsumerGroup`, `GetConsumerGroups` and `SyncConsumerGroup`. A one-shot `PollMessages` reads an explicit partition. Use `reader.NewPartitionReader` or `reader.NewIggyConsumer` with `iggcon.NewGroupConsumer` to read the full assignment.
+
+The reader joins, refreshes assignments and leaves on `Close`. Its default wait is five seconds. `Commit` stores a delivered checkpoint after processing. `iggcon.AutoCommitPolicy(iggcon.DefaultAutoCommit())` selects automatic commits after processing. See [Deferred polling](https://iggy.apache.org/docs/sdk/deferred-polling).
+
+## Connection strings and metadata
+
+`client.ParseConnectionString` returns TCP options from a connection string. Pass them to `client.WithTcp` when constructing the client. It accepts credentials, TLS and reconnect options. Use `GetMetadataChanges` to read resource or activity changes without listing the entire catalog. Raw requests can target a replica with `SendBinaryRequestToReplica`. See [Metadata changes](https://iggy.apache.org/docs/sdk/metadata-changes) for restart and retention behavior.
+
+## Examples
+
+A runnable getting-started example with producer, consumer, and TLS flags lives in [examples/go](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/go). See the [examples page](https://iggy.apache.org/docs/sdk/go/examples) for how to run it.
+
+---
+
+# Examples
+
+> Runnable Go examples from the core repository, and how to start a server they can connect to.
+
+Rendered page: https://iggy.apache.org/docs/sdk/go/examples/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/go/examples.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+A runnable getting-started example lives in the [examples/go](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/go) directory of the core repository. Its `go.mod` carries a `replace` directive pointing at the in-repo SDK, so the example always builds against the SDK source in the same checkout. The examples are exercised in CI via `scripts/run-examples-from-readme.sh --language go`.
+
+## Starting the server
+
+The Go SDK speaks the VSR (Viewstamped Replication) wire protocol. Build the SDK and server from the same checkout for unreleased changes. The examples require Go 1.25 or newer and log in as `iggy`/`iggy`. From the repository root, start a disposable development server with no `IGGY_ROOT_USERNAME` or `IGGY_ROOT_PASSWORD` overrides:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+`--fresh` **wipes this replica's local data directory** (`local_data` by default). Environment credentials take precedence over the flag, and bootstrap settings do not replace recovered credentials. A fresh cluster replica can recover credentials from peers. This setup is intended only for development and testing.
+
+## Getting started
+
+The [producer](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/examples/go/getting-started/producer/main.go) creates `sample-stream` and `sample-topic` (if missing) and sends 5 batches of 10 messages to partition `0`. The [consumer](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/examples/go/getting-started/consumer/main.go) polls them from offset `0` and exits after 5 batches. Stream, topic, and partition IDs are **0-based**. These repository examples use numeric stream and topic IDs `0`, so create no other streams or topics before running the producer on the fresh server. Run the producer first.
+
+Run both from the `examples/go` directory:
+
+```bash
+go run ./getting-started/producer/main.go
+go run ./getting-started/consumer/main.go
+```
+
+Each consumer reads partition `0` independently, starting from offset `0` or the earliest retained message. Running several consumers reads the same messages. These examples do not join a consumer group.
+
+Both binaries accept the same flags:
+
+- `--tcp-server-address` - server address, default `127.0.0.1:8090`
+- `--tls` - enable TLS
+- `--tls-ca-file` - path to a CA certificate file
+- `--tls-domain` - TLS server domain name for SNI
+
+## TLS
+
+From the repository root, start a disposable server with TLS enabled and the development certificates:
+
+```bash
+IGGY_TCP_TLS_ENABLED=true \
+IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
+IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+The same data and credential prerequisites apply. These certificates are for development only. Run the producer before the consumer with the TLS flags (paths relative to `examples/go`):
+
+```bash
+go run ./getting-started/producer/main.go --tcp-server-address localhost:8090 --tls --tls-ca-file ../../core/certs/iggy_ca_cert.pem
+go run ./getting-started/consumer/main.go --tcp-server-address localhost:8090 --tls --tls-ca-file ../../core/certs/iggy_ca_cert.pem
+```
+
+For the code walkthrough, see the [quick start](https://iggy.apache.org/docs/sdk/go/intro#quick-start) on the intro page, which follows the same example.
+
+---
+
+# Node.js SDK
+
+> The Node.js and TypeScript SDK, from installation to keeping client and server versions in step.
+
+Rendered page: https://iggy.apache.org/docs/sdk/node/intro/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/node/intro.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The Iggy Node.js SDK is a client library that allows you to interact with the Iggy API from your Node.js and TypeScript applications. It communicates with the Iggy server over TCP or TLS using the binary protocol. The package is available on [npm](https://www.npmjs.com/package/apache-iggy) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/node).
+
+These docs target server **0.10.0** and Node SDK **0.11.0**. The Node package 0.8.0 uses the older protocol. The current SDK speaks only the VSR wire protocol and doesn't fall back to older formats.
+
+## Installation
+
+```bash
+npm install apache-iggy@0.11.0
+```
+
+## Quick start
+
+The samples below expect an Iggy server on `127.0.0.1:8090`. See [Getting started](https://iggy.apache.org/docs/introduction/getting-started) for the server prerequisites:
+
+```bash
+docker run --rm \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -p 8090:8090 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  apache/iggy:0.10.0
+
+# Or from a 0.10.0 source checkout
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and set the root credentials the samples log in with. Without `--with-default-root-credentials` (or the `IGGY_ROOT_USERNAME` / `IGGY_ROOT_PASSWORD` variables), a fresh server refuses to start. For source runs, `--fresh` deletes existing local server data. Explicit credential environment variables take precedence over the default-root flag. Bootstrap settings do not replace credentials already stored in recovered data.
+
+Save the following snippets as `producer.mjs` and `consumer.mjs` in the project where you installed the SDK. Run `node producer.mjs` before `node consumer.mjs`. A consumer group sample follows them.
+
+### Producer
+
+```typescript
+import { Client, Partitioning } from 'apache-iggy';
+
+const STREAM_NAME = 'sample-stream';
+const TOPIC_NAME = 'sample-topic';
+
+const client = new Client({
+  transport: 'TCP',
+  options: { port: 8090, host: '127.0.0.1' },
+  credentials: { username: 'iggy', password: 'iggy' },
+});
+
+// Re-running this example is fine: only create what is missing.
+const streams = await client.stream.list();
+const stream =
+  streams.find((s) => s.name === STREAM_NAME) ??
+  (await client.stream.create({ name: STREAM_NAME }));
+
+const topics = await client.topic.list({ streamId: stream.id });
+const topic =
+  topics.find((t) => t.name === TOPIC_NAME) ??
+  (await client.topic.create({
+    streamId: stream.id,
+    name: TOPIC_NAME,
+    partitionCount: 1,
+    compressionAlgorithm: 1, // 1 = None, 2 = Gzip
+  }));
+
+const messages = Array.from({ length: 10 }, (_, i) => ({
+  id: i + 1,
+  headers: [],
+  payload: `message-${i + 1}`,
+}));
+
+await client.message.send({
+  streamId: stream.id,
+  topicId: topic.id,
+  messages,
+  partition: Partitioning.Balanced,
+});
+
+console.log(`Sent ${messages.length} message(s)`);
+
+await client.destroy();
+```
+
+The client resolves the target partition and routes requests to its primary. A primary can differ from the metadata leader.
+
+### Consumer
+
+```typescript
+import { Client, CommitPolicy, PollingStrategy, Consumer } from 'apache-iggy';
+
+const STREAM_NAME = 'sample-stream';
+const TOPIC_NAME = 'sample-topic';
+const PARTITION_ID = 0;
+
+const client = new Client({
+  transport: 'TCP',
+  options: { port: 8090, host: '127.0.0.1' },
+  credentials: { username: 'iggy', password: 'iggy' },
+});
+
+// Next starts after consumer 0's stored offset.
+// Autocommit requests offset storage before application processing.
+const polledMessages = await client.message.poll({
+  streamId: STREAM_NAME,
+  topicId: TOPIC_NAME,
+  consumer: Consumer.Single,
+  partitionId: PARTITION_ID,
+  strategy: PollingStrategy.Next,
+  options: { count: 10, commit: CommitPolicy.OnRead },
+});
+
+for (const message of polledMessages.messages) {
+  const payload = message.payload.toString('utf8');
+  console.log(`Offset: ${message.headers.offset}, Payload: ${payload}`);
+}
+
+await client.destroy();
+```
+
+The poll response does not wait for the auto-commit to finish. The sample processes messages after polling, so auto-commit does not confirm that the application handled each message.
+
+### Consumer group
+
+A consumer group distributes partitions among its members. The high-level consumer creates and joins the group, then reads its assigned partitions. Save this as `consumer-group.mjs`:
+
+```typescript
+import { Client } from 'apache-iggy';
+
+const client = new Client('iggy://iggy:iggy@127.0.0.1:8090');
+const consumer = await client.consumerGroup({
+  name: 'sample-group',
+  streamId: 'sample-stream',
+  topicId: 'sample-topic',
+});
+try {
+  for await (const received of consumer) {
+    console.log(received.message.payload.toString('utf8'));
+    await consumer.commit(received.checkpoint);
+  }
+} finally {
+  await consumer.shutdown();
+  await client.destroy();
+}
+```
+
+This loop waits for messages until it is stopped. It stores checkpoints after printing. The group has its own offsets, separate from a standalone consumer.
+
+### Running the samples again
+
+All three samples can be run again without changes:
+
+- `node producer.mjs` finds the existing stream and topic and appends ten more messages.
+- `node consumer.mjs` prints only the new messages, because `PollingStrategy.Next` continues after the stored offset. With nothing new to read, it prints nothing.
+- `node consumer-group.mjs` does the same from the group's stored offset.
+
+To start again with an empty server, stop the container and run the `docker run` command again. `--rm` removes the container and its data.
+
+## Configuration
+
+The client constructor accepts a few options:
+
+- **reconnect**: automatic reconnection with `{ enabled, interval, maxRetries }`.
+- **heartbeatInterval**: the client pings the server every 5 seconds by default. `0` disables heartbeats. When server heartbeat eviction is enabled, silent consumer-group members can be evicted, so keep it well below the server's heartbeat timeout.
+- **maxResponseFrameSize**: response frames larger than this limit (default 64 MiB) are rejected and close the connection. Raise it when polling very large batches.
+- **poolSize**: the client currently supports exactly one pooled connection. `min`/`max` above 1 throw.
+- **TLS**: set `transport: 'TLS'` and pass Node `tls.ConnectionOptions` in `options`. See the [tcp-tls example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/node/src/tcp-tls).
+
+## Beyond the basics
+
+- **Consumer groups**: `client.group` manages groups (including ensure-and-join in one call), and `client.message.reader` or `client.consumerGroup` reads the assigned partitions. A one-shot poll names one partition.
+- **Consumer streams**: A high-level consumer supports async iteration, handler-based consumption and `toReadable()`.
+- **Administration**: users, personal access tokens, offsets, partitions, segments, and cluster metadata are all available on the client.
+- **Errors**: the package exports `ResponseError`, `DeserializeError`, `ProtocolFrameError`, and `VsrEvictionError` for precise error handling.
+
+See the [foreign/node README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/node) for the full API walkthrough.
+
+## Examples
+
+Examples are available in the [examples/node](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/node) directory, written in TypeScript. See [Examples](https://iggy.apache.org/docs/sdk/node/examples) for the list and how to run them.
+
+---
+
+# Examples
+
+> Build the local Node.js SDK and run its TypeScript examples.
+
+Rendered page: https://iggy.apache.org/docs/sdk/node/examples/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/node/examples.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+Examples are available in the [examples/node](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/node) directory, written in TypeScript. They use the SDK from the same checkout:
+
+- **getting-started** - basic producer and consumer
+- **basic** - producer and consumer with utilities
+- **message-envelope** - JSON message envelope pattern
+- **message-headers** - message-type dispatch using a JSON wrapper in the payload
+- **multi-tenant** - separate streams for tenants, using one client
+- **tcp-tls** - TLS-encrypted TCP connections
+- **stream-builder** - end-to-end walkthrough: create a stream and topic, produce, and consume
+- **sink-data-producer** - bulk data generation for sink connectors
+
+## Running the examples
+
+These examples target server **0.10.0**. See [Getting started](https://iggy.apache.org/docs/introduction/getting-started) for prerequisites:
+
+```bash
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+The default-root flag sets the `iggy`/`iggy` credentials used by the examples. `--fresh` deletes existing local server data. Explicit credential environment variables override the default-root flag. Bootstrap settings do not replace recovered credentials.
+
+From the repository root, build the local SDK before installing the examples. The stream-builder example creates a stream and topic, sends and consumes three messages, and deletes its resources:
+
+```bash
+npm --prefix foreign/node ci
+npm --prefix foreign/node run build
+npm --prefix examples/node ci
+cd examples/node
+DEBUG=iggy:examples npm run test:stream-builder
+```
+
+Each example has a script in `examples/node/package.json`. Set `DEBUG=iggy:examples*` to see its progress.
+
+The separate producer and consumer scripts do not consistently share resources: the envelope and headers consumers create new empty topics, and the tenant producer deletes its streams before exiting. The getting-started and basic producers spread batches over five partitions, while their consumers poll partition 0. Use the self-contained stream-builder command above for a complete send-and-consume walkthrough. The sink-data producer deletes its selected topic and stream when it finishes, including resources that already existed.
+
+The TCP/TLS pair needs a TLS-enabled source server. Run this command from the repository root, then the two `test:tcp-tls:*` scripts from `examples/node`, where they load `../../core/certs/iggy_ca_cert.pem`:
+
+```bash
+IGGY_TCP_TLS_ENABLED=true \
+IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
+IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+These are repository development certificates.
+
+For the quick-start code itself, see the [Node.js SDK intro](https://iggy.apache.org/docs/sdk/node/intro).
+
+---
+
+# C# SDK
+
+> The async-first C# SDK for .NET applications over TCP and HTTP, from installation to creating a client.
+
+Rendered page: https://iggy.apache.org/docs/sdk/csharp/intro/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/csharp/intro.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The Iggy SDK for C# is a modern, async-first client library for interacting with an Iggy message streaming server from your .NET applications. It supports TCP and HTTP transports. The package is available on [NuGet](https://www.nuget.org/packages/Apache.Iggy/) and the source code lives on [GitHub](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/csharp).
+
+The SDK is built around the `IIggyClient` interface, which aggregates every feature (publishing, consuming, stream/topic management, users, offsets, consumer groups, and system operations). For the low-level per-call API and the full configuration reference, see the [Guide](https://iggy.apache.org/docs/sdk/csharp/guide). For the ergonomic, batteries-included producer/consumer abstractions, see the [High-level SDK](https://iggy.apache.org/docs/sdk/csharp/high-level-sdk).
+
+## Installation
+
+```bash
+dotnet add package Apache.Iggy --version 0.10.0
+```
+
+The SDK targets .NET 8 and .NET 10 (`net8.0` and `net10.0`). Version `0.10.0` matches the server 0.10.0 protocol and includes both topic durability options. Version `0.8.0` uses the older TCP framing. When building from source, use the server and SDK from the same checkout.
+
+To use the source SDK with these release-preparation examples, run from the Iggy checkout root:
+
+```bash
+dotnet new console --name IggySample --framework net10.0
+dotnet add IggySample/IggySample.csproj reference foreign/csharp/Iggy_SDK/Iggy_SDK.csproj
+```
+
+Put a sample in `IggySample/Program.cs` and run `dotnet run --project IggySample`. For console logging, add its package to that project:
+
+```bash
+dotnet add IggySample/IggySample.csproj package Microsoft.Extensions.Logging.Console --version 10.0.11
+```
+
+## Supported protocols
+
+The SDK supports two transport protocols:
+
+- **TCP** - binary protocol for optimal performance and lower latency (recommended). Over TCP the SDK speaks the VSR consensus framing, the only wire protocol the server accepts. See [Connection semantics](#connection-semantics)
+- **HTTP** - RESTful JSON API for stateless operations. `BaseAddress` must then be a full URI such as `http://127.0.0.1:3000` (the server's default HTTP port is 3000, TCP is 8090)
+
+Some operations are **TCP-only** and throw `FeatureUnavailableException` on HTTP: joining/leaving a consumer group, `GetMeAsync`, `DeleteSegmentsAsync`, and `SendBinaryRequestAsync`.
+
+## Connection semantics
+
+TCP uses the current binary protocol and routes partition requests to their primaries. The client discovers the cluster roster and follows metadata leadership separately. Balanced and message-key partitioning are resolved on the client.
+
+A retained session can survive transport loss. Reconnect binds it before registering a new session. Logout, session expiry and account deactivation end the session. An uncertain mutation retains its request identity for recovery. Keep the same client and use `ResolveOperationAsync` or `AbandonOperationAsync` when an exception reports a retained operation. Abandonment does not undo the server result.
+
+A committing deferred poll whose reply is lost can throw `VsrFetchProgressUncertainException`. Later progress calls can throw `VsrPartitionLaneBlockedException` until the operation is abandoned. Offset reads remain available for inspection. Do not convert every exception into a fresh send.
+
+The reader and high-level consumer follow group assignments. A one-shot poll names one partition. They default to manual checkpoint commits. See [Deferred polling](https://iggy.apache.org/docs/sdk/deferred-polling) and the [Guide](https://iggy.apache.org/docs/sdk/csharp/guide).
+
+## Creating a client
+
+The examples use `iggy` / `iggy`. For a new server data directory, start the matching source server from the Iggy repository root:
+
+```bash
+IGGY_ROOT_USERNAME=iggy IGGY_ROOT_PASSWORD=iggy cargo run --bin iggy-server
+```
+
+For an existing server, use its configured credentials. Create a client with `IggyClientFactory.CreateClient`, then call `ConnectAsync`:
+
+```csharp
+using Apache.Iggy.Contracts;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Factory;
+
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp
+});
+
+await client.ConnectAsync();
+await client.LoginUserAsync("iggy", "iggy");
+```
+
+Optionally, provide an `ILoggerFactory` for diagnostics (defaults to `NullLoggerFactory.Instance`). The console logger requires the `Microsoft.Extensions.Logging.Console` package:
+
+```csharp
+using Apache.Iggy.Contracts;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Factory;
+using Microsoft.Extensions.Logging;
+
+using var loggerFactory = LoggerFactory.Create(builder =>
+{
+    builder
+        .AddFilter("Apache.Iggy", LogLevel.Information)
+        .AddConsole();
+});
+
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp,
+    LoggerFactory = loggerFactory
+});
+```
+
+`IggyClientConfigurator` also exposes TCP socket buffers, TLS, heartbeat, response-frame limits, reconnection with exponential backoff (on by default), auto-login, and message encryption. HTTP clients require explicit login. The TCP connection settings are not applied to HTTP. See [Client configuration](https://iggy.apache.org/docs/sdk/csharp/guide#client-configuration) for the full reference.
+
+## Quick start
+
+These samples use the [High-level SDK](https://iggy.apache.org/docs/sdk/csharp/high-level-sdk) - the recommended way to build producers and consumers. For the equivalent low-level, per-call flow, see the [Guide](https://iggy.apache.org/docs/sdk/csharp/guide).
+
+### Producer
+
+```csharp
+using Apache.Iggy.Contracts;
+using System.Text;
+using Apache.Iggy;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Extensions;
+using Apache.Iggy.Factory;
+using Apache.Iggy.Messages;
+
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp
+});
+
+await client.ConnectAsync();
+await client.LoginUserAsync("iggy", "iggy");
+
+await using var publisher = client.CreatePublisherBuilder(
+        Identifier.String("sample-stream"),
+        Identifier.String("sample-topic"))
+    .CreateStreamIfNotExists("sample-stream")
+    .CreateTopicIfNotExists("sample-topic")
+    .Build();
+
+await publisher.InitAsync();
+
+for (var i = 0; i < 10; i++)
+{
+    var payload = Encoding.UTF8.GetBytes($"message-{i}");
+    await publisher.SendMessagesAsync(new List<Message> { new(Guid.NewGuid(), payload) });
+}
+
+```
+
+### Consumer
+
+```csharp
+using Apache.Iggy.Contracts;
+using System.Text;
+using Apache.Iggy;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Consumers;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Extensions;
+using Apache.Iggy.Factory;
+using Apache.Iggy.Kinds;
+
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp
+});
+
+await client.ConnectAsync();
+await client.LoginUserAsync("iggy", "iggy");
+
+await using var consumer = client.CreateConsumerBuilder(
+        Identifier.String("sample-stream"),
+        Identifier.String("sample-topic"),
+        Consumer.New(1))
+    .WithPollingStrategy(PollingStrategy.Next())
+    .WithPollOptions(new PollOptions { Commit = CommitPolicy.Auto() })
+    .Build();
+
+await consumer.InitAsync();
+
+await foreach (var message in consumer.ReceiveAsync())
+{
+    var payload = Encoding.UTF8.GetString(message.Message.Payload);
+    Console.WriteLine($"Offset {message.CurrentOffset}: {payload}");
+}
+```
+
+`ReceiveAsync` polls **indefinitely** - pass a `CancellationToken` or `break` out of the loop to stop.
+
+## Next steps
+
+- [Guide](https://iggy.apache.org/docs/sdk/csharp/guide) - client configuration reference and the full API surface: auth, streams, topics, partitions, publishing, consuming, offsets, consumer groups, system operations
+- [High-level SDK](https://iggy.apache.org/docs/sdk/csharp/high-level-sdk) - `IggyPublisher` / `IggyConsumer` with background sending, retries, auto-commit, typed (de)serialization, and pooled (rented) buffers to avoid separate payload copies on TCP
+- [Examples](https://iggy.apache.org/docs/sdk/csharp/examples) - producer, consumer-group, and typed-message samples, plus links to runnable projects
+
+---
+
+# Guide
+
+> Client configuration and the full low-level IIggyClient API surface for the C# SDK.
+
+Rendered page: https://iggy.apache.org/docs/sdk/csharp/guide/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/csharp/guide.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+This guide covers client configuration and the full `IIggyClient` API surface - the low-level, per-call operations. For the ergonomic producer/consumer abstractions built on top of these, see the [High-level SDK](https://iggy.apache.org/docs/sdk/csharp/high-level-sdk).
+
+The API fragments below reuse a connected, authenticated `client` (see [Creating a client](https://iggy.apache.org/docs/sdk/csharp/intro#creating-a-client)) and the imports in the configuration example. Use existing streams and topics for read, update, delete, publish, and poll operations. The create examples show how to prepare them.
+
+## Client configuration
+
+`IggyClientConfigurator` exposes the full set of connection options - buffer sizes, TLS, heartbeat, automatic reconnection with exponential backoff, and auto-login:
+
+```csharp
+using Apache.Iggy.Contracts;
+using System.Text;
+using Apache.Iggy;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Contracts.Auth;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Factory;
+using Apache.Iggy.Headers;
+using Apache.Iggy.IggyClient;
+using Apache.Iggy.Kinds;
+using Apache.Iggy.Messages;
+using Partitioning = Apache.Iggy.Kinds.Partitioning;
+
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp,
+
+    // Null preserves the operating system socket defaults.
+    ReceiveBufferSize = null,
+    SendBufferSize = null,
+
+    // Upper bound on a reply frame the server sends, 64 MiB by default (TCP)
+    MaxResponseFrameSize = 64 * 1024 * 1024,
+
+    // Idle ping keeping the session alive and consumer-group assignments fresh (TCP).
+    // Default 5 seconds. Init-only
+    HeartbeatInterval = TimeSpan.FromSeconds(5),
+
+    // Automatic reconnection with exponential backoff (enabled by default, infinite retries)
+    ReconnectionSettings = new ReconnectionSettings
+    {
+        Enabled = true,
+        MaxRetries = 0,              // 0 = infinite retries
+        InitialDelay = TimeSpan.FromSeconds(5),
+        MaxDelay = TimeSpan.FromSeconds(30),
+        WaitAfterReconnect = TimeSpan.FromSeconds(1),
+        UseExponentialBackoff = true,
+        BackoffMultiplier = 2.0
+    },
+
+    // Configured credentials are reused when TCP reconnects.
+    AutoLoginSettings = AutoLoginSettings.For("iggy", "iggy")
+    // or AutoLoginSettings.ForPersonalAccessToken("your_token")
+});
+
+await client.ConnectAsync();
+```
+
+With TCP auto-login configured, the client logs in once connected. Successful manual username/password or PAT login is also remembered for reconnects. HTTP `ConnectAsync` does no network work and does not auto-login. Call `LoginUserAsync` or `LoginWithPersonalAccessTokenAsync` explicitly.
+
+#### `IggyClientConfigurator`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `BaseAddress` | `string` | *required* | Server address. TCP takes `host:port` (e.g. `127.0.0.1:8090`). HTTP needs a full URI (e.g. `http://127.0.0.1:3000`) |
+| `Protocol` | `Protocol` | *required* | Transport: `Protocol.Tcp` or `Protocol.Http` |
+| `MaxResponseFrameSize` | `int` | 64 MiB | Largest reply frame accepted over TCP. A reply above the bound is refused and the connection dropped. Raise it if a single response legitimately exceeds it (a large [snapshot](#snapshots) is the usual case) |
+| `ReceiveBufferSize` | `int?` | `null` | TCP receive buffer override in bytes. Null preserves the OS default |
+| `SendBufferSize` | `int?` | `null` | TCP send buffer override in bytes. Null preserves the OS default |
+| `HeartbeatInterval` | `TimeSpan` | `5s` | Interval between the automatic pings the TCP client sends while connected (see [Heartbeat](#heartbeat)). Init-only. Must be between 1 millisecond and about 49 days |
+| `TlsSettings` | `TlsSettings` | disabled | TCP TLS configuration (see below). HTTP uses its HTTPS URI and standard certificate validation |
+| `ReconnectionSettings` | `ReconnectionSettings` | enabled | TCP reconnection behavior (see below) |
+| `AutoLoginSettings` | `AutoLoginSettings` | disabled | TCP automatic login on connect |
+| `LoggerFactory` | `ILoggerFactory` | `NullLoggerFactory.Instance` | Logger factory for diagnostics (currently applied to TCP clients only) |
+| `MessageEncryptor` | `IMessageEncryptor?` | `null` | Client-side payload encryptor (encrypts on send, decrypts on poll - see [Message encryption](#message-encryption)) |
+| `AllowAutoCommitWithEncryptor` | `bool` | `false` | Allow auto-commit while an encryptor is configured |
+
+#### Heartbeat
+
+The TCP client pings the server on its own every `HeartbeatInterval` while connected, so an idle session survives the server's heartbeat verification and consumer-group memberships and assignments stay fresh. The ping goes through the regular request path: a lost session is repaired by the same reconnect and auto-login any other request would trigger. Heartbeat failures are logged and the loop keeps going until the client is disposed.
+
+#### `TlsSettings`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `Enabled` | `bool` | `false` | Whether TLS is enabled |
+| `Hostname` | `string` | `""` | Server name for the TLS handshake |
+| `CertificatePath` | `string` | `""` | Path to the certificate (CA / self-signed) file |
+
+#### `ReconnectionSettings`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `Enabled` | `bool` | `true` | Enable automatic reconnection when the connection drops |
+| `MaxRetries` | `int` | `0` | Maximum failed passes through the known address roster (`0` = unlimited) |
+| `InitialDelay` | `TimeSpan` | `5s` | Delay before the first reconnection attempt |
+| `MaxDelay` | `TimeSpan` | `30s` | Maximum delay between attempts |
+| `WaitAfterReconnect` | `TimeSpan` | `1s` | Pause after a successful reconnect (e.g. to rejoin a consumer group) |
+| `UseExponentialBackoff` | `bool` | `true` | Use exponential backoff for delays |
+| `BackoffMultiplier` | `double` | `2.0` | Multiplier for exponential backoff |
+
+> **Warning:** TCP reconnection is **on by default** with **unlimited retries**. A failed pass tries the known roster addresses before consuming one retry. Connection and TLS handshake failures can be retried. An invalid local CA file stops after the pass, and rejected login credentials are surfaced. Pass a `CancellationToken` or set `MaxRetries` to bound connection attempts, or set `Enabled = false` to disable reconnection. Request replay also has its own deadline and requires configured or remembered login credentials.
+
+#### `AutoLoginSettings`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `Enabled` | `bool` | `false` | Log in automatically once connected |
+| `Username` | `string` | `""` | Username for auto-login |
+| `Password` | `string` | `""` | Password for auto-login |
+| `PersonalAccessToken` | `string` | `""` | Personal access token to sign in with instead of a username and password. Takes precedence over them when set |
+
+All properties are init-only: build the settings with an object initializer or the static factories `AutoLoginSettings.For(username, password)` and `AutoLoginSettings.ForPersonalAccessToken(token)`. TCP reconnects use configured auto-login credentials first, then credentials remembered from a successful manual login. Without either, a reconnect cannot restore the authenticated session.
+
+## Message encryption
+
+Set `IggyClientConfigurator.MessageEncryptor` to encrypt message payloads and user headers client-side. They are encrypted on send and decrypted on poll. Routing information and message metadata remain visible to the server. The built-in `AesMessageEncryptor` uses AES-GCM (confidentiality + authenticity) and takes a 16-, 24-, or 32-byte key for AES-128/192/256:
+
+```csharp
+using Apache.Iggy.Factory;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Contracts;
+using System.Security.Cryptography;
+using Apache.Iggy.Encryption;
+
+var key = RandomNumberGenerator.GetBytes(32);
+using var encryptor = new AesMessageEncryptor(key);
+
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp,
+    MessageEncryptor = encryptor
+});
+```
+
+Keep the same key for clients that exchange encrypted messages and for later reads. The generated key above lasts only for this example. For a custom scheme, implement `IMessageEncryptor`.
+
+Things to know:
+
+- The encryptor applies to **every message on the connection** - topics mixing encrypted and plaintext messages are not supported.
+- You own the encryptor and must dispose it once the client is done with it.
+- With an encryptor configured, polling with `autoCommit: true` throws `InvalidOperationException` by default: the server commits the offset **before the client decrypts**, so a decryption failure would silently skip the whole batch. Poll with `autoCommit: false` and store offsets after processing, or opt in with `AllowAutoCommitWithEncryptor = true`. `IggyConsumer` separately rejects wire auto-commit with encryption. Use `AfterReceive` or `Disabled` there.
+- On the high-level builders, `WithEncryptor(...)` is only valid when the builder creates its own client. For an external client, set `MessageEncryptor` on the configurator instead.
+
+## Connection events
+
+TCP clients publish connection state changes, useful for reacting to reconnects. HTTP subscription methods are no-ops:
+
+```csharp
+Func<ConnectionStateChangedEventArgs, Task> handler = async args =>
+{
+    Console.WriteLine($"Current connection state: {args.CurrentState}");
+    await Task.CompletedTask;
+};
+
+client.SubscribeConnectionEvents(handler);
+
+// Later
+client.UnsubscribeConnectionEvents(handler);
+```
+
+## Identifiers
+
+Streams, topics, users, and consumer groups are referenced by an `Identifier`, which can be either numeric or a name:
+
+```csharp
+var byId = Identifier.Numeric(0);
+var byName = Identifier.String("my-stream");
+```
+
+Server-assigned ids are **0-based**: the first stream, topic, partition, or consumer group gets id 0. The root user has id 0 as well.
+
+## Authentication
+
+### User login
+
+Use the credentials configured when the server was initialized. These examples use the `iggy` / `iggy` setup from the introduction:
+
+```csharp
+var response = await client.LoginUserAsync("iggy", "iggy");
+
+// Log out the currently authenticated user
+await client.LogoutUserAsync();
+```
+
+### Creating users
+
+Create new users with customizable permissions:
+
+```csharp
+var permissions = new Permissions
+{
+    Global = new GlobalPermissions
+    {
+        ManageServers = true,
+        ManageUsers = true,
+        ManageStreams = true,
+        ManageTopics = true,
+        PollMessages = true,
+        ReadServers = true,
+        ReadStreams = true,
+        ReadTopics = true,
+        ReadUsers = true,
+        SendMessages = true
+    }
+};
+
+await client.CreateUserAsync("test_user", "secure_password", UserStatus.Active, permissions);
+
+var loginResponse = await client.LoginUserAsync("test_user", "secure_password");
+```
+
+Besides `Global`, `Permissions.Streams` scopes permissions to specific streams (keyed by numeric stream id), and each `StreamPermissions` can in turn scope down to specific topics:
+
+```csharp
+var permissions = new Permissions
+{
+    Global = new GlobalPermissions
+    {
+        ManageServers = false,
+        ManageUsers = false,
+        ManageStreams = false,
+        ManageTopics = false,
+        PollMessages = false,
+        ReadServers = false,
+        ReadStreams = false,
+        ReadTopics = false,
+        ReadUsers = false,
+        SendMessages = false
+    },
+    Streams = new Dictionary<uint, StreamPermissions>
+    {
+        [0] = new StreamPermissions
+        {
+            ManageStream = false,
+            ReadStream = true,
+            ManageTopics = false,
+            ReadTopics = true,
+            PollMessages = true,
+            SendMessages = true,
+            Topics = new Dictionary<uint, TopicPermissions>
+            {
+                [0] = new TopicPermissions
+                {
+                    ManageTopic = false,
+                    ReadTopic = true,
+                    PollMessages = true,
+                    SendMessages = false
+                }
+            }
+        }
+    }
+};
+```
+
+### Managing users
+
+```csharp
+var userId = Identifier.String("test_user");
+
+// Get / list
+var user = await client.GetUserAsync(userId);
+var users = await client.GetUsersAsync();
+
+// Update name and/or status (both optional)
+await client.UpdateUserAsync(userId, new UserUpdate { Username = "renamed_user", Status = UserStatus.Inactive });
+userId = Identifier.String("renamed_user");
+
+// Replace permissions
+await client.UpdatePermissionsAsync(userId, permissions);
+
+// Change password
+await client.ChangePasswordAsync(userId, "secure_password", "new_password");
+
+// Delete
+await client.DeleteUserAsync(userId);
+```
+
+### Personal access tokens
+
+Create and use Personal Access Tokens (PAT) for programmatic access:
+
+```csharp
+// Create a PAT (expiry is optional. Null = server default, TimeSpan.MaxValue = never expires)
+var pat = await client.CreatePersonalAccessTokenAsync("api-token", TimeSpan.FromHours(1));
+
+// Login with the raw token value
+await client.LoginWithPersonalAccessTokenAsync(pat!.Token);
+
+// List / delete (by name)
+var tokens = await client.GetPersonalAccessTokensAsync();
+await client.DeletePersonalAccessTokenAsync("api-token");
+```
+
+## Streams
+
+```csharp
+// Create
+await client.CreateStreamAsync("my-stream");
+
+// Get / list
+var stream = await client.GetStreamByIdAsync(Identifier.String("my-stream"));
+var streams = await client.GetStreamsAsync();
+
+// Update and delete
+await client.UpdateStreamAsync(Identifier.String("my-stream"), new StreamUpdate { Name = "renamed-stream" });
+await client.DeleteStreamAsync(Identifier.String("renamed-stream"));
+```
+
+## Topics
+
+Create a topic with typed `TopicOptions`. Fields left null use the server default. Compression, durability, partition resize policy and replication factor are fixed at creation.
+
+```csharp
+var streamId = Identifier.String("my-stream");
+await client.CreateTopicAsync(streamId, name: "my-topic", partitionsCount: 3,
+    options: new TopicOptions
+    {
+        SegmentSize = 128 * 1024 * 1024,
+        Durability = Durability.Persisted,
+        ConsumerOffsetDurability = Durability.Persisted,
+        MessageExpiry = TimeSpan.FromDays(7)
+    });
+```
+
+### Topic options
+
+`DescribeOptionsAsync(OptionsScope.Topic)` returns the catalog. Set fields in `TopicUpdate` to change them. `Reset` returns a supported key to its server default. Omitted fields keep their stored values. Compression cannot be updated. See [Topic options](https://iggy.apache.org/docs/server/topic-options).
+
+```csharp
+var topicId = Identifier.String("my-topic");
+var topic = await client.GetTopicByIdAsync(streamId, topicId);
+var topics = await client.GetTopicsAsync(streamId);
+await client.UpdateTopicAsync(streamId, topicId, new TopicUpdate
+{
+    MessageExpiry = TimeSpan.FromDays(1),
+    Reset = new HashSet<TopicOptionKey> { TopicOptionKey.MaxTopicSize }
+});
+```
+
+Stream and topic purge are removed. `DeleteTopicAsync` deletes the topic and its data. There is no on-demand flush command. Select both durability policies when creating the topic.
+
+## Partitions
+
+Add partitions to or remove them from an existing topic:
+
+```csharp
+await client.CreatePartitionsAsync(streamId, topicId, partitionsCount: 2);
+await client.DeletePartitionsAsync(streamId, topicId, partitionsCount: 2);
+```
+
+## Publishing messages
+
+### Sending messages
+
+A `Message` takes an id (`Guid` or `UInt128`) and a payload:
+
+```csharp
+var streamId = Identifier.String("my-stream");
+var topicId = Identifier.String("my-topic");
+
+var messages = new List<Message>
+{
+    new(Guid.NewGuid(), "Hello, Iggy!"u8.ToArray()),
+    new(1, "Another message"u8.ToArray())
+};
+
+var response = await client.SendMessagesAsync(
+    streamId,
+    topicId,
+    Partitioning.None(),  // balanced partitioning
+    messages
+);
+
+// The confirmations report where each committed batch landed. This is the only
+// way to learn the partition and offset a message was assigned
+foreach (var confirmation in response.Confirmations)
+{
+    Console.WriteLine($"Partition {confirmation.PartitionId}, base offset {confirmation.BaseOffset}");
+}
+```
+
+`SendMessagesAsync` returns a `SendMessagesResponse` whose `Confirmations` carry `StreamId`, `TopicId`, `PartitionId`, and `BaseOffset` (the offset of the first message of the batch) per committed batch. An empty list reports no assigned offsets. A single-message overload is also available: `SendMessagesAsync(streamId, topicId, partitioning, message)`.
+
+To send many payloads without a `byte[]` allocation per message, build them into a single pooled buffer with `RentedMessageBatchBuilder` - see [Publishing with rented batches](https://iggy.apache.org/docs/sdk/csharp/high-level-sdk#publishing-with-rented-batches).
+
+### Partitioning strategies
+
+Control which partition receives each message:
+
+```csharp
+// Balanced - the client round-robins across partitions (default)
+Partitioning.None();
+
+// Send to a specific partition (partition ids are 0-based)
+Partitioning.PartitionId(0);
+
+// Key-based routing - messages with the same key land on the same partition
+Partitioning.EntityIdString("user-123");
+Partitioning.EntityIdInt(12345);
+Partitioning.EntityIdUlong(12345);
+Partitioning.EntityIdGuid(Guid.NewGuid());
+Partitioning.EntityIdBytes(new byte[] { 1, 2, 3 });
+```
+
+Partition selection is resolved **client-side** on both transports. Balanced partitioning round-robins over the topic's partitions, and key-based routing hashes the key with xxHash32 modulo the partition count, consistent with the Rust SDK for the same encoded key bytes and partition count. Strings use UTF-8, integers use little-endian bytes, and GUID keys use `Guid.ToByteArray()`.
+
+### User-defined headers
+
+Add typed custom headers to messages. Build keys with `HeaderKey.FromString` and values with the `HeaderValue.From*` factories:
+
+```csharp
+var headers = new Dictionary<HeaderKey, HeaderValue>
+{
+    { HeaderKey.FromString("correlation_id"), HeaderValue.FromString("req-123") },
+    { HeaderKey.FromString("priority"), HeaderValue.FromInt32(1) },
+    { HeaderKey.FromString("timeout"), HeaderValue.FromInt64(5000) },
+    { HeaderKey.FromString("confidence"), HeaderValue.FromFloat(0.95f) },
+    { HeaderKey.FromString("is_urgent"), HeaderValue.FromBool(true) },
+    { HeaderKey.FromString("request_id"), HeaderValue.FromGuid(Guid.NewGuid()) }
+};
+
+var messages = new List<Message>
+{
+    new(Guid.NewGuid(), "Message with headers"u8.ToArray(), headers)
+};
+
+await client.SendMessagesAsync(streamId, topicId, Partitioning.PartitionId(0), messages);
+```
+
+Available value factories: `FromString`, `FromBool`, `FromBytes`, `FromUInt8`, `FromInt32`, `FromInt64`, `FromInt128`, `FromUInt32`, `FromUInt64`, `FromUInt128`, `FromFloat`, `FromDouble`, `FromGuid`.
+
+## Consuming messages
+
+### Fetching messages
+
+A poll reads one explicit partition. Use a reader for several partitions or a consumer group assignment. `PollOptions` defaults to no wait and manual commits.
+
+```csharp
+var consumer = Consumer.New(1);
+var options = new PollOptions { Count = 100, MaxWait = TimeSpan.FromSeconds(5) };
+var polled = await client.PollMessagesAsync(
+    streamId, topicId, 0, consumer, PollingStrategy.Next(), options);
+foreach (var message in polled.Messages)
+{
+    Console.WriteLine(Encoding.UTF8.GetString(message.Payload));
+}
+if (polled.Checkpoint is { } checkpoint)
+{
+    await client.StoreConsumerPositionAsync(consumer, streamId, topicId, checkpoint);
+}
+```
+
+A checkpoint retains the partition history and owner. A commit after a partition recreation or ownership change is refused. `polled.Continuation` continues the same partition without losing that context.
+
+`CommitPolicy.OnRead` submits the offset with the read, before application processing. `CommitPolicy.Auto()` is available to readers and consumers, but not a one-shot poll. The [deferred polling guide](https://iggy.apache.org/docs/sdk/deferred-polling) explains limits and cancellation.
+
+### Partition reader
+
+```csharp
+await using var reader = await client.Reader(streamId, topicId, Consumer.New(1))
+    .WithPartitions(0, 1, 2)
+    .WithOptions(new PollOptions { MaxWait = TimeSpan.FromSeconds(5) })
+    .BuildAsync();
+var batch = await reader.NextAsync();
+foreach (var message in batch.Messages)
+{
+    Console.WriteLine(Encoding.UTF8.GetString(message.Payload));
+}
+await reader.CommitAsync(batch.Checkpoint!);
+```
+
+TCP groups reads by primary. HTTP uses one poll per partition and supports standalone consumers only. A group reader joins and follows its assignment. `ReadException` reports the partition and any continuation that skips an undecodable record. A stopped partition needs an explicit seek before reading resumes.
+
+### Polling with rented buffers
+
+The rental API returns payload slices backed by a pooled buffer. Dispose each rental and copy any bytes that must outlive it. Do not retain a payload or raw-header reference after disposal. The high-level consumer exposes `ReceiveRentedAsync` for this path.
+
+### Polling strategies
+
+Control where consumption starts:
+
+```csharp
+PollingStrategy.Offset(1000);              // from a specific offset
+PollingStrategy.Timestamp(1699564800000000);  // from a timestamp (microseconds since epoch)
+PollingStrategy.First();                   // from the earliest message
+PollingStrategy.Last();                    // from the latest message
+PollingStrategy.Next();                    // from the next unread message
+```
+
+## Offset management
+
+Consumer offsets are keyed by consumer + stream + topic + partition. Note the argument order - the `Consumer` comes first:
+
+```csharp
+var consumer = Consumer.New(1);
+var streamId = Identifier.String("my-stream");
+var topicId = Identifier.String("my-topic");
+
+// Store the current position
+await client.StoreOffsetAsync(consumer, streamId, topicId, offset: 42, partitionId: 0);
+
+// Retrieve the stored offset
+var offsetInfo = await client.GetOffsetAsync(consumer, streamId, topicId, partitionId: 0);
+Console.WriteLine($"Stored offset: {offsetInfo!.StoredOffset}");
+
+// Clear the stored offset
+await client.DeleteOffsetAsync(consumer, streamId, topicId, partitionId: 0);
+```
+
+## Consumer groups
+
+Consumer groups coordinate message consumption across multiple consumers, load-balancing partitions between members.
+
+```csharp
+var streamId = Identifier.String("my-stream");
+var topicId = Identifier.String("my-topic");
+
+// Create
+await client.CreateConsumerGroupAsync(streamId, topicId, "my-consumer-group");
+
+// Inspect
+var groups = await client.GetConsumerGroupsAsync(streamId, topicId);
+var group = await client.GetConsumerGroupByIdAsync(streamId, topicId, Identifier.String("my-consumer-group"));
+
+// Delete
+await client.DeleteConsumerGroupAsync(streamId, topicId, Identifier.String("my-consumer-group"));
+```
+
+### Joining and leaving
+
+> **Note:** Join/Leave are TCP-only and throw `FeatureUnavailableException` on HTTP.
+
+```csharp
+await client.JoinConsumerGroupAsync(streamId, topicId, Identifier.String("my-consumer-group"));
+await client.LeaveConsumerGroupAsync(streamId, topicId, Identifier.String("my-consumer-group"));
+```
+
+## System operations
+
+```csharp
+// Health check
+await client.PingAsync();
+
+// Address of the node the client currently talks to
+var address = client.GetCurrentAddress();
+
+// Server statistics
+var stats = await client.GetStatsAsync();
+
+// Cluster metadata and node information
+var metadata = await client.GetClusterMetadataAsync();
+
+// Connected clients
+var clients = await client.GetClientsAsync();
+var clientById = await client.GetClientByIdAsync(clientId: 1);
+var currentClient = await client.GetMeAsync();  // TCP-only
+```
+
+`PingAsync` is **more than a bare ping** over TCP: it also re-syncs the assignment of every consumer group this client has joined, at the cost of one extra round trip per joined group. The client already pings on its own every [`HeartbeatInterval`](#heartbeat), so an explicit ping is only needed to force an assignment refresh sooner. `GetCurrentAddress()` is useful under leader redirection, when the client may have followed the cluster roster to a different node than the one it was configured with (see [Connection semantics](https://iggy.apache.org/docs/sdk/csharp/intro#connection-semantics)).
+
+### Option catalog
+
+`DescribeOptionsAsync` enumerates the option keys a server accepts for a resource scope (`OptionsScope.Topic`, `OptionsScope.Stream`, or `OptionsScope.User`), with the kind, default, and description of each. This is the discovery surface for the [topic options](#topic-options) dictionary:
+
+```csharp
+var specs = await client.DescribeOptionsAsync(OptionsScope.Topic);
+
+foreach (var spec in specs)
+{
+    Console.WriteLine($"{spec.Key} ({spec.Kind}): {spec.Description}");
+}
+```
+
+### Raw binary requests
+
+`SendBinaryRequestAsync` is an escape hatch that sends a raw command code with a prebuilt payload and returns the raw response bytes, for commands the typed API does not cover:
+
+```csharp
+const uint PingCommand = 1;
+var responseBytes = await client.SendBinaryRequestAsync(PingCommand, Array.Empty<byte>());
+```
+
+Session-control codes (login, logout, and the like) are rejected with an invalid-command error, and the operation is TCP-only: HTTP clients throw `FeatureUnavailableException`.
+
+### Snapshots
+
+Capture a system snapshot as a compressed archive:
+
+```csharp
+var snapshotBytes = await client.GetSnapshotAsync(
+    SnapshotCompression.Zstd,
+    new List<SystemSnapshotType>
+    {
+        SystemSnapshotType.ServerLogs,
+        SystemSnapshotType.ServerConfig,
+        SystemSnapshotType.ResourceUsage
+    }
+);
+
+// Or capture everything
+var fullSnapshot = await client.GetSnapshotAsync(
+    SnapshotCompression.Deflated,
+    new List<SystemSnapshotType> { SystemSnapshotType.All }
+);
+```
+
+Compression methods: `Stored`, `Deflated`, `Bzip2`, `Zstd`, `Lzma`, `Xz`. Snapshot types: `FilesystemOverview`, `ProcessList`, `ResourceUsage`, `Test`, `ServerLogs`, `ServerConfig`, `All`.
+
+A full snapshot can exceed the default 64 MiB reply-frame bound, in which case the reply is **refused and the connection dropped**. Raise [`MaxResponseFrameSize`](#iggyclientconfigurator) before requesting large snapshots.
+
+### Segment management
+
+Delete up to N of the oldest sealed segments from a partition. The active segment is retained:
+
+> **Note:** TCP-only - throws `FeatureUnavailableException` on HTTP.
+
+```csharp
+await client.DeleteSegmentsAsync(
+    Identifier.String("my-stream"),
+    Identifier.String("my-topic"),
+    partitionId: 0,
+    segmentsCount: 2
+);
+```
+
+---
+
+# High-level SDK
+
+> IggyPublisher and IggyConsumer for C#, with background batching, retries and automatic offset commits.
+
+Rendered page: https://iggy.apache.org/docs/sdk/csharp/high-level-sdk/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/csharp/high-level-sdk.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The per-call [`IIggyClient`](https://iggy.apache.org/docs/sdk/csharp/guide) API is explicit but verbose - you manage partitioning, batching, retries, and offsets yourself. The high-level `IggyPublisher` and `IggyConsumer` wrap that surface with fluent builders that handle:
+
+- **Background sending** with buffering, batching, and retries
+- **Automatic stream/topic/consumer-group creation**
+- **Automatic offset commits** (on each poll, after each received message, or manual)
+- **Consuming a topic as an async stream** (`IAsyncEnumerable`)
+- **Typed message (de)serialization**
+- Sending and receiving over **rented, pooled buffers** to avoid separate payload copies on TCP
+
+The fragments below reuse an authenticated `client` and the imports in the first example. The named streams/topics must already exist unless the snippet creates them. Both abstractions can be built from an existing connected client via `IggyPublisherBuilder.Create(...)` / `IggyConsumerBuilder.Create(...)`, or equivalently via the `client.CreatePublisherBuilder(...)` / `client.CreateConsumerBuilder(...)` extension methods from `Apache.Iggy.Extensions`.
+
+## IggyPublisher
+
+Configure a publisher, initialize it, then send. `InitAsync` validates (and optionally creates) the stream and topic:
+
+```csharp
+using Apache.Iggy.Contracts;
+using System.Buffers;
+using System.Text;
+using System.Text.Json;
+using Apache.Iggy;
+using Apache.Iggy.Consumers;
+using Apache.Iggy.Kinds;
+using Apache.Iggy.Messages;
+using Apache.Iggy.Publishers;
+
+await using var publisher = IggyPublisherBuilder.Create(
+    client,
+    Identifier.String("my-stream"),
+    Identifier.String("my-topic")
+)
+.WithPartitioning(Partitioning.None())
+.WithBackgroundSending(enabled: true, batchSize: 100)
+.WithRetry(maxAttempts: 3)
+.Build();
+
+await publisher.InitAsync();
+
+var messages = new List<Message>
+{
+    new(Guid.NewGuid(), "Message 1"u8.ToArray()),
+    new(0, "Message 2"u8.ToArray())
+};
+
+await publisher.SendMessagesAsync(messages);
+
+// Drain the background queue, then dispose
+await publisher.WaitUntilAllSendsAsync();
+```
+
+### Publisher builder options
+
+| Method | Description |
+|--------|-------------|
+| `WithConnection(protocol, address, login, password, receiveBufferSize = null, sendBufferSize = null, reconnectionSettings = null)` | Connection settings - only used when the builder creates its own client (i.e. the `Create(streamId, topicId)` overload, without an existing client). A builder-created TCP client auto-logs in and reuses the credentials across reconnects. For HTTP, supply an explicitly authenticated client |
+| `WithConnection(protocol, address, personalAccessToken, receiveBufferSize = null, sendBufferSize = null, reconnectionSettings = null)` | Same, authenticating with a personal access token instead of a username and password |
+| `WithPartitioning(partitioning)` | Routing strategy for produced messages (default: balanced) |
+| `CreateStreamIfNotExists(name)` | Auto-create the stream on `InitAsync` if missing |
+| `CreateTopicIfNotExists(name, topicPartitionsCount = 1, compressionAlgorithm = None, messageExpiry = TimeSpan.Zero, maxTopicSize = 0)` | Auto-create the topic on `InitAsync` if missing |
+| `WithRetry(enabled = true, maxAttempts = 3, initialDelay = 100ms, maxDelay = 10s, backoffMultiplier = 2.0)` | Retry background sends with exponential backoff. Direct sends surface errors |
+| `WithBackgroundSending(enabled = true, queueCapacity = 10000, batchSize = 100, flushInterval = 100ms, disposalTimeout = 5s)` | Queue and flush sends in the background for higher throughput |
+| `WithEncryptor(encryptor)` | Client-side payload encryption. Only valid on a builder-created client - for an external client, set `IggyClientConfigurator.MessageEncryptor` instead |
+| `SubscribeOnBackgroundError(handler)` | Observe background-processing errors (only fires when background sending is enabled) |
+| `SubscribeOnMessageBatchFailed(handler)` | Fires when a batch fails after all retries are exhausted (only with background sending - direct sends throw to the caller instead) |
+| `WithLogger(loggerFactory)` | Logger factory for diagnostics |
+
+**`WithRetry` parameters**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | `bool` | `true` | Whether retry is enabled |
+| `maxAttempts` | `int` | `3` | Total send attempts, including the first send |
+| `initialDelay` | `TimeSpan?` | `100ms` | Delay before the first retry |
+| `maxDelay` | `TimeSpan?` | `10s` | Maximum delay between retries |
+| `backoffMultiplier` | `double` | `2.0` | Exponential backoff multiplier |
+
+**`WithBackgroundSending` parameters**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | `bool` | `true` | Whether background sending is enabled |
+| `queueCapacity` | `int` | `10000` | Max queued send calls (one slot per `SendMessagesAsync` call, regardless of batch size) |
+| `batchSize` | `int` | `100` | Flush threshold in messages. An individual send call is not split |
+| `flushInterval` | `TimeSpan?` | `100ms` | Interval at which pending messages are flushed |
+| `disposalTimeout` | `TimeSpan?` | `5s` | How long `DisposeAsync` waits for the processor to stop. Pending sends may be discarded |
+
+A batch also flushes once its accumulated payload reaches `IggyPublisherConfig.BackgroundMaxBatchBytes` (default 256 KiB, `0` disables the byte gate) - whichever of `batchSize` or the byte limit is hit first. This knob has no builder method. Set it on the config directly if needed. Await `WaitUntilAllSendsAsync` before disposal to finish queued sends. Disposal alone can discard them. Background send calls return an empty confirmation list before delivery, and failures are reported through the subscribed events.
+
+### Publishing with rented batches
+
+`SendMessagesAsync` accepts messages with `ReadOnlyMemory<byte>` payloads, which can share backing storage. On hot paths, build a `RentedMessageBatch` instead - every payload is written into a single buffer rented from the shared array pool - and hand it to `SendAsync`:
+
+```csharp
+using Apache.Iggy.Contracts;
+using System.Text.Json;
+using Apache.Iggy.Messages;
+
+using var builder = new RentedMessageBatchBuilder(sizeHint: 4096);
+
+foreach (var evt in events)
+{
+    // Serialize straight into the pooled buffer (static lambda + state = no closure allocation)
+    builder.Add(evt, static (e, writer) =>
+    {
+        using var json = new Utf8JsonWriter(writer);
+        JsonSerializer.Serialize(json, e);
+    }, Guid.NewGuid());
+}
+
+var batch = builder.Build();
+await publisher.SendAsync(batch);
+await publisher.WaitUntilAllSendsAsync();
+```
+
+`RentedMessageBatchBuilder`:
+
+| Member | Description |
+|--------|-------------|
+| `new RentedMessageBatchBuilder(sizeHint = 1024)` | Initial capacity hint (bytes) for the rented buffer |
+| `Add(payload, id = null, userHeaders = null)` | Copies a `ReadOnlySpan<byte>` payload into the shared buffer |
+| `Add(state, writePayload, id = null, userHeaders = null)` | Writes the payload via an `Action<TState, IBufferWriter<byte>>` callback directly into the buffer |
+| `Count` | Number of payloads added so far |
+| `Build()` | Materializes the `RentedMessageBatch`. The builder must not be used afterwards |
+
+A `null` message id sends the message with id 0, letting the server assign one.
+
+Ownership rules:
+
+- `publisher.SendAsync(batch)` **takes ownership** - do not dispose the batch yourself. Its buffer returns to the pool once the batch is sent (immediately, or after the background flush).
+- For a direct low-level send, pass `batch.Messages` to `client.SendMessagesAsync(...)` yourself, `await` it, then dispose the batch (`using var batch = builder.Build()`).
+- After disposal, `batch.Messages` and every payload's `Span` throw `ObjectDisposedException` instead of reading recycled pool memory.
+- Dispose the builder only when abandoning it before `Build()`. A `using` on the builder is safe either way (it becomes a no-op after `Build()`).
+
+### Typed publisher
+
+For automatic object serialization, use `IggyPublisherBuilder<T>` with an `ISerializer<T>`:
+
+```csharp
+await using var publisher = IggyPublisherBuilder<Order>.Create(
+    client,
+    Identifier.String("orders-stream"),
+    Identifier.String("orders-topic"),
+    new OrderSerializer()
+).Build();
+
+await publisher.InitAsync();
+await publisher.SendAsync(new List<Order> { new(Guid.NewGuid(), 99.90m) });
+
+record Order(Guid OrderId, decimal Amount);
+
+class OrderSerializer : ISerializer<Order>
+{
+    public void Serialize(Order data, IBufferWriter<byte> writer) =>
+        writer.Write(JsonSerializer.SerializeToUtf8Bytes(data));
+}
+```
+
+Besides the collection overload, `SendAsync` also accepts a single item (`SendAsync(order, messageId: null, userHeaders: null)`) or a collection of `(data, messageId, userHeaders)` tuples when you need per-message ids or headers.
+
+For JSON you don't need a custom serializer - the built-in `SystemTextJsonSerializer<T>` (in `Apache.Iggy.Publishers`) writes System.Text.Json output directly into the send buffer, with optional `JsonSerializerOptions`:
+
+```csharp
+await using var publisher = IggyPublisherBuilder<Order>.Create(
+    client,
+    Identifier.String("orders-stream"),
+    Identifier.String("orders-topic"),
+    new SystemTextJsonSerializer<Order>()
+).Build();
+```
+
+With background sending enabled, typed values are serialized at flush time. Keep them immutable or pass a snapshot until `WaitUntilAllSendsAsync` completes.
+
+There is **no built-in deserializer counterpart** - consumers implement `IDeserializer<T>` themselves (see [Typed consumer](#typed-consumer)).
+
+## IggyConsumer
+
+The consumer reads through a `PartitionReader` and yields one message at a time. A standalone consumer requires `WithPartitions`. A group consumer follows the server assignment.
+
+```csharp
+using Apache.Iggy.Contracts;
+using System.Text;
+using Apache.Iggy;
+using Apache.Iggy.Consumers;
+using Apache.Iggy.Kinds;
+
+await using var consumer = IggyConsumerBuilder.Create(
+    client, Identifier.String("my-stream"), Identifier.String("my-topic"), Consumer.New(1))
+    .WithPartitions(0)
+    .WithPollingStrategy(PollingStrategy.Next())
+    .WithPollOptions(new PollOptions { Count = 100, MaxWait = TimeSpan.FromSeconds(5) })
+    .Build();
+await consumer.InitAsync();
+await foreach (var received in consumer.ReceiveAsync())
+{
+    Console.WriteLine(Encoding.UTF8.GetString(received.Message.Payload));
+    await consumer.CommitAsync(received.Checkpoint!);
+}
+```
+
+The fragment assumes a connected client. Manual commits are the default. Commit the checkpoint after processing. `DisposeAsync` calls `ShutdownAsync` to close the reader and leave the group.
+
+### Consumer groups
+
+Use `Consumer.Group("my-group")` and `WithConsumerGroup("my-group", createIfNotExists: true)`. Do not supply standalone partitions. Set `WithPollOptions(new PollOptions { Commit = CommitPolicy.Auto() })` for automatic commits after processing.
+
+`AutoCommit.Default` stores every 10,000 messages or five seconds. `CommitAfter.Processing` counts a message when enumeration advances or a `ConsumeAsync` handler succeeds. A handler exception ends consumption and leaves that message uncounted. `CommitAfter.Marked` supports explicit progress marking after concurrent work.
+
+`CommitPolicy.OnRead` submits the offset before processing. It cannot be combined with a consumer encryptor. See [Deferred polling](https://iggy.apache.org/docs/sdk/deferred-polling).
+
+### Consumer builder options
+
+Use `WithPollOptions` for count, wait, minimum count, byte budget and commit policy. Use `WithPartitions` for standalone partition selection, and `WithPollingStrategy` for the initial position. The previous `WithBatchSize`, `WithPollingInterval`, `WithPartitionId` and `WithAutoCommitMode` consumer methods are replaced.
+
+A read error that stops a partition ends enumeration with `ReadException`. Inspect `StopsPartition`, `IsResumable` and `Skip` before selecting a new start with `SeekAsync`. Automatic retries do not discard an undecodable record without an application decision.
+
+### Consuming with rented buffers
+
+`ReceiveRentedAsync` exposes payloads from a pooled buffer. Dispose each yielded message before moving on, and copy bytes that must survive disposal. Read limits and commit policies are the same as for `ReceiveAsync`.
+
+### Typed consumer
+
+`IggyConsumerBuilder<T>` accepts an `IDeserializer<T>` and exposes `ReceiveDeserializedAsync`. Keep the typed builder in a variable before configuring it because inherited fluent methods return the base builder type. Use `WithPollOptions` to select the commit policy, and inspect each message status before accepting its progress.
+
+See the [C# examples](https://iggy.apache.org/docs/sdk/csharp/examples) for complete producer and consumer programs.
+
+---
+
+# Examples
+
+> Producer and consumer samples for the C# SDK, built on the high-level publisher and consumer.
+
+Rendered page: https://iggy.apache.org/docs/sdk/csharp/examples/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/csharp/examples.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+These samples use the [High-level SDK](https://iggy.apache.org/docs/sdk/csharp/high-level-sdk) - the recommended way to build producers and consumers. For the low-level, per-call equivalents, see the [Guide](https://iggy.apache.org/docs/sdk/csharp/guide).
+
+Use the [installation and server setup](https://iggy.apache.org/docs/sdk/csharp/intro) first. The snippets share their named resources: run a producer before its corresponding consumer.
+
+## Producer
+
+A publisher that creates the stream and topic if missing, batches sends in the background, and retries failures:
+
+```csharp
+using Apache.Iggy.Contracts;
+using System.Text;
+using Apache.Iggy;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Extensions;
+using Apache.Iggy.Factory;
+using Apache.Iggy.Messages;
+
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp
+});
+
+await client.ConnectAsync();
+await client.LoginUserAsync("iggy", "iggy");
+
+await using var publisher = client.CreatePublisherBuilder(
+        Identifier.String("dev"),
+        Identifier.String("events"))
+    .CreateStreamIfNotExists("dev")
+    .CreateTopicIfNotExists("events", topicPartitionsCount: 2)
+    .WithBackgroundSending(batchSize: 100, flushInterval: TimeSpan.FromMilliseconds(100))
+    .WithRetry(maxAttempts: 3)
+    .Build();
+
+await publisher.InitAsync();
+
+for (var i = 0; i < 100; i++)
+{
+    var payload = Encoding.UTF8.GetBytes($"Event #{i}");
+    await publisher.SendMessagesAsync(new List<Message> { new(Guid.NewGuid(), payload) });
+}
+
+// Drain the background queue before exiting
+await publisher.WaitUntilAllSendsAsync();
+
+Console.WriteLine("Queued 100 messages");
+```
+
+## Consumer group
+
+A consumer that creates and joins a consumer group, stores each offset after handling the yielded message and requesting the next one, and surfaces polling errors:
+
+```csharp
+using Apache.Iggy.Contracts;
+using System.Text;
+using Apache.Iggy;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Consumers;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Extensions;
+using Apache.Iggy.Factory;
+using Apache.Iggy.Kinds;
+
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp
+});
+
+await client.ConnectAsync();
+await client.LoginUserAsync("iggy", "iggy");
+
+await using var consumer = client.CreateConsumerBuilder(
+        Identifier.String("dev"),
+        Identifier.String("events"),
+        Consumer.Group("event-processors"))
+    .WithConsumerGroup("event-processors", createIfNotExists: true)
+    .WithPollingStrategy(PollingStrategy.Next())
+        .WithPollOptions(new PollOptions { Commit = CommitPolicy.Auto() })
+    .SubscribeOnPollingError(e =>
+    {
+        Console.WriteLine($"Polling error: {e.Exception.Message}");
+        return Task.CompletedTask;
+    })
+    .Build();
+
+await consumer.InitAsync();
+
+await foreach (var message in consumer.ReceiveAsync())
+{
+    var payload = Encoding.UTF8.GetString(message.Message.Payload);
+    Console.WriteLine($"Partition {message.PartitionId}, offset {message.CurrentOffset}: {payload}");
+}
+```
+
+Run several instances of the consumer to see the group load-balance partitions between members.
+
+## Typed messages
+
+A typed publisher/consumer pair that (de)serializes a record as JSON. The typed builders are configured via statements rather than one fluent chain - the `With*` methods return the untyped base builder, so `Build()` **must be called on the typed builder variable** (see [Typed consumer](https://iggy.apache.org/docs/sdk/csharp/high-level-sdk#typed-consumer)):
+
+```csharp
+using Apache.Iggy.Contracts;
+using System.Buffers;
+using System.Text.Json;
+using Apache.Iggy;
+using Apache.Iggy.Configuration;
+using Apache.Iggy.Consumers;
+using Apache.Iggy.Enums;
+using Apache.Iggy.Factory;
+using Apache.Iggy.Kinds;
+using Apache.Iggy.Publishers;
+
+using var client = IggyClientFactory.CreateClient(new IggyClientConfigurator
+{
+    BaseAddress = "127.0.0.1:8090",
+    Protocol = Protocol.Tcp
+});
+
+await client.ConnectAsync();
+await client.LoginUserAsync("iggy", "iggy");
+
+// Publish typed messages
+var publisherBuilder = IggyPublisherBuilder<OrderEvent>.Create(
+    client,
+    Identifier.String("orders"),
+    Identifier.String("created"),
+    new OrderSerializer()
+);
+publisherBuilder.CreateStreamIfNotExists("orders");
+publisherBuilder.CreateTopicIfNotExists("created");
+
+await using var publisher = publisherBuilder.Build();
+await publisher.InitAsync();
+
+await publisher.SendAsync(new OrderEvent(Guid.NewGuid(), 99.90m));
+
+// Consume them
+var consumerBuilder = IggyConsumerBuilder<OrderEvent>.Create(
+    client,
+    Identifier.String("orders"),
+    Identifier.String("created"),
+    Consumer.New(1),
+    new OrderDeserializer()
+);
+consumerBuilder.WithPartitions(0);
+consumerBuilder.WithPollingStrategy(PollingStrategy.Next());
+consumerBuilder.WithPollOptions(new PollOptions { Commit = CommitPolicy.Auto() });
+
+await using var consumer = consumerBuilder.Build();
+await consumer.InitAsync();
+
+await foreach (var message in consumer.ReceiveDeserializedAsync())
+{
+    if (message.Status == MessageStatus.Success)
+    {
+        Console.WriteLine($"Order {message.Data!.OrderId}, amount {message.Data.Amount}");
+    }
+}
+
+record OrderEvent(Guid OrderId, decimal Amount);
+
+class OrderSerializer : ISerializer<OrderEvent>
+{
+    public void Serialize(OrderEvent data, IBufferWriter<byte> writer) =>
+        writer.Write(JsonSerializer.SerializeToUtf8Bytes(data));
+}
+
+class OrderDeserializer : IDeserializer<OrderEvent>
+{
+    public OrderEvent Deserialize(ReadOnlyMemory<byte> data) =>
+        JsonSerializer.Deserialize<OrderEvent>(data.Span)!;
+}
+```
+
+## More examples
+
+The [examples/csharp](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/csharp) directory in the Iggy repository contains complete, runnable projects:
+
+- **Basic** / **GettingStarted** - low-level producer and consumer
+- **NewSdk** - high-level `IggyPublisher` / `IggyConsumer` (like the samples above)
+- **MessageEnvelope** - envelope pattern (message type + JSON payload) over the low-level client
+- **MessageHeaders** - user-defined message headers
+- **TcpTls** - TLS-encrypted TCP connection
+
+Repository examples require .NET 10 and reference the local SDK. Build and run from the same checkout as the server:
+
+```bash
+dotnet build examples/csharp/Iggy_SDK.Examples.sln --configuration Release
+dotnet run --no-build --configuration Release --project examples/csharp/src/GettingStarted/Iggy_SDK.Examples.GettingStarted.Producer
+dotnet run --no-build --configuration Release --project examples/csharp/src/GettingStarted/Iggy_SDK.Examples.GettingStarted.Consumer
+```
+
+The getting-started producer sends 50 messages to partition 0. Its consumer reads five nonempty batches and then exits. Envelope and header examples also use five batches. NewSdk uses four partitions and its group consumer runs until stopped.
+
+For TcpTls, run from the repository root so `core/certs/iggy_ca_cert.pem` resolves. Start a separate matching server with the example TLS certificate and root credentials:
+
+```bash
+IGGY_ROOT_USERNAME=iggy IGGY_ROOT_PASSWORD=iggy \
+IGGY_TCP_TLS_ENABLED=true \
+IGGY_TCP_TLS_CERT_FILE=core/certs/iggy_cert.pem \
+IGGY_TCP_TLS_KEY_FILE=core/certs/iggy_key.pem \
+cargo run --bin iggy-server
+```
+
+```bash
+dotnet run --no-build --configuration Release --project examples/csharp/src/TcpTls/Iggy_SDK.Examples.TcpTls.Producer
+dotnet run --no-build --configuration Release --project examples/csharp/src/TcpTls/Iggy_SDK.Examples.TcpTls.Consumer
+```
+
+---
+
+# C++ SDK
+
+> The C++ SDK, a CXX bridge over the Rust SDK, and how to build it from source with Bazel.
+
+Rendered page: https://iggy.apache.org/docs/sdk/cpp/intro/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/cpp/intro.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The Iggy C++ SDK wraps the Rust SDK through a [CXX](https://cxx.rs) FFI bridge, so it can use all transport protocols (TCP, QUIC, HTTP, WebSocket) via connection strings. The source code is available at [github.com/apache/iggy/tree/master/foreign/cpp](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/cpp).
+
+This SDK isn't published to any package registry. Consume it from the monorepo and build it from source with Bazel.
+
+## Building from source
+
+The project builds with the Bazel version pinned in `.bazelversion` (`BUILD.bazel` / `MODULE.bazel`). Its Rust bridge uses the Cargo and Rust toolchain provisioned by `rules_rust`, with a separate target directory in the Bazel output tree. Use a compatible Java runtime for Bazel. The pinned Bazel 9.2.0 requires Java 21 or newer.
+
+```bash
+cd foreign/cpp
+
+# Build the library
+bazel build //:iggy-cpp
+
+# Unit tests
+bazel test //:unit
+
+# Low-level integration tests (require a running server)
+bazel test //:e2e
+```
+
+## Quick start
+
+The snippet below mirrors the SDK's own end-to-end tests in `foreign/cpp/tests/e2e`. Start a [local server](https://iggy.apache.org/docs/introduction/getting-started) on `127.0.0.1:8090` with the `iggy`/`iggy` credentials first. The stream name must not already exist.
+
+```cpp
+#include "lib.rs.h"
+
+#include <cstdint>
+#include <iostream>
+#include <string>
+#include <utility>
+
+iggy::ffi::Identifier id(const std::string &name) {
+    iggy::ffi::Identifier identifier;
+    identifier.set_string(name);
+    return identifier;
+}
+
+iggy::ffi::Identifier numeric_id(const std::uint32_t value) {
+    iggy::ffi::Identifier identifier;
+    identifier.set_numeric(value);
+    return identifier;
+}
+
+rust::Vec<std::uint8_t> payload(const std::string &text) {
+    rust::Vec<std::uint8_t> bytes;
+    for (const char c : text) {
+        bytes.push_back(static_cast<std::uint8_t>(c));
+    }
+    return bytes;
+}
+
+int main() {
+    iggy::ffi::Client *client = iggy::ffi::new_connection({});
+    client->connect();
+    iggy::ffi::ErrorInfo error_info{};
+    client->login_user("iggy", "iggy", error_info);
+
+    client->create_stream("my-stream", {}, error_info);
+
+    iggy::ffi::TopicCreateOptions topic_options{};
+    topic_options.has_partitions_count = true;
+    topic_options.partitions_count = 1;
+    client->create_topic(id("my-stream"), "my-topic", std::move(topic_options), error_info);
+
+    rust::Vec<iggy::ffi::IggyMessageToSend> messages;
+    for (int i = 0; i < 10; i++) {
+        messages.push_back(iggy::ffi::make_message(
+            payload("message-" + std::to_string(i)), {}));
+    }
+    client->send_messages(id("my-stream"), id("my-topic"), "balanced", {},
+                          std::move(messages), error_info);
+
+    iggy::ffi::PollOptions poll_options{};
+    poll_options.count = 10;
+    poll_options.min_count = 1;
+    poll_options.max_bytes = 1024 * 1024;
+    poll_options.commit = iggy::ffi::CommitPolicy::Manual;
+    iggy::ffi::PollingStrategy strategy{};
+    strategy.kind = "offset";
+    strategy.value = 0;
+    auto polled = client->poll_messages(id("my-stream"), id("my-topic"), 0,
+                                        "consumer", numeric_id(1),
+                                        std::move(strategy), poll_options, error_info);
+    for (const auto &message : polled.messages) {
+        std::string text(message.payload.begin(), message.payload.end());
+        std::cout << "Offset: " << message.offset << ", Payload: " << text
+                  << std::endl;
+    }
+
+    iggy::ffi::delete_client(client);
+    return 0;
+}
+```
+
+Polling strategies are selected by kind string: `offset`, `timestamp`, `first`, `last`, or `next`. Partitioning kinds for sending are `balanced`, `partition_id`, and `messages_key`.
+
+## Connection strings
+
+The C++ SDK supports the same connection string format as the Rust SDK:
+
+```text
+iggy://user:pass@host:port           (TCP, default)
+iggy+quic://user:pass@host:port      (QUIC)
+iggy+http://user:pass@host:port      (HTTP)
+iggy+ws://user:pass@host:port        (WebSocket)
+```
+
+`iggy::ffi::from_connection_string()` accepts these strings. `new_connection()` instead takes an `IggyClientConfig`: `{}` selects TCP at `127.0.0.1:8090` without automatic login, and its `server_address` field overrides that address. Binary clients authenticate from their connection string during `connect()`. HTTP requires an explicit `login_user()` call. See [connection strings](https://iggy.apache.org/docs/sdk/connection-strings) for the supported options and credential syntax.
+
+## Helper types
+
+Beyond the generated `lib.rs.h` FFI surface, `foreign/cpp/include/iggy.hpp` ships typed C++ helpers: `CompressionAlgorithm`, `MaxTopicSize`, `Expiry`, `PollingStrategy`, `IdKind`, `TopicOption`, `SnapshotCompression`, and `SystemSnapshotType`, plus the `IggyException` error type. They construct and validate the kind strings and values the raw FFI calls expect.
+
+## Current status
+
+The FFI bridge exposes command-level operations for streams, topics, partitions, and segments. Message sending and polling with user headers. Consumer groups and consumer offsets. Stats, client info, and cluster metadata. Snapshots. User create/get/update/delete, permission updates and password changes. Topic option discovery (`describe_options`). And raw binary requests (`send_binary_request`).
+
+The typed `IggyBlockingClient` also provides resource management, readers, consumers, offsets, user administration and client inspection. Personal access token creation is exposed by the bridge. Use `iggy.hpp` for typed `StreamCreateOptions`, `TopicCreateOptions`, update patches and `PollOptions`.
+
+## Readers and recovery
+
+`Reader` reads batches from explicit partitions or a group assignment. `StandaloneConsumer` and `GroupConsumer` yield individual messages. Call `Close` before destruction. Manual commits are the default, and reader waits default to five seconds.
+
+`IggyException::OperationId()` identifies retained uncertain operations. `ResolveOperation` retries a mutation with its retained identity, without returning the original payload. `AbandonOperation` frees local state without undoing the result. A lost committing poll reports `fetch_progress_uncertain` and blocks partition progress until abandonment.
+
+The generated bridge passes `ErrorInfo` by reference to mutations, login, polls and recovery calls. Use a separate value for each concurrent call. `GetMetadataChanges` follows the metadata log, and `send_binary_request_to_replica` targets a node for supported non-replicated commands.
+
+---
+
+# PHP SDK
+
+> The experimental PHP SDK, a native extension wrapping the Rust SDK, and how to build it from source.
+
+Rendered page: https://iggy.apache.org/docs/sdk/php/intro/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/php/intro.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The Iggy PHP SDK is a native PHP extension built in Rust with [ext-php-rs](https://github.com/davidcole1340/ext-php-rs). It wraps the Rust SDK and exposes a synchronous `Iggy\Client`: each call drives the extension's internal Tokio runtime and blocks the calling PHP thread until the operation completes. The source code is available on [GitHub](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/php).
+
+The extension is experimental. It's defined as the `apache/iggy-php` composer package (`php-ext` type). To use it today, build it from the repository source.
+
+## Requirements
+
+- Rust and Cargo
+- PHP 8.3 or newer with `php-config` (non-thread-safe builds only, no ZTS)
+- [`cargo-php`](https://github.com/davidcole1340/ext-php-rs)
+
+## Build and install
+
+```bash
+cd foreign/php
+cargo build --release
+cargo php install --release --yes
+
+# Verify PHP can load it
+php -r 'var_dump(extension_loaded("iggy-php"));'
+```
+
+Alternatively, skip the install and point PHP at the built library per invocation:
+
+```bash
+php -d extension=target/release/libiggy_php.so my-script.php
+```
+
+On macOS the library is `libiggy_php.dylib`.
+
+## Quick start
+
+The sample below targets Iggy 0.10.0 on `127.0.0.1:8090`. Start the server:
+
+```bash
+# Server 0.10.0
+docker run --rm \
+  --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -p 8090:8090 \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
+  -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  apache/iggy:0.10.0
+
+# Or from the repository root
+cargo run --bin iggy-server -- --fresh --with-default-root-credentials
+```
+
+The environment variables make the server reachable through the published port (it binds to `127.0.0.1` inside the container by default) and bootstrap the `iggy`/`iggy` root credentials for a new data directory. Existing stored credentials are not replaced. For the source command, ensure `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` are unset or match the sample. Environment values take precedence over the flag. `--fresh` removes the local replica state, so use it only for disposable development data.
+
+For binary transports, credentials in the connection string take effect on `connect()`. HTTP requires `loginUser()` explicitly. Alternatively, construct the client with a plain address (`new \Iggy\Client('127.0.0.1:8090')`) and call `loginUser('iggy', 'iggy')` explicitly.
+
+```php
+<?php
+
+use Iggy\Client;
+use Iggy\PollingStrategy;
+use Iggy\SendMessage;
+
+$client = Client::fromConnectionString('iggy+tcp://iggy:iggy@127.0.0.1:8090');
+$client->connect();
+
+$stream = 'php-stream';
+$topic = 'php-topic';
+
+// Re-running this example is fine: only create what is missing.
+if ($client->getStream($stream) === null) {
+    $client->createStream($stream);
+}
+
+if ($client->getTopic($stream, $topic) === null) {
+    $client->createTopic($stream, $topic, 1);
+}
+
+$messages = [];
+foreach (range(1, 10) as $i) {
+    $messages[] = new SendMessage("message-{$i}");
+}
+$client->sendMessages($stream, $topic, 0, $messages);
+
+$polled = $client->pollMessages(
+    $stream, $topic, 0, 1, PollingStrategy::first(), new \Iggy\PollOptions(count: 10)
+);
+foreach ($polled->messages as $message) {
+    echo "Offset: {$message->offset()}, Payload: {$message->payload()}", PHP_EOL;
+}
+```
+
+## Consumer groups
+
+`consumerGroup()` creates and joins a group by default. It reads assigned partitions and stores no offsets unless you select a policy or commit checkpoints. This example processes five messages:
+
+```php
+<?php
+
+$consumer = $client->consumerGroup(
+    'php-consumer', $stream, $topic, \Iggy\PollingStrategy::next(),
+);
+try {
+    $consumer->consumeMessages(
+        function (\Iggy\ReceiveMessage $message) use ($consumer): void {
+            echo $message->payload(), PHP_EOL;
+            $consumer->commit($message->checkpoint());
+        },
+        5,
+    );
+} finally {
+    $consumer->shutdown();
+}
+```
+
+`consumeMessages()` requires a finite limit. A callback exception ends the run. With automatic commits after processing, the failed message stays uncounted. `PollOptions` carries the commit policy. Use `CommitPolicy::manual()`, `CommitPolicy::onRead()` or `CommitPolicy::auto(...)`.
+
+`reader()` reads batches from explicit partitions. `groupReader()` reads an existing group's assignment. Close a reader with `close()`. A timeout on `next(timeout_micros)` returns null and keeps a later batch available for the next call.
+
+## API notes
+
+- Methods are camelCase and classes live in the `Iggy` namespace, for example `Iggy\Client` and `Iggy\SendMessage`.
+- Partition ids are 0-based: for a topic with one partition, use `0`.
+- PHP strings are passed as named identifiers, including strings that contain only digits. PHP integers are passed as numeric identifiers.
+- `PollingStrategy::timestamp()` and `timestampMicros()` expect microseconds since the Unix epoch. Use `PollingStrategy::timestampSeconds()` for PHP `time()` values.
+- Message IDs and checksums are returned as decimal strings. Offset and timestamp getters return PHP integers and are limited to `PHP_INT_MAX`.
+- Errors are thrown as exceptions under `Iggy\Exception`: `AuthenticationException`, `ConnectionException`, `NotFoundException`, `TransientException`, and the `IggyException` base.
+- TLS uses the Rust SDK connection-string format, for example `iggy+tcp://user:pass@host:port?tls=true&tls_domain=localhost&tls_ca_file=/path/to/ca.pem`.
+- The extension owns a lazy global Tokio runtime. Don't call `pcntl_fork()` after the first Iggy call: the child inherits file descriptors but not the runtime's worker threads.
+
+## Resource options and recovery
+
+`createStream($name, $encryption_key)` accepts the standard padded base64 of a 32-byte stream key. `createTopic` accepts named creation arguments, including `replication_factor`. Stream and topic updates change only named fields and reset keys. `describeOptions()` lists each catalog. User and PAT administration are not exposed as typed PHP methods in this release. Reads expose encryption fingerprints, never key material.
+
+`getMetadataChanges()` follows the metadata log. `sendBinaryRequestToReplica()` sends supported non-replicated commands to a selected node. See [Metadata changes](https://iggy.apache.org/docs/sdk/metadata-changes).
+
+Retained mutation errors expose an operation ID. Use `resolveOperation()` on the same client to retry its retained identity, or `abandonOperation()` to accept the unknown result and release local state. A lost committing poll throws `FetchProgressUncertain` and blocks progress for the partition until abandonment.
+
+## Examples
+
+Working examples are available in the [examples/php](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/php) directory. They read `IGGY_CONNECTION_STRING` for a binary transport with credentials. Otherwise they connect over TCP using `IGGY_HOST` and `IGGY_PORT`, then log in with the literal `IGGY_USERNAME` and `IGGY_PASSWORD` values:
+
+```bash
+# From the repository root
+cd examples/php
+(cd ../../foreign/php && cargo build)
+export PHP_IGGY_EXTENSION="$(pwd)/../../foreign/php/target/debug/libiggy_php.so"
+
+php -d extension="$PHP_IGGY_EXTENSION" getting-started/producer.php
+php -d extension="$PHP_IGGY_EXTENSION" getting-started/consumer.php
+```
+
+---
+
+# Swift SDK
+
+> Use Swift concurrency to produce, read and manage Iggy resources over TCP with optional TLS.
+
+Rendered page: https://iggy.apache.org/docs/sdk/swift/intro/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/swift/intro.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The Swift SDK 0.2.0 provides an async TCP client with optional TLS, resource management, producers, partition readers and consumers. It routes partition requests to their primaries and reconnects with heartbeat support.
+
+## Requirements and installation
+
+The SDK requires Swift 6.0 or later. Supported platforms are macOS 13, iOS 16, tvOS 16, watchOS 9, visionOS 1 and Linux. The runnable examples require Swift 6.1 or later.
+
+The repository root contains the Swift Package Manager manifest and exports the `Iggy` product. For the upcoming release, use the source release candidate. The package dependency below names that release candidate without relying on an unpublished final tag:
+
+```swift
+.package(url: "https://github.com/apache/iggy.git", revision: "server-0.10.0-rc.1")
+```
+
+Add `.product(name: "Iggy", package: "iggy")` to your target dependencies. Build the server and client from the same release source.
+
+## Connect and create resources
+
+Start the [development server](https://iggy.apache.org/docs/introduction/getting-started) with `iggy`/`iggy` credentials. Run these calls from an async Swift context:
+
+```swift
+import Iggy
+
+let client = try IggyClient(connectionString: "iggy://iggy:iggy@localhost:8090")
+try await client.connect()
+let stream = try await client.createStream(name: "orders")
+let topic = try await client.createTopic(
+    streamID: "orders", name: "created", options: .init(partitionsCount: 3))
+var messages: [IggyMessage] = ["placed"]
+try await client.sendMessages(
+    streamID: "orders", topicID: "created", partitioning: .partition(0), messages: &messages)
+let batch = try await client.pollMessages(
+    streamID: "orders", topicID: "created", partitionID: 0,
+    consumer: .consumer(1), strategy: .first, options: PollOptions(count: 100))
+for message in batch.messages {
+    print(message.offset, message.payloadString)
+}
+await client.shutdown()
+```
+
+Use new resource names when running this creation example again. `disconnect()` closes the current connection and permits a later `connect()`. `shutdown()` is final.
+
+Connection strings accept `iggy://` and `iggy+tcp://`. TLS uses system roots or the configured CA file. `tls_domain` overrides the name checked in the certificate. The parser accepts pending-operation limits, but does not implement retained mutation limits.
+
+## Readers and consumers
+
+`client.reader` returns batches from explicit partitions or a group assignment. `client.consumerGroup` yields individual messages. A consumer needs `initialize()` before iteration:
+
+```swift
+let consumer = try client.consumerGroup(
+    name: "billing", streamID: "orders", topicID: "created",
+    configuration: ConsumerConfiguration(
+        pollOptions: PollOptions(maxWait: .seconds(5), commit: .manual)))
+try await consumer.initialize()
+for try await received in consumer {
+    print(received.message.payloadString)
+    try await consumer.commit(received.checkpoint)
+}
+await consumer.shutdown()
+```
+
+This fragment uses an existing connected client. Commit after processing. Automatic commits use `.auto(.default)`, which counts processing and stores every 10,000 messages or five seconds. `.onRead` stores with the read. Close readers and shut down consumers to finish offset work and leave groups.
+
+## Options, metadata and recovery
+
+Creation and updates use `StreamCreateOptions`, `TopicCreateOptions`, `StreamUpdateOptions`, `TopicUpdateOptions` and `UserUpdateOptions`. `EncryptionKey` accepts exactly 32 bytes. The server must have a wrapping key configured. Only fingerprints return in resource details.
+
+`getMetadataChanges` exposes the metadata log. `sendRawRequest(code:payload:replica:)` targets a replica for supported non-replicated commands. See [Metadata changes](https://iggy.apache.org/docs/sdk/metadata-changes).
+
+Swift does not expose retained mutation resolution or mutation lanes. It does track uncertain committing reads. `fetchProgressUncertain` carries an operation ID, and affected progress calls fail with `partitionLaneBlocked` until `abandonOperation` releases it. Abandonment does not undo a committed offset. A `ReadError` can stop a partition until `seek` selects a new position.
+
+---
+
+# Examples
+
+> Run the Swift producer and consumer from the Apache Iggy source release.
+
+Rendered page: https://iggy.apache.org/docs/sdk/swift/examples/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/sdk/swift/examples.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+The [Swift examples](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/swift) use the SDK from the same checkout. Start the server from the repository root with development credentials and a separate data directory:
+
+```bash
+IGGY_PATH=local_data/swift-example cargo run --bin iggy-server -- --with-default-root-credentials
+```
+
+From `examples/swift`, run the producer and then the consumer:
+
+```bash
+swift run --package-path getting-started producer
+swift run --package-path getting-started consumer
+```
+
+The producer creates `sample-stream` and `sample-topic` if needed and sends five batches of ten messages. The consumer reads from the first message, stores no offset and exits after five batches. Running it again replays retained messages.
+
+Both programs accept `--tcp-server-address`, `--tls`, `--tls-ca-file` and `--tls-domain`. The [example README](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/examples/swift/README.md) provides the development TLS commands.

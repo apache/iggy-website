@@ -1,0 +1,1336 @@
+# Apache Iggy documentation: Binary Protocol
+
+These docs describe server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0. This file joins every page in the Binary Protocol section. For the other sections, see https://iggy.apache.org/llms.txt. For all sections in one file, see https://iggy.apache.org/llms-full.txt.
+
+---
+
+# Binary Protocol
+
+> Binary protocol 0.12.0: one wire format across TCP, QUIC and WebSocket, covering both the client and replica planes.
+
+Rendered page: https://iggy.apache.org/docs/binary-protocol/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/binary-protocol/index.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+Iggy speaks one binary protocol over its three binary transports: TCP, QUIC, and WebSocket. Commands, responses, data models, and status codes are the same on all of them. The HTTP transport is separate: it exposes JSON REST endpoints for a subset of these operations, listed in [server.http](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/server/server.http).
+
+This section describes **binary protocol version 0.12.0**. The protocol version is the `major.minor.patch` of the `iggy_binary_protocol` crate, ignoring prerelease tags, and it's exchanged and checked during login (see [Connection lifecycle](https://iggy.apache.org/docs/binary-protocol/connection-lifecycle)). The crate itself is the source of truth: request and response types document their payload layouts, and the server dispatch defines which operations are supported.
+
+All multi-byte integers are **little-endian** unless stated otherwise.
+
+The same 256-byte header layout carries two traffic planes. The pages below cover both:
+
+- **Server ↔ SDK client**, everything a client sends or receives:
+  - [Framing](https://iggy.apache.org/docs/binary-protocol/framing): the 256-byte headers every client-facing message rides in.
+  - [Connection lifecycle](https://iggy.apache.org/docs/binary-protocol/connection-lifecycle): protocol versioning and the login-register handshake.
+  - [Commands](https://iggy.apache.org/docs/binary-protocol/commands): the command codes and per-command payload layouts.
+  - [Shared encodings](https://iggy.apache.org/docs/binary-protocol/encodings): primitives the payloads are built from.
+  - [Message batches](https://iggy.apache.org/docs/binary-protocol/messages): the one layout messages travel and rest in.
+- **Server ↔ server**, the replica-to-replica consensus traffic that never appears on a client connection:
+  - [Server-to-server](https://iggy.apache.org/docs/binary-protocol/cluster): prepare/ack replication, view changes, and state transfer.
+
+---
+
+# Framing
+
+> The fixed 256-byte header every binary-transport message rides in, and the request, reply and eviction shapes it carries.
+
+Rendered page: https://iggy.apache.org/docs/binary-protocol/framing/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/binary-protocol/framing.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+Every message on a binary transport is a fixed **256-byte header** followed by an optional body. The header is a `#[repr(C)]` struct decoded by pointer cast (zero-copy), so field offsets are fixed and enforced at compile time in the server. Three header shapes cross the client boundary:
+
+- `RequestHeader`: client to server.
+- `ReplyHeader`: server to client, answers one request.
+- `EvictionHeader`: server to client, connection rejection with no body.
+
+The header shape is identified by the `command` byte at offset 60. Values a client sends or receives:
+
+| `command` | Value | Direction | Meaning |
+|-----------|-------|-----------|---------|
+| `Request` | 5 | client to server | A command request |
+| `Reply` | 8 | server to client | Answer to one request |
+| `Eviction` | 13 | server to client | Connection rejected, no per-request correlation |
+
+Other `command` values (Prepare, PrepareOk, view-change traffic, and so on) are replica-to-replica consensus messages and never appear on a client connection. They are documented on the [Server-to-server](https://iggy.apache.org/docs/binary-protocol/cluster) page.
+
+The `size` field at offset 48 is the total frame length in bytes, header included. A body, when present, immediately follows the 256 header bytes and has length `size - 256`. Readers can decode `size` before typing the header. That offset is a protocol constant.
+
+## RequestHeader
+
+Client to server. 256 bytes.
+
+| Offset | Size | Field | Type | Description |
+|--------|------|-------|------|-------------|
+| 0 | 16 | `checksum` | u128 | Frame seal. Not used on client-facing frames. Send zero. |
+| 16 | 16 | `checksum_body` | u128 | Body seal. Not used on client-facing frames. Send zero. |
+| 32 | 16 | `cluster` | u128 | Cluster id. Send zero. |
+| 48 | 4 | `size` | u32 | Total frame length: 256 + body length. |
+| 52 | 4 | `view` | u32 | Consensus view. Send zero. |
+| 56 | 4 | `release` | u32 | Must be zero. |
+| 60 | 1 | `command` | u8 | `5` (`Request`). |
+| 61 | 1 | `replica` | u8 | Send zero. |
+| 62 | 66 | reserved | bytes | Zero. |
+| 128 | 16 | `client` | u128 | Client-chosen identity, non-zero. Mint a fresh id for a new logical client. Retain it when resuming that client. |
+| 144 | 16 | `request_checksum` | u128 | Random identity for a logical metadata or session request, retained across retries. Partition and non-replicated requests leave it zero. |
+| 160 | 8 | `timestamp` | u64 | May be zero. Direct replies can echo it, but committed prepares use a server-assigned timestamp. |
+| 168 | 8 | `request` | u64 | Request number, per client. See [request numbering](#request-numbering). |
+| 176 | 1 | `operation` | u8 | The [`Operation`](#operation-discriminants) discriminant. |
+| 177 | 7 | padding | bytes | Zero. |
+| 184 | 8 | `session` | u64 | Session fence epoch from the login reply. Zero on the login-register request itself and on non-replicated operations sent before login (only `PING` is accepted unauthenticated). |
+| 192 | 4 | `user_id` | u32 | Ignored on the wire. The server stamps the authenticated user itself. Send zero. |
+| 196 | 4 | command code | u32 | Concrete code for `NonReplicated`, zero otherwise. |
+| 200 | 8 | `partition_incarnation` | u64 | History identity captured with the request. |
+| 208 | 8 | `owner_generation` | u64 | Consumer group ownership generation, zero without a group. |
+| 216 | 8 | `minimum_metadata_op` | u64 | Minimum metadata progress needed to interpret the request. |
+| 224 | 32 | reserved | bytes | Zero on client requests. |
+
+## Operation discriminants
+
+The `operation` byte tells the server which state-machine operation the request carries. Replicated operations are identified by `operation` alone. Non-replicated operations (reads, ping) all use `operation = 2` and carry their concrete u32 command code in header bytes 196..200.
+
+Values a client may send:
+
+| Value | Operation | Plane |
+|-------|-----------|-------|
+| 1 | `Register` | session (login handshake, codes 40 and 45) |
+| 2 | `NonReplicated` | reads and ping. The u32 code rides bytes 196..200 |
+| 3 | `Logout` | session (code 39) |
+| 128 | `CreateStream` | metadata |
+| 130 | `DeleteStream` | metadata |
+| 132 | `CreateTopic` | metadata |
+| 134 | `DeleteTopic` | metadata |
+| 136 | `CreatePartitions` | metadata |
+| 137 | `DeletePartitions` | metadata |
+| 138 | `DeleteSegments` | metadata (resolved to an internal partition truncation) |
+| 139 | `CreateConsumerGroup` | metadata |
+| 140 | `DeleteConsumerGroup` | metadata |
+| 141 | `CreateUser` | metadata |
+| 143 | `DeleteUser` | metadata |
+| 144 | `ChangePassword` | metadata |
+| 145 | `UpdatePermissions` | metadata |
+| 146 | `CreatePersonalAccessToken` | metadata |
+| 147 | `DeletePersonalAccessToken` | metadata |
+| 148 | `JoinConsumerGroup` | metadata |
+| 149 | `LeaveConsumerGroup` | metadata |
+| 150 | `UpdateResource` | metadata |
+| 160 | `SendMessages` | partition |
+| 161 | `StoreConsumerOffset` | partition |
+| 162 | `DeleteConsumerOffset` | partition |
+
+Value 0 is reserved and rejected. The 64..127 range is reserved for server-internal operations  and every value in it is refused from clients.
+
+The metadata plane orders resource and session changes. Each partition plane orders messages and offset changes independently. Partition requests retain their incarnation, ownership generation and metadata requirement across retries. Refreshing a route does not authorize a request against a replacement history.
+
+## Request numbering
+
+A retry keeps the original client, session, request number, logical request stamp and arguments. New mutations use new request numbers. Registration uses request zero. Do not infer that a low-numbered request succeeded because a later request committed.
+
+Session-qualified retry protection is retained by the metadata and partition state machines. A full partition table rejects new writers instead of evicting live protection. Ordered retirement releases ended sessions. Receipt recovery is bounded by the session lifetime and retained state. It is not an unlimited exactly-once guarantee.
+
+A reconnect uses [BindSession](https://iggy.apache.org/docs/binary-protocol/connection-lifecycle#bind-a-retained-session). Ending the session loses access to unresolved receipts. A fresh operation can duplicate an earlier uncertain write. SDKs retain uncertain operations and block conflicting work until resolution or abandonment.
+
+## ReplyHeader
+
+Server to client. 256 bytes, followed by `size - 256` bytes of body.
+
+| Offset | Size | Field | Type | Description |
+|--------|------|-------|------|-------------|
+| 0 | 16 | `checksum` | u128 | Zero on client-facing frames. |
+| 16 | 16 | `checksum_body` | u128 | Zero on client-facing frames. |
+| 32 | 16 | `cluster` | u128 | Cluster id. |
+| 48 | 4 | `size` | u32 | Total frame length: 256 + body length. |
+| 52 | 4 | `view` | u32 | View associated with the reply. A cached committed reply retains its original view. Direct replies can echo the request value. |
+| 56 | 4 | `release` | u32 | Zero. |
+| 60 | 1 | `command` | u8 | `8` (`Reply`). |
+| 61 | 1 | `replica` | u8 | Replica index stamped by the reply builder. Cached committed replies retain the original primary index. |
+| 62 | 66 | reserved | bytes | Zero. |
+| 128 | 16 | `request_checksum` | u128 | Echoed from the request. |
+| 144 | 16 | `context` | u128 | Server context. |
+| 160 | 16 | `client` | u128 | Echoed client id. |
+| 176 | 8 | `op` | u64 | Committed log position on consensus replies. Direct replies can instead carry the session epoch or zero. This field alone does not prove a commit. |
+| 184 | 8 | `commit` | u64 | Commit position associated with the reply. A cached committed reply retains its original position. |
+| 192 | 8 | `timestamp` | u64 | Server-assigned prepare timestamp on committed replies, or the request timestamp on direct replies. |
+| 200 | 8 | `request` | u64 | Echoed request number. Non-replicated requests can reuse a number, so it is not a unique correlation id for concurrent reads. |
+| 208 | 1 | `operation` | u8 | Reply operation. Server rewrites can return `64` for CreateTopic, `65` for CreatePartitions, or `68` for DeleteSegments instead of the original client operation. |
+| 209 | 7 | padding | bytes | Zero. |
+| 216 | 4 | `status` | u32 | `0` = no header-level failure. Nonzero = an `IggyError` code for a failure decided **before** commit (authorization denial, admission reject). A nonzero status always comes with an empty body. |
+| 220 | 1 | committed result | u8 | Exactly `1` marks a final committed result. Zero and unknown values provide no proof. |
+| 221 | 3 | reserved | bytes | Zero. |
+| 224 | 8 | `partition_incarnation` | u64 | Request or served partition incarnation. Poll body context carries the full served context. |
+| 232 | 24 | reserved | bytes | Zero. |
+
+Decode order for a client:
+
+1. Read 256 bytes, check `command`. `13` (`Eviction`) rejects the connection: map the reason and close that link. `8` (`Reply`) continues.
+2. Read the remaining `size - 256` body bytes.
+3. If `status` is nonzero, this reply reports a pre-commit rejection. It does not settle an earlier uncertain attempt. The body is empty.
+4. Decode the body and any result section. To settle an uncertain mutation, also require the committed-result marker and matching original request identity.
+
+## Result section
+
+Replies for all metadata operations, including their server-internal rewrites, and for the partition-plane consumer-offset writes (`StoreConsumerOffset`, `DeleteConsumerOffset`) are **result-framed**. Non-empty Register replies use the same framing. The body starts with a result section ahead of the typed payload.
+
+```text
+[count: u32]
+count x { index: u32, result: u32 }
+```
+
+- Success: `count = 0`, and the typed response payload (if any) follows the 4 count bytes.
+- Business or transient rejection: one entry `{ index: 0, result: error_code }` and no payload.
+
+A nonzero header `status` has an empty body. With `status = 0`, decode the result section for the operations above: it can report either a committed outcome or a pre-commit transient rejection. Its presence alone does not prove commitment. A matching final result also needs the committed-result marker at byte 220. Replayed PAT creation cannot return the original secret and can report `PersonalAccessTokenAlreadyExists` with that proof. A successful login-register reply starts with `count = 0`, followed by the [login response payload](https://iggy.apache.org/docs/binary-protocol/connection-lifecycle#login-register). An empty Register body is a terminal failure, not a successful login.
+
+Replies to non-replicated commands aren't result-framed: after `status = 0` the body is the response payload directly.
+
+## EvictionHeader
+
+Server to client. 256 bytes, never a body. An eviction has no per-request correlation. Close the affected link. A stale-client eviction can occur while the logical session is still live, so try binding the retained session before replacing it. A terminal bind refusal requires a new registration.
+
+| Offset | Size | Field | Type | Description |
+|--------|------|-------|------|-------------|
+| 0 | 16 | `checksum` | u128 | Zero on client-facing frames. |
+| 16 | 16 | `checksum_body` | u128 | Zero on client-facing frames. |
+| 32 | 16 | `cluster` | u128 | Cluster id. |
+| 48 | 4 | `size` | u32 | Always 256: an eviction has no body. |
+| 52 | 4 | `view` | u32 | |
+| 56 | 4 | `release` | u32 | Zero. |
+| 60 | 1 | `command` | u8 | `13` (`Eviction`). |
+| 61 | 1 | `replica` | u8 | |
+| 62 | 66 | reserved | bytes | Zero. |
+| 128 | 16 | `client` | u128 | The evicted client id. |
+| 144 | 4 | `server_protocol_version` | u32 | Accepted protocol window (max), packed semver. Set only for reason 14, zero otherwise. |
+| 148 | 4 | `server_protocol_version_min` | u32 | Accepted protocol window (min). Set only for reason 14, zero otherwise. |
+| 152 | 103 | reserved | bytes | Zero. |
+| 255 | 1 | `reason` | u8 | Eviction reason, see below. |
+
+Eviction reasons:
+
+| Value | Reason | Meaning |
+|-------|--------|---------|
+| 1 | `NoSession` | No session exists for this client id |
+| 2 | `ClientReleaseTooLow` | Client release below cluster minimum |
+| 3 | `ClientReleaseTooHigh` | Client release above cluster maximum |
+| 4 | `InvalidRequestOperation` | Unknown `operation` discriminant |
+| 5 | `InvalidRequestBody` | Body failed validation |
+| 6 | `InvalidRequestBodySize` | Body size mismatch |
+| 7 | `SessionTooLow` | Session epoch below the cluster's retained minimum |
+| 8 | `SessionReleaseMismatch` | Session bound to a different release |
+| 9 | `InvalidCredentials` | Login refused: bad username or password |
+| 10 | `InvalidToken` | Login refused: bad personal access token |
+| 11 | `UserInactive` | Login refused: user inactive |
+| 12 | `SessionError` | Session-level failure |
+| 13 | `StaleClient` | Missed heartbeats. Server evicted the session |
+| 14 | `IncompatibleProtocol` | Client protocol version outside the accepted window (see bytes 144..152) |
+| 15 | `MalformedLogin` | Login body without a decodable version prefix, or a legacy login code |
+
+Value 0 is reserved and never sent.
+
+---
+
+# Connection lifecycle
+
+> How the protocol version is packed and checked, and the login-register handshake that authenticates a connection.
+
+Rendered page: https://iggy.apache.org/docs/binary-protocol/connection-lifecycle/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/binary-protocol/connection-lifecycle.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+Server 0.10.0 uses binary protocol 0.12.0. Clients must use a compatible release.
+
+## Protocol version
+
+The protocol version is a semver packed into one u32, 10 bits per component (each must be below 1024):
+
+```text
+bits 31..30  reserved (zero)
+bits 29..20  major
+bits 19..10  minor
+bits  9..0   patch
+value = major << 20 | minor << 10 | patch
+```
+
+Integer order equals semver order. The value tracks the `iggy_binary_protocol` crate release. Under 0.x the compatibility gate is minor-scoped: the server accepts a client whose packed version is at least the server's minimum and whose `major.minor` is at most the server's. Patch releases never change the wire, so the upper bound ignores patch. The implemented minimum is the current version with its patch component zeroed. Compatibility across minor versions after 1.0.0 requires a future change to that calculation.
+
+## Login-register
+
+A new logical session authenticates through the register handshake: command code **40** (`LOGIN_REGISTER`, username and password) or **45** (`LOGIN_REGISTER_WITH_PAT`, personal access token). Both ride `operation = 1` (`Register`) with `session = 0`, `request = 0`, and a non-zero `client` id. Mint a fresh id for a new logical client. A reconnect retains its request identities and binds the existing session. A matching registration retry preserves its epoch.
+
+Both request bodies begin with the `ClientVersionInfo` prefix, so the server can gate on the version before touching credentials:
+
+```text
+[protocol_version: u32]
+[sdk_name_len: u8][sdk_name: UTF-8, 1-255 bytes]
+[sdk_version_len: u8][sdk_version: UTF-8, 1-255 bytes]
+```
+
+`protocol_version` is the packed version of the protocol the client was built against. `sdk_name` identifies the SDK (for example `rust-sdk`, `go-sdk`). `sdk_version` is the SDK's own build version.
+
+After the prefix:
+
+**`LOGIN_REGISTER` (code 40):**
+
+```text
+[ClientVersionInfo]
+[bind_secret: 32 bytes]
+[username_len: u8][username: N]
+[password_len: u8][password: N]
+[context_len: u32][context: N, only when context_len > 0]
+```
+
+**`LOGIN_REGISTER_WITH_PAT` (code 45):**
+
+```text
+[ClientVersionInfo]
+[bind_secret: 32 bytes]
+[token_len: u8][token: N]
+[context_len: u32][context: N, only when context_len > 0]
+```
+
+An incompatible protocol version is answered with a 256-byte `Eviction` frame, reason `14` (`IncompatibleProtocol`), carrying the accepted window at bytes 144 (max) and 148 (min) as packed u32 versions. A body without a decodable `ClientVersionInfo` prefix gets reason `15` (`MalformedLogin`) with a zero window. Bad credentials get reasons 9-11. See [EvictionHeader](https://iggy.apache.org/docs/binary-protocol/framing#evictionheader) for the frame layout.
+
+A successful login is a normal `Reply` with `status = 0`. Its body includes an empty [result section](https://iggy.apache.org/docs/binary-protocol/framing#result-section) before the login payload:
+
+```text
+[result_count: u32 = 0]
+[user_id: u32]
+[session: u64]
+[server_protocol_version: u32]
+[server_version_len: u8][server_version: N]
+```
+
+The client stores `session` and echoes it in every subsequent request header. Logout is command code **39** (`LOGOUT_USER`), `operation = 3` (`Logout`), empty body.
+
+The legacy login commands **38** (`LOGIN_USER`) and **44** (`LOGIN_WITH_PERSONAL_ACCESS_TOKEN`) are refused: the server answers them with an `Eviction` frame, reason `15` (`MalformedLogin`). Before authentication, a connection can ping or use the registration and binding flows. Protected commands require an authenticated session.
+
+## Bind a retained session
+
+BindSession, code 15, authenticates another connection for the same logical session without another Register:
+
+```text
+[ClientVersionInfo]
+[client_id: u128][session: u64][metadata_watermark: u64]
+[bind_secret: 32 bytes]
+```
+
+The client creates and protects the random binding secret for its session. The server stores a verifier. Session zero can resolve a lost registration reply using this retained secret. Binding supports connections to different partition primaries while preserving one session identity.
+
+Transport loss alone does not end a retained session. Logout, session expiry and account deactivation do. A password or PAT change does not revoke an already established session. Once the original session ends, unresolved operations cannot recover their old receipts through a new login.
+
+---
+
+# Commands
+
+> The catalog of command codes, their operation bytes, and which commands are replicated.
+
+Rendered page: https://iggy.apache.org/docs/binary-protocol/commands/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/binary-protocol/commands.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+## Catalog
+
+The u32 command codes. Replicated commands are identified on the wire by their `operation` byte (see [Operation discriminants](https://iggy.apache.org/docs/binary-protocol/framing#operation-discriminants)). The code column below is the protocol-level registry and, for non-replicated commands, the value carried in header bytes 196..200.
+
+```text
+# System
+PING = 1                                  # non-replicated; works without login
+GET_STATS = 10                            # non-replicated
+GET_SNAPSHOT_FILE = 11                    # non-replicated
+GET_CLUSTER_METADATA = 12                 # non-replicated
+DESCRIBE_OPTIONS = 13                     # non-replicated
+BIND_SESSION = 15                         # non-replicated
+UPDATE_RESOURCE = 16                      # operation 150
+GET_METADATA_CHANGES = 17                 # non-replicated
+GET_ME = 20                               # non-replicated
+GET_CLIENT = 21                           # non-replicated
+GET_CLIENTS = 22                          # non-replicated
+
+# Users
+GET_USER = 31                             # non-replicated
+GET_USERS = 32                            # non-replicated
+CREATE_USER = 33                          # operation 141
+DELETE_USER = 34                          # operation 143
+UPDATE_PERMISSIONS = 36                   # operation 145
+CHANGE_PASSWORD = 37                      # operation 144
+LOGIN_USER = 38                           # legacy; server rejects with MalformedLogin eviction
+LOGOUT_USER = 39                          # operation 3 (Logout)
+LOGIN_REGISTER = 40                       # operation 1 (Register)
+LOGIN_REGISTER_WITH_PAT = 45              # operation 1 (Register)
+
+# Personal access tokens
+GET_PERSONAL_ACCESS_TOKENS = 41           # non-replicated
+CREATE_PERSONAL_ACCESS_TOKEN = 42         # operation 146
+DELETE_PERSONAL_ACCESS_TOKEN = 43         # operation 147
+LOGIN_WITH_PERSONAL_ACCESS_TOKEN = 44     # legacy; server rejects with MalformedLogin eviction
+
+# Messages
+POLL_MESSAGES = 100                       # non-replicated
+SEND_MESSAGES = 101                       # operation 160
+GET_PARTITION_ROUTE = 105                 # non-replicated
+POLL_MESSAGES_DEFERRED = 106              # non-replicated
+CANCEL_DEFERRED_REQUEST = 108             # non-replicated
+FETCH_MESSAGES = 109                     # non-replicated
+
+# Consumer offsets
+GET_CONSUMER_OFFSET = 120                 # non-replicated
+STORE_CONSUMER_OFFSET = 121               # operation 161
+DELETE_CONSUMER_OFFSET = 122              # operation 162
+
+# Streams
+GET_STREAM = 200                          # non-replicated
+GET_STREAMS = 201                         # non-replicated
+CREATE_STREAM = 202                       # operation 128
+DELETE_STREAM = 203                       # operation 130
+
+# Topics
+GET_TOPIC = 300                           # non-replicated
+GET_TOPICS = 301                          # non-replicated
+CREATE_TOPIC = 302                        # operation 132
+DELETE_TOPIC = 303                        # operation 134
+
+# Partitions
+CREATE_PARTITIONS = 402                   # operation 136
+DELETE_PARTITIONS = 403                   # operation 137
+
+# Segments
+DELETE_SEGMENTS = 503                     # operation 138
+
+# Consumer groups
+GET_CONSUMER_GROUP = 600                  # non-replicated
+GET_CONSUMER_GROUPS = 601                 # non-replicated
+CREATE_CONSUMER_GROUP = 602               # operation 139
+DELETE_CONSUMER_GROUP = 603               # operation 140
+JOIN_CONSUMER_GROUP = 604                 # operation 148
+LEAVE_CONSUMER_GROUP = 605                # operation 149
+SYNC_CONSUMER_GROUP = 606                 # non-replicated
+```
+
+Codes 14, 35, 102, 103, 104, 107, 123, 124, 204, 205, 304 and 305 are retired. They are not alternate names for current commands. Use UpdateResource for resource patches and topic durability for persistence requirements.
+
+## Payloads
+
+Payloads below are the request **body** (the bytes after the 256-byte header). Types reference the [shared encodings](https://iggy.apache.org/docs/binary-protocol/encodings). Empty payload means the body has zero bytes.
+
+### System
+
+**Ping. Code: 1.** Empty payload. The only command accepted before login.
+
+**Get stats. Code: 10.** Empty payload.
+
+**Get snapshot. Code: 11.**
+
+```text
+[compression: u8][types_count: u8][snapshot_type: u8] x types_count
+```
+
+Compression codes: 1 = Stored, 2 = Deflated, 3 = Bzip2, 4 = Zstd, 5 = Lzma, 6 = Xz. Snapshot type codes: 1 = FilesystemOverview, 2 = ProcessList, 3 = ResourceUsage, 4 = Test, 5 = ServerLogs, 6 = ServerConfig, 100 = All.
+
+**Get cluster metadata. Code: 12.** Empty payload.
+
+**Describe options. Code: 13.**
+
+```text
+[scope: u8]
+```
+
+Scope: 1 = topic, 2 = stream, 3 = user. Returns the option catalog for the scope: keys, value kinds, defaults, and descriptions. See [Options block](https://iggy.apache.org/docs/binary-protocol/encodings#options-block).
+
+**Get me. Code: 20.** Empty payload.
+
+**Get client. Code: 21.**
+
+```text
+[client_id: u32]
+```
+
+**Get clients. Code: 22.** Empty payload.
+
+### Streams
+
+**Get stream. Code: 200.**
+
+```text
+[stream_id: Identifier]
+```
+
+**Get streams. Code: 201.** Empty payload.
+
+**Create stream. Code: 202.**
+
+```text
+[name_len: u8][name: N][options block to end]
+```
+
+The stream catalog accepts a create-only, write-only `encryption_key`. An omitted key uses the server creation default. See [Stream options](https://iggy.apache.org/docs/server/stream-options).
+
+**Delete stream. Code: 203.**
+
+```text
+[stream_id: Identifier]
+```
+
+### Topics
+
+**Get topic. Code: 300.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier]
+```
+
+**Get topics. Code: 301.**
+
+```text
+[stream_id: Identifier]
+```
+
+**Create topic. Code: 302.**
+
+```text
+[stream_id: Identifier][partitions_count: u32][name_len: u8][name: N][options block to end]
+```
+
+The fixed fields are the shape of the operation: which stream, how many partitions, what name. Every topic setting (`compression_algorithm`, `message_expiry`, `max_topic_size`, `segment_size`, `durability`, `consumer_offset_durability`, `messages_required_to_save`, `size_of_messages_required_to_save`, `preallocate_segments`, `partition_resize_policy`, `replication_factor`) rides the options block. See [Topic options](https://iggy.apache.org/docs/server/topic-options). `partitions_count` is an argument, not a setting: it is consumed at admission and never persisted as an option.
+
+**Delete topic. Code: 303.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier]
+```
+
+### Partitions
+
+**Create partitions. Code: 402.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier][partitions_count: u32]
+```
+
+**Delete partitions. Code: 403.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier][partitions_count: u32]
+```
+
+### Segments
+
+**Delete segments. Code: 503.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier][partition_id: u32][segments_count: u32]
+```
+
+Deletes up to `segments_count` oldest sealed segments of the partition. The active segment is retained.
+
+### Messages
+
+**Poll messages. Code: 100.**
+
+```text
+[consumer: Consumer][stream_id: Identifier][topic_id: Identifier]
+[partition_flag: u8][partition_id: u32]
+[strategy: 9 bytes][count: u32][auto_commit: u8]
+```
+
+`strategy` is a [polling strategy](https://iggy.apache.org/docs/binary-protocol/encodings#polling-strategy). `count` is the requested number of messages. `auto_commit = 1` asks the server to advance the consumer offset. A primary submits a quorum offset write before replying, but the poll does not wait for that write to commit. Partition reads route to their current primary. See [Client failover](https://iggy.apache.org/docs/clustering/client-failover#where-requests-are-served).
+
+The response body:
+
+```text
+[partition_id: u32][current_offset: u64][messages_count: u32]
+[incarnation: u64][owner_generation: u64][metadata_op: u64]
+[batch records to end]
+```
+
+The 40-byte prefix is followed by a stream of [batch records](https://iggy.apache.org/docs/binary-protocol/messages): each record's header carries the stamped `base_offset` and `base_timestamp`, and each frame's deltas resolve against them. A record may be a server-sliced view of a larger stored batch, so the first polled offset is `base_offset + offset_delta` of the first frame, not necessarily `base_offset` itself. `current_offset` is the partition's newest offset at poll time. The server rebuilds records when decrypting encrypted payloads.
+
+**Send messages. Code: 101.**
+
+```text
+[metadata_length: u32]
+[stream_id: Identifier][topic_id: Identifier][partitioning: Partitioning]
+[messages_count: u32]
+[batch: 256-byte batch header + frames]
+```
+
+`metadata_length` counts the bytes from `stream_id` through `messages_count` inclusive, so a reader can skip straight to the batch. The producer leaves `partition_id`, `base_offset`, and `base_timestamp` zero in the [batch header](https://iggy.apache.org/docs/binary-protocol/messages), and the server stamps them. Every checksum is producer-computed and verified at admission. The reserved regions must be zero.
+
+A committed append returns offset confirmations without a metadata result section:
+
+```text
+[confirmations_count: u32]
+[stream_id: u32][topic_id: u32][partition_id: u32][base_offset: u64] x confirmations_count
+```
+
+Each confirmation is 20 bytes. The server reports one partition per append. A zero count or an empty successful body supplies no offset information. A retry can return the retained result rather than append again. Retry coverage is [bounded](https://iggy.apache.org/docs/binary-protocol/framing#request-numbering), and crash durability depends on the topic's [durability policy](https://iggy.apache.org/docs/server/durability).
+
+### Consumer offsets
+
+**Get consumer offset. Code: 120.**
+
+```text
+[consumer: Consumer][stream_id: Identifier][topic_id: Identifier]
+[partition_flag: u8][partition_id: u32]
+```
+
+When an offset is stored, the response body is 20 bytes. When none is stored, a successful reply has an empty body.
+
+```text
+[partition_id: u32][current_offset: u64][stored_offset: u64]
+```
+
+**Store consumer offset. Code: 121.**
+
+```text
+[consumer: Consumer][stream_id: Identifier][topic_id: Identifier]
+[partition_flag: u8][partition_id: u32][offset: u64][ack: u8]
+```
+
+**Delete consumer offset. Code: 122.**
+
+```text
+[consumer: Consumer][stream_id: Identifier][topic_id: Identifier]
+[partition_flag: u8][partition_id: u32][ack: u8]
+```
+
+The trailing `ack` byte is mandatory on both write commands. A payload without it fails to decode. Ack levels:
+
+| Value | Level | Meaning |
+|-------|-------|---------|
+| 0 | `NoAck` | Local write on a single-replica partition. Replicated partitions use the same consensus path as `Quorum` |
+| 1 | `Quorum` | Replicate through partition consensus. Respond after a quorum commit (default for explicit writes) |
+
+### Consumer groups
+
+**Get consumer group. Code: 600.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier][group_id: Identifier]
+```
+
+**Get consumer groups. Code: 601.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier]
+```
+
+**Create consumer group. Code: 602.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier][name_len: u8][name: N]
+```
+
+**Delete consumer group. Code: 603.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier][group_id: Identifier]
+```
+
+**Join consumer group. Code: 604.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier][group_id: Identifier]
+```
+
+**Leave consumer group. Code: 605.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier][group_id: Identifier]
+```
+
+**Sync consumer group. Code: 606.**
+
+```text
+[stream_id: Identifier][topic_id: Identifier][group_id: Identifier]
+```
+
+Read-only: a member asks for its current partition assignment and the group generation, so it can select partitions to poll client-side.
+
+### Users
+
+**Get user. Code: 31.**
+
+```text
+[user_id: Identifier]
+```
+
+**Get users. Code: 32.** Empty payload.
+
+**Create user. Code: 33.**
+
+```text
+[username_len: u8][username: N][password_len: u8][password: N][status: u8]
+[has_permissions: u8][permissions_len: u32, only when has_permissions = 1][permissions: M bytes]
+[options block to end]
+```
+
+`permissions_len` and the permissions bytes are present **only** when `has_permissions = 1`. When it is 0 the options block follows immediately. The user catalog includes `username` and `status` for updates. Creation carries those values in its fixed fields. `status`: 1 = active, 2 = inactive.
+
+**Delete user. Code: 34.**
+
+```text
+[user_id: Identifier]
+```
+
+**Update permissions. Code: 36.**
+
+```text
+[user_id: Identifier][has_permissions: u8]
+[permissions_len: u32, only when has_permissions = 1][permissions: M bytes, only when 1]
+```
+
+As in `CreateUser`, the length field is conditional: with `has_permissions = 0` the payload ends at the flag.
+
+**Change password. Code: 37.**
+
+```text
+[user_id: Identifier]
+[current_password_len: u8][current_password: N]
+[new_password_len: u8][new_password: N]
+```
+
+### Authentication
+
+Login and logout are part of the [connection lifecycle](https://iggy.apache.org/docs/binary-protocol/connection-lifecycle):
+
+- **Login register. Code: 40.** `Operation::Register`. The body is `ClientVersionInfo` + credentials, described in [Login-register](https://iggy.apache.org/docs/binary-protocol/connection-lifecycle#login-register).
+- **Login register with PAT. Code: 45.** `Operation::Register`. The body is `ClientVersionInfo` + token.
+- **Logout user. Code: 39.** `Operation::Logout`. Empty payload.
+- Codes **38** and **44** are the pre-register login shapes. The server rejects both with a `MalformedLogin` eviction.
+
+### Personal access tokens
+
+**Get personal access tokens. Code: 41.** Empty payload.
+
+**Create personal access token. Code: 42.**
+
+```text
+[name_len: u8][name: N][expiry: u64]
+```
+
+`expiry` is a duration in **microseconds**. Two sentinel values exist: `0` (server default, which currently means no expiry) and `u64::MAX` (never expires).
+
+**Delete personal access token. Code: 43.**
+
+```text
+[name_len: u8][name: N]
+```
+
+### Resource patches
+
+UpdateResource is code 16, operation 150:
+
+```text
+[scope: u8][identifiers][reset_count: u8][reset_key: Name] x reset_count
+[options block to end]
+```
+
+Scope 1 selects a topic with stream and topic identifiers. Scope 2 selects a stream. Scope 3 selects a user. Empty patches, duplicate keys and keys that are both set and reset are rejected. The catalog defines update and reset permissions for each key.
+
+### Partition routes
+
+GetPartitionRoute is code 105. Its request contains stream and topic identifiers followed by a u32 partition ID. The response is exactly 25 bytes:
+
+```text
+[incarnation: u64][metadata_op: u64][view: u32]
+[partitions_count: u32][primary_replica: u8]
+```
+
+The primary value is a configured replica ID, not a roster position. Retain the incarnation and metadata operation when constructing a request. Group ownership adds its own generation.
+
+### Deferred polls
+
+PollMessagesDeferred is code 106. It extends the PollMessages body:
+
+```text
+[PollMessages body]
+[wait_us: u64][min_count: u32][max_bytes: u32][request_timeout_us: u64]
+```
+
+The response uses the same 40-byte prefix as PollMessages. Waiting requests need a positive count, `min_count` from 1 through count and a byte budget of at least 344. A positive wait requires at least one second of reply margin. Waits cannot exceed 600 seconds, and request timeouts cannot exceed 630 seconds. The server can shorten waits through its configuration.
+
+CancelDeferredRequest is code 108. It has an empty body and identifies the original request through the header request number on the same authenticated connection. The cancel command has no success reply. A committing deferred read still has one terminal reply that tells the caller whether the cancel won or an offset was stored.
+
+### Grouped fetches
+
+FetchMessages is code 109:
+
+```text
+[consumer][stream_id][topic_id][wait_us: u64][request_timeout_us: u64]
+[min_count: u32][count: u32][max_bytes: u32][auto_commit: u8]
+[targets_count: u32]
+[partition_id: u32][strategy: 9 bytes][max_bytes: u32]
+[incarnation: u64][owner_generation: u64] x targets_count
+```
+
+Targets have unique partition IDs and use offset or next strategies. The request applies its count, minimum count and byte limit across all targets. Each target also has a byte limit no greater than the request limit. A fetch requires the one-second reply margin even when its wait is zero.
+
+The response starts with a u32 section count, followed by a table of 56-byte section headers:
+
+```text
+[partition_id: u32][status: u32][current_offset: u64][messages_count: u32]
+[incarnation: u64][owner_generation: u64][metadata_op: u64]
+[next_offset: u64][records_len: u32]
+```
+
+All section headers precede the records. Records follow in table order. A failed section has no records. Inspect every section status before accepting progress. See [Deferred polling](https://iggy.apache.org/docs/sdk/deferred-polling) for SDK use.
+
+### Metadata changes
+
+GetMetadataChanges is code 17. It supports Earliest, Latest, After and Current starts, group selection, bounded result counts and optional time bounds. The [request codec](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/binary_protocol/src/requests/system/get_metadata_changes.rs) defines its flags and position encodings. See [Metadata changes](https://iggy.apache.org/docs/sdk/metadata-changes) for the follow and rebuild contract.
+
+---
+
+# Shared encodings
+
+> The primitives command payloads are built from: names, identifiers, consumers and the other shared encodings.
+
+Rendered page: https://iggy.apache.org/docs/binary-protocol/encodings/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/binary-protocol/encodings.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+Primitives the [command payloads](https://iggy.apache.org/docs/binary-protocol/commands) are built from.
+
+## Name
+
+Length-prefixed UTF-8 string, used for stream, topic, group, user, and token names:
+
+```text
+[length: u8][value: UTF-8, 1-255 bytes]
+```
+
+## Identifier
+
+Polymorphic identifier of a stream, topic, user, or consumer group:
+
+```text
+[kind: u8][length: u8][value: N bytes]
+```
+
+- Numeric: `kind = 1`, `length = 4`, value is a u32.
+- String: `kind = 2`, `length = 1..255`, value is UTF-8 bytes.
+
+## Consumer
+
+Identifies a consumer or a consumer group in message and offset commands:
+
+```text
+[kind: u8][id: Identifier]
+```
+
+- `kind = 1`: consumer.
+- `kind = 2`: consumer group.
+- `kind = 3`: externally managed group offsets. This kind cannot poll or join native consumer groups.
+
+## Optional partition id
+
+Several commands take an optional partition id encoded as 5 fixed bytes:
+
+```text
+[flag: u8][partition_id: u32]
+```
+
+`flag = 1` means the id is set. `flag = 0` means none (the value bytes are then zero). Group polls and group offset writes require an explicit assigned partition. Plain-consumer polls and consumer-offset reads use partition 0 when the id is omitted.
+
+## Partitioning
+
+How `SendMessages` picks the target partition:
+
+```text
+[kind: u8][length: u8][value: 0-255 bytes]
+```
+
+- `Balanced`: `kind = 1`, `length = 0`, no value. The binary client resolves it to an explicit partition before sending.
+- `PartitionId`: `kind = 2`, `length = 4`, value is a u32 partition id.
+- `MessagesKey`: `kind = 3`, `length = 1..255`, value is a routing key hashed to a partition.
+
+The Rust binary SDK resolves balanced and key routing client-side and sends `kind = 2`. The binary server requires explicit partition routing. The HTTP API can resolve the other strategies.
+
+## Polling strategy
+
+Fixed 9 bytes:
+
+```text
+[kind: u8][value: u64]
+```
+
+| Kind | Name | Meaning of `value` |
+|------|------|--------------------|
+| 1 | Offset | Start at this offset |
+| 2 | Timestamp | Start at this timestamp (microseconds) |
+| 3 | First | Start from the beginning (`value` ignored) |
+| 4 | Last | Start from the end (`value` ignored) |
+| 5 | Next | Continue after the stored consumer offset (`value` ignored) |
+
+## Header kinds
+
+Typed values used by user headers and option values. The kind byte:
+
+| Code | Kind | Code | Kind |
+|------|------|------|------|
+| 1 | Raw | 9 | Uint8 |
+| 2 | String | 10 | Uint16 |
+| 3 | Bool | 11 | Uint32 |
+| 4 | Int8 | 12 | Uint64 |
+| 5 | Int16 | 13 | Uint128 |
+| 6 | Int32 | 14 | Float32 |
+| 7 | Int64 | 15 | Float64 |
+| 8 | Int128 | | |
+
+Integers are little-endian. `Bool` is one byte.
+
+## User headers block
+
+A user headers block (inside a [message frame](https://iggy.apache.org/docs/binary-protocol/messages)) is a flat run of TLV fields:
+
+```text
+[kind: u8][length: u32][data: length bytes]
+```
+
+Fields pair up: first the key, then the value. Keys and values can both use the header kinds above. Every `length` must be 1..=255, kind 0 is rejected, and the block must consume its byte range exactly. The wire validator preserves unknown non-zero kind codes. A typed SDK accessor may still reject a kind it does not recognize.
+
+## Options block
+
+`CreateStream`, `CreateTopic`, `CreateUser` and `UpdateResource` end with a key-value **options block** that reuses the user-headers TLV encoding. The block runs from its start to the end of the payload (no length prefix, and the validator requires exact consumption) and may be empty.
+
+On top of the TLV walk, options enforce: string keys only (kind 2, valid UTF-8), no duplicate keys, at most 1024 entries, and at most 100000 bytes total.
+
+Semantics:
+
+- **Create** requests resolve absent keys to server defaults and persist the effective values. Updates use explicit reset keys to restore defaults. Zero retention sentinels do not reset a value. See [update semantics](https://iggy.apache.org/docs/server/topic-options).
+- **Update** requests are patches: keys absent from the block are left alone, never reset. A client built before a key existed cannot erase it.
+- Unknown keys are rejected at the wire edge, never silently skipped.
+
+The catalog is discoverable with DescribeOptions, code 13, using scope 1 for topics, 2 for streams and 3 for users. All three catalogs have entries. Stream keys are create-only and secret. Stream and topic names and user identity/status can be updated. Topic retention fields can be reset, while compression and storage policies are fixed at creation. See [Topic options](https://iggy.apache.org/docs/server/topic-options) and [Stream options](https://iggy.apache.org/docs/server/stream-options).
+
+## Compression
+
+The `compression_algorithm` value used by topic options:
+
+| Code / name | Algorithm |
+|-------------|-----------|
+| 1, `none` | No compression (default) |
+| 2, `gzip` | Gzip |
+
+Any other value is rejected. The option is a **placeholder today**: the value is validated, persisted, and echoed back, but it does not enable automatic payload compression or decompression. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/message-headers) in the Iggy repo.
+
+## Partition context
+
+A served partition context is 24 bytes:
+
+```text
+[incarnation: u64][owner_generation: u64][metadata_op: u64]
+```
+
+The incarnation identifies the partition history. The owner generation identifies group ownership and is zero for ordinary consumers. The metadata operation establishes the minimum metadata needed to interpret the context. Poll replies, continuations and checkpoints preserve these fields.
+
+## Option catalog flags
+
+DescribeOptions entries report mutability and visibility. Bit 0 means updatable, bit 1 resettable, bit 2 secret, bit 3 read-only and bit 4 critical. A critical key must be understood before a node serves the resource. Unknown client option keys are rejected.
+
+---
+
+# Message batches
+
+> The batch layout messages travel and rest in, from the 256-byte batch header down to individual message frames.
+
+Rendered page: https://iggy.apache.org/docs/binary-protocol/messages/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/binary-protocol/messages.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+Messages travel and rest in exactly one layout, the **batch**: the `SendMessages` body, the replicated record, the persisted segment record, and the poll reply all share it. There is no other message encoding.
+
+```text
+[batch header: 256 bytes][blob: message frames]
+frame = [frame header: 48 bytes][payload][user_headers]
+```
+
+## Batch header (256 bytes)
+
+| Offset | Size | Field | Type | Description |
+|--------|------|-------|------|-------------|
+| 0 | 8 | `partition_id` | u64 | Server-stamped at admission. Producers send zero. |
+| 8 | 8 | `base_offset` | u64 | Server-stamped when the batch is appended to the partition journal. Producers send zero. |
+| 16 | 8 | `base_timestamp` | u64 | Server-stamped at journal append (microseconds). Producers send zero. |
+| 24 | 8 | `origin_timestamp` | u64 | Producer-set: the earliest `origin_timestamp` among the batch's messages (microseconds). |
+| 32 | 8 | `batch_length` | u64 | Total batch size: 256 + blob length. |
+| 40 | 8 | `batch_checksum` | u64 | XxHash3-64 over the header fields (`partition_id`, `base_offset`, `base_timestamp`, `origin_timestamp`, `batch_length`, `message_count`, in that order, little-endian bytes) followed, when present, by the producer flag, ID, epoch and sequence, then each frame's 8 checksum bytes. Recomputed by the server when it stamps the header. |
+| 48 | 4 | `message_count` | u32 | Number of frames in the blob. |
+| 52 | 1 | flags | u8 | Bit 0 means producer fields are present. Other bits are rejected. |
+| 53 | 3 | reserved | bytes | Zero. |
+| 56 | 8 | `producer_id` | u64 | Producer identity, at most the signed 64-bit maximum. |
+| 64 | 2 | `epoch` | u16 | Producer epoch, at most the signed 16-bit maximum. |
+| 66 | 2 | reserved | bytes | Zero. |
+| 68 | 4 | `base_sequence` | u32 | First message sequence, at most the signed 32-bit maximum. |
+| 72 | 184 | reserved | bytes | Zero. |
+
+Without the producer-present flag, every producer field is zero. With it, the partition can deduplicate producer retries. Sequence numbers wrap after the signed 32-bit maximum. See [Idempotent producers](https://iggy.apache.org/docs/sdk/idempotent-producers).
+
+## Message frame header (48 bytes)
+
+| Offset | Size | Field | Type | Description |
+|--------|------|-------|------|-------------|
+| 0 | 8 | `checksum` | u64 | XxHash3-64 over frame bytes 8..48 followed by `payload` and `user_headers`. Producer-computed. Verified at admission. |
+| 8 | 16 | `id` | u128 | Message id (for example a UUID). |
+| 24 | 4 | `offset_delta` | u32 | Message offset = `base_offset + offset_delta`. Producer sends the frame's index in the batch. |
+| 28 | 4 | `timestamp_delta` | u32 | Microsecond delta against the batch `origin_timestamp`. One batch spans at most about 71.6 minutes of producer clock (`u32` microseconds). |
+| 32 | 4 | `user_headers_length` | u32 | Byte length of the user headers block. |
+| 36 | 4 | `payload_length` | u32 | Byte length of the payload. |
+| 40 | 8 | reserved | u64 | Must be zero. |
+
+After the 48 header bytes: `payload` (`payload_length` bytes), then `user_headers` (`user_headers_length` bytes). The payload comes **first**.
+
+A frame's absolute position is derived, not stored: offset = `base_offset + offset_delta`. The server-stamped time is the flat batch `base_timestamp` (the delta does not apply to it). Producer time resolves as `origin_timestamp + timestamp_delta`.
+
+The 64-byte `IggyMessageHeader` (checksum, id, offset, timestamp, origin_timestamp, lengths, reserved) that earlier protocol generations put in front of every message **no longer exists on the wire or on disk**. It survives only as an in-memory model.
+
+---
+
+# Server-to-server
+
+> Replica links, consensus commands, history fences and the header layouts used by Apache Iggy 0.10.0.
+
+Rendered page: https://iggy.apache.org/docs/binary-protocol/cluster/
+
+Source: https://github.com/apache/iggy-website/blob/main/content/docs/binary-protocol/cluster.mdx
+
+Docs version: server 0.10.0, Rust SDK 0.12.0, CLI 0.15.0, Node.js SDK 0.11.0, Python, Java, Go and C# SDKs 0.10.0, Swift, C++ and PHP SDKs 0.2.0
+
+Replicas use dedicated TCP listeners and 256-byte headers. Client listeners reject replica control commands. The replica protocol has no mixed-version upgrade path. Run the same server version and `replica_connections_per_peer` on every node.
+
+## Transport
+
+The roster supplies each node's `tcp_replica` port and literal IP address. Lower replica IDs dial higher IDs. Each pair can use several links, which distribute traffic across shards. The default frame limit is 64 MiB through `message_bus.max_message_size`.
+
+Each connection starts with an eight-byte placement preamble before TLS and the replica handshake:
+
+```text
+[magic: IGRL, 4 bytes][version: u8 = 1][dialer_replica: u8][link_index: u16]
+```
+
+The preamble selects a shard and is not authentication. ReplicaHello repeats the peer and link identity and supplies the link count. The acceptor rejects a mismatch. With authentication enabled, placement fields participate in the handshake MAC. Shard counts can differ between nodes.
+
+## Handshake
+
+ReplicaHello, ReplicaChallenge and ReplicaFinish establish the connection. `[cluster.auth]` enables the shared-key BLAKE3 MAC. `[cluster.tls]` encrypts traffic with TLS 1.3 and ALPN `iggy-replica`. TLS requires replica authentication. See [Cluster security](https://iggy.apache.org/docs/clustering/security) for configuration and key rotation.
+
+## Command discriminants
+
+The `command` byte is at offset 60. This is the complete registry, including client commands:
+
+| Value | Command |
+| --- | --- |
+| 0 | `Reserved` |
+| 1 | `Ping` |
+| 2 | `Pong` |
+| 3 | `PingClient` |
+| 4 | `PongClient` |
+| 5 | `Request` |
+| 6 | `Prepare` |
+| 7 | `PrepareOk` |
+| 8 | `Reply` |
+| 9 | `Commit` |
+| 10 | `StartViewChange` |
+| 11 | `DoViewChange` |
+| 12 | `StartView` |
+| 13 | `Eviction` |
+| 14 | `ReplicaHello` |
+| 15 | `ReplicaChallenge` |
+| 16 | `ReplicaFinish` |
+| 17 | `RequestStartView` |
+| 18 | `RequestPrepares` |
+| 19 | `RepairPrepare` |
+| 20 | `RepairDone` |
+| 21 | `RangeEvicted` |
+| 22 | `RequestStateTransfer` |
+| 23 | `StateTransferTarget` |
+| 24 | `RequestStateChunk` |
+| 25 | `StateChunk` |
+| 26 | `ForwardRegister` |
+| 27 | `ForwardRegisterResult` |
+| 28 | `ForwardLogout` |
+| 29 | `ForwardLogoutResult` |
+| 30 | `ConsumerSessionHeartbeat` |
+| 31 | `SessionRetirementProgress` |
+| 32 | `ForwardCompletion` |
+| 33 | `PrimaryRebalance` |
+| 34 | `SegmentDelete` |
+| 35 | `CommitReply` |
+| 36 | `PrepareProgress` |
+
+Reserved and unused ping/pong forms do not establish a session. Reply and Eviction are client-bound and rejected on replica ingress. A replica Request uses the internal routed-request header, including its group and metadata watermark.
+
+## Consensus and history
+
+The metadata group orders resources, users and sessions. Every partition has its own group for messages and offsets. The `group` field identifies the target. The metadata group uses `1 << 63`, while partition groups use packed stream, topic and partition IDs.
+
+Prepare carries an operation and its body. PrepareOk acknowledges the required replication and persistence work. Commit broadcasts the commit point and a liveness token. CommitReply proves that peers still respond. A primary that cannot reach a quorum relinquishes leadership.
+
+StartViewChange, DoViewChange and StartView establish a new view. DoViewChange includes an untrusted-log flag so a replica without proven history cannot vote as an authoritative empty log. RequestStartView probes for the current view after recovery.
+
+Partition incarnation fields fence an old partition history. Consumer ownership generations separately fence old group members. PrimaryRebalance moves a partition primary under metadata coordination. PrepareProgress lets a slow replica report received, held and committed progress while it catches up.
+
+## Frame integrity
+
+Replica control frames use an XxHash3-64 frame seal widened to u128. Prepare and RepairPrepare use a prepare identity hash, and a parent identity links the history. Metadata prepare bodies have their own seal. Message batches carry their batch checksums. These unkeyed hashes detect corruption, not a malicious peer. Authentication and TLS provide separate protection.
+
+## Header layouts
+
+Every header begins with the common 128-byte frame prefix shown in [Framing](https://iggy.apache.org/docs/binary-protocol/framing). The tables below list the remaining fields in wire order. Multi-byte integers are little-endian. Reserved fields are not extension space for clients. RepairPrepare uses the PrepareHeader layout with its repair command value.
+
+### PrepareHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `client` |
+| 144 | 16 | `parent` |
+| 160 | 16 | `request_checksum` |
+| 176 | 8 | `op` |
+| 184 | 8 | `commit` |
+| 192 | 8 | `timestamp` |
+| 200 | 8 | `request` |
+| 208 | 1 | `operation` |
+| 209 | 7 | `operation_padding` |
+| 216 | 8 | `group` |
+| 224 | 4 | `user_id` |
+| 228 | 4 | `retry_capacity` |
+| 232 | 8 | `partition_incarnation` |
+| 240 | 8 | `reserved` |
+| 248 | 8 | `session` |
+
+### PrepareOkHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `parent` |
+| 144 | 16 | `prepare_checksum` |
+| 160 | 8 | `op` |
+| 168 | 8 | `commit` |
+| 176 | 8 | `timestamp` |
+| 184 | 8 | `request` |
+| 192 | 1 | `operation` |
+| 193 | 7 | `operation_padding` |
+| 200 | 8 | `group` |
+| 208 | 48 | `reserved` |
+
+### CommitHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `commit_checksum` |
+| 144 | 8 | `timestamp_monotonic` |
+| 152 | 8 | `commit` |
+| 160 | 8 | `checkpoint_op` |
+| 168 | 8 | `group` |
+| 176 | 8 | `partition_incarnation` |
+| 184 | 72 | `reserved` |
+
+### CommitReplyHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 8 | `timestamp_monotonic` |
+| 136 | 8 | `group` |
+| 144 | 8 | `partition_incarnation` |
+| 152 | 104 | `reserved` |
+
+### PrepareProgressHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 8 | `nonce` |
+| 136 | 8 | `group` |
+| 144 | 8 | `partition_incarnation` |
+| 152 | 8 | `observed_op` |
+| 160 | 8 | `received_op` |
+| 168 | 8 | `held_op` |
+| 176 | 8 | `commit_op` |
+| 184 | 1 | `kind` |
+| 185 | 1 | `ready` |
+| 186 | 70 | `reserved` |
+
+### StartViewChangeHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 8 | `group` |
+| 136 | 8 | `partition_incarnation` |
+| 144 | 112 | `reserved` |
+
+### DoViewChangeHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 8 | `op` |
+| 136 | 8 | `commit` |
+| 144 | 8 | `group` |
+| 152 | 4 | `log_view` |
+| 156 | 1 | `flags` |
+| 157 | 59 | `reserved` |
+| 216 | 8 | `partition_incarnation` |
+| 224 | 16 | `nack_bitset` |
+| 240 | 16 | `present_bitset` |
+
+### StartViewHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 8 | `op` |
+| 136 | 8 | `commit` |
+| 144 | 8 | `group` |
+| 152 | 8 | `partition_incarnation` |
+| 160 | 80 | `reserved` |
+| 240 | 16 | `incarnation` |
+
+### RequestStartViewHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 8 | `group` |
+| 136 | 8 | `partition_incarnation` |
+| 144 | 96 | `reserved` |
+| 240 | 16 | `incarnation` |
+
+### RequestPreparesHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `nonce` |
+| 144 | 8 | `from_op` |
+| 152 | 8 | `to_op` |
+| 160 | 8 | `group` |
+| 168 | 8 | `partition_incarnation` |
+| 176 | 80 | `reserved` |
+
+### RepairRangeReplyHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `nonce` |
+| 144 | 8 | `op` |
+| 152 | 8 | `group` |
+| 160 | 8 | `partition_incarnation` |
+| 168 | 88 | `reserved` |
+
+### RequestStateTransferHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `nonce` |
+| 144 | 8 | `group` |
+| 152 | 8 | `partition_incarnation` |
+| 160 | 96 | `reserved` |
+
+### StateTransferTargetHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `nonce` |
+| 144 | 8 | `commit_op` |
+| 152 | 8 | `group` |
+| 160 | 1 | `available` |
+| 161 | 1 | `unavailable_transient` |
+| 162 | 6 | `reserved_alignment` |
+| 168 | 8 | `commit_max` |
+| 176 | 8 | `partition_incarnation` |
+| 184 | 72 | `reserved` |
+
+### RequestStateChunkHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `nonce` |
+| 144 | 8 | `offset` |
+| 152 | 8 | `group` |
+| 160 | 4 | `len` |
+| 164 | 4 | `artifact` |
+| 168 | 8 | `partition_incarnation` |
+| 176 | 80 | `reserved` |
+
+### StateChunkHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `nonce` |
+| 144 | 8 | `offset` |
+| 152 | 8 | `group` |
+| 160 | 4 | `artifact` |
+| 164 | 84 | `reserved` |
+| 248 | 8 | `partition_incarnation` |
+
+### ForwardRegisterHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `client` |
+| 144 | 16 | `nonce` |
+| 160 | 4 | `user_id` |
+| 164 | 92 | `reserved` |
+
+### ForwardRegisterResultHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `nonce` |
+| 144 | 16 | `client` |
+| 160 | 8 | `epoch` |
+| 168 | 8 | `watermark` |
+| 176 | 79 | `reserved` |
+| 255 | 1 | `outcome` |
+
+### ForwardLogoutHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `client` |
+| 144 | 16 | `nonce` |
+| 160 | 8 | `session` |
+| 168 | 8 | `request` |
+| 176 | 80 | `reserved` |
+
+### ForwardLogoutResultHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 16 | `nonce` |
+| 144 | 16 | `client` |
+| 160 | 8 | `commit` |
+| 168 | 87 | `reserved` |
+| 255 | 1 | `outcome` |
+
+### ForwardCompletionHeader
+
+| Offset | Bytes | Field |
+| --- | --- | --- |
+| 128 | 2 | `reporter` |
+| 130 | 1 | `operation` |
+| 131 | 125 | `reserved` |
+
+## Repair and state transfer
+
+RequestPrepares asks for a retained operation range. RepairPrepare sends the original prepares. RepairDone terminates the stream, and RangeEvicted reports history that is no longer retained. Requests are bounded by `repair_chunk_max` and the peer queue capacity.
+
+State transfer handles larger gaps. RequestStateTransfer obtains a manifest, then RequestStateChunk and StateChunk transfer artifacts. The receiver checks each complete artifact against its manifest length and checksum before using it. The manifest has magic `ISM1`, a u32 entry count, a u8 entry length and a trailing XxHash3-64 checksum. Entries contain kind, frontier, length and checksum.
+
+| Kind | Artifact | Current format |
+| --- | --- | --- |
+| 0 | Metadata snapshot | MessagePack version 15, readers accept 14 and 15 |
+| 1 | Client table | `ICT5` |
+| 2 | Segment log | Canonical batch records |
+| 3 | Consumer offsets and partition state | `ICO1` version 9, readers accept 8 and 9 |
+
+The offset artifact also retains partition history, retry state and producer state. These internal readability windows do not provide migration from a 0.9 data directory. Use the [upgrade procedure](https://iggy.apache.org/docs/server/upgrading).
+
+The [header definitions](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/binary_protocol/src/consensus/header.rs) and [command registry](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/binary_protocol/src/consensus/command.rs) define the layouts. The [replica transport](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/message_bus/src/replica) implements preamble admission and authentication.

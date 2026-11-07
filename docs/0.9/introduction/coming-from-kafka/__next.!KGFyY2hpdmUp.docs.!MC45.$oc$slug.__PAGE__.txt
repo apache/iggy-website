@@ -1,0 +1,50 @@
+5:"$Sreact.fragment"
+6:"/_next/static/chunks/0vov8es4ujaym.js"
+7:"/_next/static/chunks/3dvxc_i7jdz7n.js"
+8:I[39756,["$6","$7"],"default"]
+9:I[37457,["$6","$7"],"default"]
+e:"/_next/static/chunks/1g4w9cpc3zkpi.js"
+f:"/_next/static/chunks/0pg-3l73j6-i4.js"
+10:"/_next/static/chunks/07w_uh2ca3p4h.js"
+11:"/_next/static/chunks/1mwfozxzplnkm.js"
+12:"/_next/static/chunks/07igp-s_v4qmc.js"
+13:"/_next/static/chunks/3p7tdii2wsk8d.js"
+14:"/_next/static/chunks/0qyip0yosqs02.js"
+15:"/_next/static/chunks/3nzm6ahx8b9mz.js"
+16:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"DocsPage"]
+17:I[22016,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],""]
+18:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"DocsTitle"]
+19:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"DocsDescription"]
+1a:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"DocsBody"]
+1b:I[47873,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"default"]
+1c:I[94157,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15"],"Heading"]
+24:"ViewportBoundary"
+25:I[97367,["$6","$7"],"$24"]
+26:"MetadataBoundary"
+27:I[97367,["$6","$7"],"$26"]
+28:"$Sreact.suspense"
+29:I[27201,["$6","$7"],"IconMark"]
+b:X
+b:C
+c:X
+d:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$5","c",{"children":[["$","$L16",null,{"toc":[{"depth":2,"url":"#how-the-terms-map","title":"How the terms map"},{"depth":2,"url":"#what-works-differently","title":"What works differently"}],"footer":{"items":{"previous":{"$id":"introduction/concepts.mdx","type":"page","name":[["$","span",null,{"className":"me-1 font-normal text-fd-muted-foreground","children":["Introduction",":"]}],"Concepts"],"description":"The domain model behind Iggy, and how an append-only streaming log differs from a message broker.","url":"/docs/0.9/introduction/concepts","$ref":"introduction/concepts.mdx"},"next":{"$id":"introduction/glossary.mdx","type":"page","name":[["$","span",null,{"className":"me-1 font-normal text-fd-muted-foreground","children":["Introduction",":"]}],"Glossary"],"description":"Short definitions of the terms used across the Apache Iggy docs, with links to where each one is explained.","url":"/docs/0.9/introduction/glossary","$ref":"introduction/glossary.mdx"}}},"children":[["$","div",null,{"className":"mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-fd-foreground","children":["These are the docs for Apache Iggy 0.9, kept for reference and no longer updated. Server 0.10.0 changed the wire protocol, so 0.9 clients and servers do not work with 0.10.0."," ",["$","$L17",null,{"href":"/docs","className":"font-medium text-fd-primary underline","children":"Read the current docs"}],"."]}],["$","$L18",null,{"children":"Coming from Apache Kafka"}],["$","$L19",null,{"children":"How Apache Kafka's topics, partitions, consumer groups and offsets map to Apache Iggy, and what works differently."}],["$","$L1a",null,{"children":[["$","p",null,{"children":["If you already know Apache Kafka, most of Apache Iggy will feel familiar. This page maps the Kafka terms you know to Iggy's and lists what works differently. For when to choose one or the other, see ",["$","$L1b",null,{"href":"/blogs/2026/09/23/apache-iggy-or-apache-kafka","children":"Apache Iggy or Apache Kafka"}],"."]}],"\n",["$","$L1c",null,{"as":"h2","id":"how-the-terms-map","children":"How the terms map"}],"\n",["$","div",null,{"className":"relative overflow-auto prose-no-margin my-6","children":["$","table",null,{"children":[["$","thead",null,{"children":["$","tr",null,{"children":[["$","th",null,{"children":"Kafka"}],["$","th",null,{"children":"Iggy"}],["$","th",null,{"children":"What to know"}]]}]}],["$","tbody",null,{"children":[["$","tr",null,{"children":[["$","td",null,{"children":"No equivalent"}],["$","td",null,{"children":"Stream"}],["$","td",null,{"children":["A container for related topics. For example, a ",["$","code",null,{"children":"dev"}]," stream and a ",["$","code",null,{"children":"production"}]," stream can each have their own ",["$","code",null,{"children":"orders"}]," topic."]}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"Topic"}],["$","td",null,{"children":"Topic"}],["$","td",null,{"children":"Belongs to one stream."}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"Partition"}],["$","td",null,{"children":"Partition"}],["$","td",null,{"children":"Where messages are stored, as in Kafka."}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"Consumer group"}],["$","td",null,{"children":"Consumer group"}],["$","td",null,{"children":"Each partition goes to one member of the group, and the server rebalances when members join or leave."}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"Offset"}],["$","td",null,{"children":"Offset"}],["$","td",null,{"children":"Starts at 0 in each partition, but can skip numbers after a recovery."}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"Retention"}],["$","td",null,{"children":"Retention policy"}],["$","td",null,{"children":"Set per topic. Whole segments are deleted once all their messages have expired."}]]}]]}]]}]}],"\n",["$","p",null,{"children":[["$","$L1b",null,{"href":"/docs/0.9/introduction/concepts","children":"Concepts"}]," explains each of these in more detail."]}],"\n",["$","$L1c",null,{"as":"h2","id":"what-works-differently","children":"What works differently"}],"\n","$L1d","\n","$L1e"]}]]}],["$L1f","$L20","$L21"],"$L22"]}],"p":"$@23","v":null,"s":"$c"}}]]
+4:[["children",{"s":{"n":"slug","t":"oc","k":"introduction/coming-from-kafka","s":[]},"h":64,"d":{"r":["$","$5","c",{"children":[null,["$","$L8",null,{"parallelRouterKey":"children","template":["$","$L9",null,{}]}]]}],"p":"$@a","v":"$b","s":"$c"},"c":"$Qd"}]]
+3:[["children",{"s":"0.9","h":32,"c":"$Q4"}]]
+2:[["children",{"s":"docs","h":96,"c":"$Q3"}]]
+1:[["children",{"s":"(archive)","h":64,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":16,"c":"$Q1"},"h":{"r":["$","$5","h",{"children":[null,["$","$L25",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L27",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$28",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"0.9 Introduction: Coming from Apache Kafka | Apache Iggy"}],["$","meta","1",{"name":"description","content":"How Apache Kafka's topics, partitions, consumer groups and offsets map to Apache Iggy, and what works differently."}],["$","meta","2",{"name":"robots","content":"noindex, follow"}],["$","link","3",{"rel":"canonical","href":"https://iggy.apache.org/docs/0.9/introduction/coming-from-kafka/"}],["$","meta","4",{"property":"og:title","content":"0.9 Introduction: Coming from Apache Kafka | Apache Iggy"}],["$","meta","5",{"property":"og:description","content":"How Apache Kafka's topics, partitions, consumer groups and offsets map to Apache Iggy, and what works differently."}],["$","meta","6",{"property":"og:url","content":"https://iggy.apache.org/docs/0.9/introduction/coming-from-kafka"}],["$","meta","7",{"property":"og:site_name","content":"Apache Iggy"}],["$","meta","8",{"property":"og:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","meta","9",{"property":"og:image:width","content":"1200"}],["$","meta","10",{"property":"og:image:height","content":"630"}],["$","meta","11",{"property":"og:image:alt","content":"Apache Iggy"}],["$","meta","12",{"property":"og:type","content":"website"}],["$","meta","13",{"name":"twitter:card","content":"summary_large_image"}],["$","meta","14",{"name":"twitter:title","content":"0.9 Introduction: Coming from Apache Kafka | Apache Iggy"}],["$","meta","15",{"name":"twitter:description","content":"How Apache Kafka's topics, partitions, consumer groups and offsets map to Apache Iggy, and what works differently."}],["$","meta","16",{"name":"twitter:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","link","17",{"rel":"icon","href":"/img/favicon.png"}],["$","$L29","18",{}]]}]}],null]}],null]}],"p":"$@2a","v":null,"s":"$c"}},"a":"$@2b","u":"$@2c","b":"FpULQ-JbuhFPZJCWkTRLN"}
+2d:I[97367,["$6","$7"],"OutletBoundary"]
+1d:["$","p",null,{"children":[["$","strong",null,{"children":"Iggy has its own protocol."}]," A Kafka client can't talk to Iggy yet, so you use an ",["$","$L1b",null,{"href":"/docs/0.9/sdk/introduction","children":"Iggy SDK"}],", the HTTP API or the ",["$","$L1b",null,{"href":"/docs/0.9/binary-protocol","children":"binary protocol"}],". A Kafka protocol gateway is being built (see ",["$","$L1b",null,{"href":"https://github.com/apache/iggy/issues/3421","children":"issue #3421"}],"), but it can't serve consumers yet."]}]
+1e:["$","p",null,{"children":[["$","strong",null,{"children":"There is an extra level above topics."}]," Every topic lives in a stream, so you create a stream before you create its topics."]}]
+1f:["$","script","script-0",{"src":"/_next/static/chunks/3p7tdii2wsk8d.js","async":true}]
+20:["$","script","script-1",{"src":"/_next/static/chunks/0qyip0yosqs02.js","async":true}]
+21:["$","script","script-2",{"src":"/_next/static/chunks/3nzm6ahx8b9mz.js","async":true}]
+22:["$","$L2d",null,{"children":["$","$28",null,{"name":"Next.MetadataOutlet","children":"$@2e"}]}]
+2c:true
+c:300
+2e:null
+c:C
+2b:0
+a:"$undefined"
+2a:"$undefined"
+23:"$undefined"
