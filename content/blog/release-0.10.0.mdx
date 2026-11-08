@@ -1,0 +1,643 @@
+---
+title: Apache Iggy 0.10.0 Release
+description: Apache Iggy 0.10.0 spreads partition primaries over every node of a cluster, adds deferred polling and a new poll API to every SDK, and turns the Kafka gateway into a working bridge.
+author: hubert
+tags: ["release", "0.10.0", "announcement", "clustering", "kafka", "benchmarks"]
+date: 2026-11-09
+---
+**Contents**
+
+- [Multi-leader clusters](#multi-leader-clusters)
+- [Deferred polling and a new poll API](#deferred-polling-and-a-new-poll-api)
+- [Kafka gateway](#kafka-gateway)
+- [Idempotent producers](#idempotent-producers)
+- [Performance and benchmarks](#performance)
+- [Iggy Server](#iggy-server) and its [breaking changes](#breaking-changes)
+- [SDKs](#sdks), with the new [Swift SDK](#swift-new)
+- [Connectors](#connectors)
+- [Deployment and tools](#deployment-and-tools)
+- [CI/CD & Infrastructure](#cicd--infrastructure)
+- [What's Next](#whats-next)
+
+## Release 0.10.0
+We're happy to announce **[Apache Iggy 0.10.0](/downloads/)**. Seven weeks ago, [0.9.0](/blogs/2026/09/21/release-0.9.0/) made Iggy a replicated, clustered system, but one node usually led every partition. In 0.10.0, every node does its share of the work, consumers wait for messages instead of asking again and again, and Kafka clients can keep their data in Iggy.
+
+The official release is the **[source archive](https://www.apache.org/dyn/closer.lua/iggy/0.10.0/iggy-0.10.0-src.tar.gz)** from the Apache Software Foundation, with its [PGP signature](https://downloads.apache.org/iggy/0.10.0/iggy-0.10.0-src.tar.gz.asc), [SHA-512 checksum](https://downloads.apache.org/iggy/0.10.0/iggy-0.10.0-src.tar.gz.sha512) and the project [KEYS](https://downloads.apache.org/iggy/KEYS). The [downloads page](/downloads/) explains how to verify it. The [GitHub release](https://github.com/apache/iggy/releases/tag/server-0.10.0) lists every merged pull request.
+
+Three changes carry this release:
+
+- Partition primaries spread over every node. In 0.9.0, one node usually ordered the writes of every partition. Now each node leads its share, clients send partition requests straight to the primary, and each topic can set its own replication factor.
+- The server can hold a poll until messages arrive or the wait runs out. The poll API of every SDK changed with it: one options value carries the limits and the commit policy of a read, and a new partition reader fetches several partitions of one primary in one request.
+- The Kafka gateway works. In 0.9.0 it was a protocol listener with nothing behind it. Now Kafka producers, consumers, consumer groups and admin tools run through it, and the data lives in Iggy.
+
+0.10.0 has 281 merged pull requests from 49 contributors, and 27 of them contributed to Iggy for the first time. 60 of the pull requests are dependency updates. Alongside the server, we release the Rust SDK 0.12.0, the CLI 0.15.0, the connectors runtime 0.6.0, the MCP server 0.6.0, the Web UI 0.5.0, the bench dashboard 0.9.0 and the Kafka gateway 0.2.0. The Python 0.10.0, Node.js 0.11.0, Java 0.10.0, C# 0.10.0, Go v0.10.0 and Swift 0.2.0 SDKs come from the same repository. The C++ 0.2.0 and PHP 0.2.0 SDKs ship in the source archive only.
+
+0.10.0 also brings idempotent producers, per-stream encryption keys, an external authentication callout, a new Swift SDK, a Google BigQuery sink and an MQTT source, plus a long list of consensus and storage fixes.
+
+---
+
+## Multi-leader clusters
+
+The 0.9.0 post called multi-leader clusters "further out". They took one release. The [multi-leader docs](/docs/clustering/multi-leader) cover placement, replication factors and client routing.
+
+### Primaries spread over the cluster
+
+VSR replicates each partition as its own consensus group, and each group has a primary: the replica that orders the group's writes and sends them to the backups. In 0.9.0, a partition took its primary from the metadata view at creation, so the metadata primary usually led every partition. That node took every write and sent every replication message, while the others only followed. After a failover, the primaries moved to the next node and never came back.
+
+In 0.10.0, **[new partitions spread their primaries over the nodes](https://github.com/apache/iggy/pull/4619)**. At creation, the metadata primary gives each new partition to the ready node that leads the fewest partitions.
+
+The metadata primary also rebalances existing primaries, and there's no command or setting for it. It probes the other nodes every second. Once their readiness has held for five seconds, with a majority ready, it looks for a partition whose primary leads at least two more partitions than another ready member of that partition, and starts with the widest gap. One partition moves at a time: the old primary drains for a second, then an ordinary view change hands the partition to the new primary. In a unit test with 100 partitions on five nodes, one node fails and comes back, and every node ends up leading 20 partitions.
+
+Clients follow the primaries. With **[partition requests routed to their primaries](https://github.com/apache/iggy/pull/4506)**, a client asks any node which replica leads a partition and sends that partition's requests there. When a primary moves, the old node refuses a request before acting on it, and the client looks up the new primary and sends the request again. **[Partition routing and recovery are active in the SDKs](https://github.com/apache/iggy/pull/4561)**. The Rust, Go, C#, Java, Node.js and Swift SDKs route natively, and Python, C++ and PHP route through the Rust SDK.
+
+Over HTTP, a client can call any node. The node forwards control-plane writes, such as creating a topic, to the metadata primary. It relays a partition call to the HTTP port of the partition's primary, which authenticates the caller again. That relay needs the same `http.jwt` secret or `cluster.auth.shared_secret` on every node. Without either, a node only serves what it leads and answers the rest with a retryable 503. Each relay carries a proof that's valid for 10 seconds, so node clocks have to agree within a few seconds.
+
+Two changes keep retries safe while primaries move. With **[persisted retry receipts and shared sessions](https://github.com/apache/iggy/pull/4387)**, a write that a client sends again after a lost reply, a failover or a restart gets its first result back, and the partition doesn't apply it twice. Across a crash, that holds for topics with `persisted` durability. With **[fenced ownership and history changes](https://github.com/apache/iggy/pull/4456)**, a queued or retried request can't act on a partition that moved to another consumer group member, or on a partition that was deleted and created again.
+
+### Replication factor per topic
+
+In 0.9.0, every partition lived on every node. Now **[each topic can set its own replication factor](https://github.com/apache/iggy/pull/4692)**, so a five-node cluster can keep a topic on three nodes:
+
+```rust
+client
+    .create_topic(
+        &stream_id,
+        "orders",
+        &TopicCreateOptions {
+            partitions_count: Some(6),
+            replication_factor: Some(3),
+            ..TopicCreateOptions::default()
+        },
+    )
+    .await?;
+```
+
+The CLI takes it as a topic option, `iggy topic create prod orders 6 none --set replication_factor=3`, and `iggy topic get` shows the members of each partition and which of them are in sync. The factor is fixed at creation. It's 1 to 32, and at most the number of nodes. Without one, a topic takes `cluster.default_replication_factor`, which defaults to `"all"`, so the topic lives on every node as in 0.9.0. Give every node the same default.
+
+A partition's members are fixed at creation, partitions added later take their topic's factor, and a primary only moves among its partition's members. When every entry of `[[cluster.nodes]]` sets a `rack`, a partition's followers go to racks it doesn't use yet. Set `rack` on all nodes or on none, because a mix stops the boot.
+
+### More links between nodes
+
+The 0.9.0 post sketched a design for more replica links per pair of nodes. That design shipped. **[Replica traffic spreads over several links per peer](https://github.com/apache/iggy/pull/4656)**, and `cluster.coordinator.replica_connections_per_peer` sets how many. The default is still one. The value goes from 1 to the node's shard count, and a node has at most 256 links in total (the value times the number of peers). Every node in a cluster must use the same value. Two nodes with different values log a warning and never link. The value is read at boot, so changing it means restarting every node.
+
+### Slow replicas catch up
+
+A slow replica used to drag its healthy peers down with it. It throttled them, caused view changes and repeated snapshots, and its repair could fill the write-ahead log. **[Slow replicas now catch up under load](https://github.com/apache/iggy/pull/4658)**. The primary sends prepares to each backup on its own, with a 32 MiB credit window per backup. A state transfer reuses the verified segments the replica already holds, and hashing moved off the shard's main loop. A view only changes after a quorum votes for it, a primary that loses its heartbeat quorum steps down, and a node that's still recovering gets no new primaries.
+
+The new `partition.repair_memory_bytes_max` (1 GiB by default) caps the memory of all repairs on a node, and `partition.wal_bytes_max` now also bounds the repair of a single partition. A repair over its budget falls back to a state transfer. A cluster also **[refuses to boot with more than 32 replicas](https://github.com/apache/iggy/pull/4661)**, the replica limit of VSR in Iggy.
+
+### Fixes and tests
+
+The cluster work found and fixed bugs in consensus and storage:
+
+- **[Restarted replicas with `replicated` durability could elect a primary without the only replica that held committed operations](https://github.com/apache/iggy/pull/4500)**, and lose those operations. A **[failing test](https://github.com/apache/iggy/pull/4485)** reproduced it first.
+- **[A replica could commit a stale prepare after adopting a newer view](https://github.com/apache/iggy/pull/4433)**.
+- **[A replica whose view ran ahead never finished its state transfer](https://github.com/apache/iggy/pull/4483)**.
+- **[A late write to the primary's own disk blocked commits](https://github.com/apache/iggy/pull/4457)**. The primary now retries it on a prepare timeout.
+- **[The metadata primary could panic after its stall detector removed its next operation](https://github.com/apache/iggy/pull/4429)**.
+- **[Some recovery paths could drop acknowledged writes](https://github.com/apache/iggy/pull/4365)**, and a request id that aged out got a false success.
+- **[Partition repair could ask for an inverted range of operations](https://github.com/apache/iggy/pull/4246)** and panic.
+- **[A partition's install backup is fenced on a writeback failure](https://github.com/apache/iggy/pull/4278)**, and **[checkpoints sync through their original writers](https://github.com/apache/iggy/pull/4253)**, so a missed writeback error can't let a checkpoint reclaim the write-ahead log anymore.
+- **[Queued offset writes are refused after a partition's history resets](https://github.com/apache/iggy/pull/4325)**.
+
+New tests put the cluster under faults:
+
+- An opt-in **[chaos monkey](https://github.com/apache/iggy/pull/4407)** kills a random node of a five-node cluster at each interval and restarts it from disk. It checks every acknowledged message and compares the state and the segment bytes of every node. **[The scenarios of the older chaos tests](https://github.com/apache/iggy/pull/4557)** moved into it.
+- **[Torn-tail crash tests](https://github.com/apache/iggy/pull/4442)** cut the tail of the primary's active segment, then check that every acknowledged offset reads back and that the replicas match.
+- **[Tests for a slow replica rejoining the cluster](https://github.com/apache/iggy/pull/4653)** exposed the bugs that the catch-up work fixed.
+- The **[simulator now tells a vacuous run apart](https://github.com/apache/iggy/pull/4191)** and checks its invariants through the drain.
+
+---
+
+## Deferred polling and a new poll API
+
+### The server waits
+
+On an idle topic, a polling consumer used to pay a round trip for nothing. On a busy one, its poll interval traded latency against empty replies. The 0.9.0 post previewed the fix, and **[bounded deferred polling](https://github.com/apache/iggy/pull/4629)** ships in 0.10.0. It's also our answer to the [community request for deferred responses](https://github.com/apache/iggy/discussions/2854). The [deferred polling docs](/docs/sdk/deferred-polling) cover the read limits, the commit policies and HTTP reads.
+
+A deferred poll carries a maximum wait, a minimum message count and a reply size cap. The server parks the poll and answers as soon as `min_count` messages are ready, the reply reaches `max_bytes`, or the wait ends. An expired wait isn't an error. The reply holds whatever arrived, which can be nothing. A wait of zero answers at once, like a plain poll.
+
+Over TCP, QUIC and WebSocket, a deferred poll is command 106, and command 108 cancels it. Over HTTP it's `GET /streams/{stream_id}/topics/{topic_id}/messages/deferred`, and a poll that commits its offset uses `POST` on the same path. A request can ask to wait up to 10 minutes. The server shortens anything above `sharding.deferred_poll_max_wait` (30 s by default) rather than refusing it. Four more settings in `[sharding]` bound the parked polls:
+
+| Setting | Default | Limit |
+| --- | --- | --- |
+| `deferred_poll_max_pending` | 1024 | parked polls of one shard |
+| `deferred_poll_max_pending_per_session` | 64 | parked polls of one session |
+| `deferred_poll_max_read_bytes` | 16 MiB | memory that one parked disk read reserves, and the largest reply |
+| `deferred_poll_max_inflight_bytes` | 64 MiB | memory that the parked disk reads of one shard reserve together |
+
+A poll over one of the first two limits gets the retryable `DeferredPollCapacityExceeded` error. A disk read that finds no room under the last two waits until there is room.
+
+**[Grouped deferred fetches](https://github.com/apache/iggy/pull/4683)** go further. One fetch, command 109, reads up to 1000 partitions of the same primary into one reply, and its `count`, `min_count` and `max_bytes` apply to the whole reply. Each partition gets its own section with its own status, so an error on one partition doesn't fail the others. The partition reader sends one grouped fetch per primary over TCP, QUIC and WebSocket. HTTP has no grouped fetch, so a reader over HTTP keeps one waiting poll per partition.
+
+### One poll API in every SDK
+
+Deferred polls changed what a poll is, so 0.10.0 reworks the poll API too, in every SDK. In 0.9.0, a poll took the message count and an `auto_commit` flag as loose arguments, and in most SDKs the partition was optional. In 0.10.0:
+
+- One `PollOptions` value carries the limits of a read (`count`, `max_wait`, `min_count`, `max_bytes`) and its commit policy.
+- `CommitPolicy` replaces the `auto_commit` flag. `Manual`, the default, stores nothing, and the application commits what it processed. With `OnRead`, the server stores the offset of each read's last message as part of the read, in one round trip. That's at-most-once: a message the application never processed won't be read again. With `Auto`, the client stores the positions it counted, on an interval or after a number of messages.
+- A poll names its partition. A reply carries a continuation, where the next poll of that partition starts, and a checkpoint, the position to commit. Both carry the partition's incarnation, so a position from a deleted and recreated partition gets refused instead of applied to the new one.
+- A new partition reader reads many partitions of one topic in batches. It groups the partitions by primary, sends one grouped fetch per primary, and handles moved primaries and rebalances internally.
+
+In Rust, a one-off poll changes like this. Before, in 0.9.0:
+
+```rust
+let polled = client
+    .poll_messages(
+        &stream_id,
+        &topic_id,
+        Some(partition_id),
+        &consumer,
+        &PollingStrategy::offset(offset),
+        messages_per_batch,
+        false, // auto_commit
+    )
+    .await?;
+```
+
+After, in 0.10.0, waiting up to one second for the first message:
+
+```rust
+let polled = client
+    .poll_messages(
+        &stream_id,
+        &topic_id,
+        partition_id,
+        &consumer,
+        &PollingStrategy::offset(offset),
+        PollOptions {
+            count: messages_per_batch,
+            ..PollOptions::wait(IggyDuration::ONE_SECOND)
+        },
+    )
+    .await?;
+if let Some(checkpoint) = polled.checkpoint() {
+    client
+        .store_consumer_position(&consumer, &stream_id, &topic_id, &checkpoint)
+        .await?;
+}
+let next = polled.continuation();
+```
+
+The high-level consumer builder changes too. `poll_options` replaces `auto_commit`, `poll_interval`, `without_poll_interval` and `batch_length`, and a group member joins its group in `init()`, so `auto_join_consumer_group` and `do_not_auto_join_consumer_group` are gone. Before, in 0.9.0:
+
+```rust
+let mut consumer = client
+    .consumer_group("billing", "orders", "created")?
+    .auto_commit(AutoCommit::When(AutoCommitWhen::PollingMessages))
+    .create_consumer_group_if_not_exists()
+    .auto_join_consumer_group()
+    .polling_strategy(PollingStrategy::next())
+    .poll_interval(IggyDuration::from_str("1ms")?)
+    .batch_length(1000)
+    .build();
+```
+
+After, in 0.10.0:
+
+```rust
+let mut consumer = client
+    .consumer_group("billing", "orders", "created")?
+    .create_consumer_group_if_not_exists()
+    .polling_strategy(PollingStrategy::next())
+    .poll_options(PollOptions {
+        count: 1000,
+        commit: CommitPolicy::OnRead,
+        ..PollOptions::wait(IggyDuration::ONE_SECOND)
+    })
+    .build();
+```
+
+A standalone consumer now names its partitions with `.partitions([0, 1])` instead of taking one partition id. The partition reader is new:
+
+```rust
+let mut reader = client
+    .reader(&stream, &topic, &Consumer::new(Identifier::named("audit")?))
+    .partitions(0..8)
+    .build()
+    .await?;
+let batch = reader.next().await?;
+if let Some(checkpoint) = batch.checkpoint() {
+    reader.commit(checkpoint).await?;
+}
+```
+
+With the default `Manual` policy, a consumer commits what it processed, for example with `consumer.commit(received.checkpoint()).await?`. The Rust high-level consumer waits up to 5 seconds per poll by default. When a partition keeps refusing reads, the reader stops it until the application seeks. It also stops a partition after a read with an unknown outcome, a message that doesn't decode or a new partition history, and the [`new-sdk` consumer example](https://github.com/apache/iggy/tree/server-0.10.0/examples/rust/src/new-sdk/consumer) shows how to resume after those.
+
+The other SDKs follow the same model in their own idiom:
+
+| SDK | One poll | Reader and consumers |
+| --- | --- | --- |
+| Python | `poll_messages(stream, topic, partition_id, consumer, polling_strategy, options)` with `PollOptions(max_wait=timedelta(...))` | `reader(...)`, `consumer_group(..., poll_options=...)` |
+| Go | `PollMessages(ctx, stream, topic, partitionId, consumer, strategy, iggcon.PollOptions)` | `reader.NewPartitionReader`, `reader.NewIggyConsumer` |
+| C# | `PollMessagesAsync(stream, topic, partitionId, consumer, strategy, PollOptions)` with `PollOptions.Wait(TimeSpan)` | `client.Reader(...)`, `IggyConsumerBuilder.WithPollOptions` |
+| Java | `pollMessagesDeferred(..., DeferredPollOptions)` | `AsyncIggyTcpClient.reader(...)`, `IggyConsumer` with `PollOptions.waitFor(Duration)` |
+| Node.js | `client.message.poll({ ..., options })`, with times in milliseconds | `client.message.reader`, `client.consumer`, `client.consumerGroup` |
+| C++ | `PollMessages(consumer, stream, topic, partition_id, strategy, PollOptions)` | `Reader()`, `StandaloneConsumer()`, `GroupConsumer()` |
+| PHP | `pollMessages($stream, $topic, $partition_id, $consumer, $strategy, $options)`, with `PollOptions` times in microseconds | `reader(...)`, `consumerGroup(...)` |
+| Swift | `pollMessages(streamID:topicID:partitionID:consumer:strategy:options:)` | `reader(...)`, `consumer(...)`, `consumerGroup(...)` |
+
+In Rust, Python, Go, C++ and PHP, the poll call itself changed. Java, C# and Node.js keep their 0.9.0 poll calls next to the new ones, and those old calls send a plain poll without a wait. Every SDK has deferred polls on each of its transports. Go, Node.js and Swift only speak the binary protocol.
+
+---
+
+## Kafka gateway
+
+In 0.9.0, the Kafka gateway answered six Kafka API keys and stored nothing. In 0.10.0, it's a separate service that answers 24 Kafka API keys, plus the SASL and ACL keys on the listeners that use them, and it keeps the data in Iggy. Kafka producers, consumers, consumer groups and admin tools work through it unchanged.
+
+### What it serves
+
+- **[Kafka topics map to Iggy streams and topics](https://github.com/apache/iggy/pull/4043)**. The Kafka topic `T` lives in the Iggy topic `T` of the stream `kafka`, and a TOML topic map can put a topic somewhere else. Kafka partitions and offsets keep **[the same numbers in Iggy](https://github.com/apache/iggy/pull/4205)**.
+- **[Records keep their value, key, headers and timestamp](https://github.com/apache/iggy/pull/4229)**. The value becomes the payload, the key and headers become Iggy user headers, and the timestamp becomes the origin timestamp. A message written by an Iggy client reads back as a record without a key.
+- Consumer groups with the classic protocol: **[coordination](https://github.com/apache/iggy/pull/4263)**, **[LeaveGroup](https://github.com/apache/iggy/pull/4270)**, **[OffsetCommit and OffsetFetch](https://github.com/apache/iggy/pull/4415)** with the offsets stored in Iggy, **[static membership](https://github.com/apache/iggy/pull/4575)**, **[DeleteGroups and OffsetDelete](https://github.com/apache/iggy/pull/4559)**, and **[each member's client id and host](https://github.com/apache/iggy/pull/4651)**.
+- **[Several gateways share their consumer groups through Iggy](https://github.com/apache/iggy/pull/4681)**. A coordinator log in Iggy spreads the groups over the gateways. On a clean stop, a gateway hands its groups over at once. After a crash, another gateway takes them over once the crashed gateway's Iggy session times out. This needs `IGGY_KAFKA_BROKERS` and an Iggy user with `manage_servers`, and **[every gateway lists the others](https://github.com/apache/iggy/pull/4662)** in its Metadata answers.
+- Admin requests: CreateTopics, **[DeleteTopics](https://github.com/apache/iggy/pull/4400)** (the Iggy topic only, never the stream), **[CreatePartitions](https://github.com/apache/iggy/pull/4565)**, **[DescribeConfigs and AlterConfigs](https://github.com/apache/iggy/pull/4398)** and **[IncrementalAlterConfigs](https://github.com/apache/iggy/pull/4572)** for `retention.ms`, **[ListOffsets by timestamp](https://github.com/apache/iggy/pull/4545)**, **[a stable cluster id with DescribeCluster](https://github.com/apache/iggy/pull/4583)**, and **[topic auto-creation](https://github.com/apache/iggy/pull/4582)**, which is off by default.
+- **[Idempotent Kafka producers](https://github.com/apache/iggy/pull/4250)** get producer ids, and transactions are refused. With `IGGY_KAFKA_IDEMPOTENT_PRODUCERS=true`, each batch lands once, through any gateway and across restarts, on top of Iggy's own idempotent producers (see below). Turn it on once every Iggy node, gateway and consumer runs 0.10.0.
+- **[SASL/PLAIN](https://github.com/apache/iggy/pull/4222)**, checked by logging that user in to Iggy, and **[TLS listeners with mTLS client identities](https://github.com/apache/iggy/pull/4535)**. The gateway reloads its certificates every 60 seconds. **[DescribeAcls shows the caller's Iggy permissions](https://github.com/apache/iggy/pull/4245)**, read-only.
+
+The gateway also got sturdier. It **[gives each Kafka producer its own Iggy client](https://github.com/apache/iggy/pull/4502)**, **[keeps Fetch answering when one partition stalls](https://github.com/apache/iggy/pull/4706)**, **[stops a Produce send at the request deadline](https://github.com/apache/iggy/pull/4643)**, and **[survives accept errors and a late Iggy server at startup](https://github.com/apache/iggy/pull/4645)**. It **[accepts the `-1` defaults that KafkaJS sends and no longer reports `cleanup.policy`](https://github.com/apache/iggy/pull/4534)**, which confused Kafka Connect.
+
+Tests cover **[consumer groups end to end](https://github.com/apache/iggy/pull/4431)**, **[the gateway on split primaries](https://github.com/apache/iggy/pull/4642)**, and **[gateway failovers next to a three-node cluster](https://github.com/apache/iggy/pull/4702)**.
+
+### Run it
+
+The gateway ships as the `apache/iggy-kafka-gateway` image, or you can run it from source with `cargo run -p iggy-gateway-kafka`. It listens on `127.0.0.1:9093` by default and reads its configuration from `IGGY_KAFKA_*` environment variables. The bridge to Iggy is off by default. To turn it on, set `IGGY_KAFKA_BRIDGE_ENABLED=true` and `IGGY_KAFKA_IGGY_PASSWORD`. `IGGY_KAFKA_IGGY_ADDR` points at the Iggy server and defaults to `127.0.0.1:8090`. Without the bridge, the gateway stores nothing and refuses produce and fetch requests.
+
+The **[quick start](https://github.com/apache/iggy/pull/4372)** brings up an Iggy server and a gateway with the bridge on:
+
+```bash
+cd gateways/kafka
+docker compose up --build
+kcat -b 127.0.0.1:9093 -L
+```
+
+The gateway doesn't cover all of Kafka yet. There are no transactions, no KIP-848 consumer groups and no fetch sessions. There's no DeleteRecords either, because Iggy deletes whole segments. SASL/PLAIN is the only mechanism, because SCRAM needs stored credentials that Iggy's Argon2 password hashes can't provide. Produce and Fetch run as the gateway's own Iggy user. The [Kafka gateway docs](/docs/gateways/kafka) cover the configuration and running several gateways. The [gateway README](https://github.com/apache/iggy/tree/server-0.10.0/gateways/kafka) lists every API key and version, and which admin requests check a SASL user's permissions.
+
+---
+
+## Idempotent producers
+
+Before 0.10.0, a producer that sent a batch again after a lost reply, a reconnect or a lost session risked a duplicate. With **[idempotent producers](https://github.com/apache/iggy/pull/4691)**, the partition writes the batch once, and the second send gets the offset of the first write back.
+
+In Rust, it's one builder call:
+
+```rust
+let producer = client
+    .producer("orders", "created")?
+    .idempotent()
+    .build();
+producer.init().await?;
+producer.send(messages).await?;
+```
+
+The producer gets an id for each stream and topic in `init()`, so it needs a binary client. It picks the partition of each chunk itself and sends a partition's chunks one at a time. The lower-level `next_producer_id` and `send_producer_messages` give you full control over the id, the epoch and the sequence.
+
+Each batch carries its producer's id, an epoch and the sequence of its first message. The primary of a partition keeps the epoch and the last five batches of each producer, and checks every batch against them and against the uncommitted writes before it assigns offsets. Every replica records the batches at commit, so this state survives a failover, a restart and a state transfer. A partition tracks up to 4096 producers, drops the one that's been idle longest, and forgets a producer after 24 hours without a batch.
+
+A sequence gap fails with `ProducerSequenceOutOfOrder`, and an older epoch with `ProducerEpochFenced`. A batch that an uncommitted write already holds gets the retryable `TransientNotCommitted`, and the resend then gets the offset of the first write. For exactly-once delivery, give the topic `persisted` durability. With `replicated`, a quorum of nodes crashing at the same time can lose acknowledged batches.
+
+Connector sources and the Kafka gateway build on this. A source with `exactly_once = true` writes each batch once, and the gateway maps Kafka's idempotent producers onto Iggy's.
+
+---
+
+## Performance
+
+Several features above are performance work too: primaries on every node, several links per peer, deferred polls, grouped fetches, slow replicas that no longer hold back the rest, and one Iggy client per Kafka producer in the gateway. Two more changes take work off the hot path:
+
+- **[Partition file I/O runs as bounded jobs](https://github.com/apache/iggy/pull/4311)**. A shard used to wait for each partition's file writes and durability barriers before it served the next one, so one slow disk delayed every partition on the shard. Each file job now runs as its own task, up to `sharding.partition_io_capacity` (16 by default) per shard, and the shard keeps serving network traffic.
+- **[Small replica frames are batched per socket read](https://github.com/apache/iggy/pull/4224)**. Each plaintext replica link reads ahead into a buffer, 32 KiB by default (`message_bus.replica_read_buffer_size`), and decodes every complete frame that one read delivered. A read at least as large as the buffer goes straight to the socket.
+
+Smaller ones: the Java SDK **[builds its header length error text only on failure](https://github.com/apache/iggy/pull/4382)**, and the connectors **[drain field mappings instead of clone-then-clear](https://github.com/apache/iggy/pull/4362)** and **[stop cloning JSON leaves they already own](https://github.com/apache/iggy/pull/4399)**. `iggy-bench` got a fix of its own: it **[paces its warmup and rewinds its consumers](https://github.com/apache/iggy/pull/4314)**.
+
+### Benchmarks: 0.9.0 → 0.10.0
+
+The 0.9.0 post compared 0.9.0 with a development snapshot and promised the final numbers for the next release. Here they are. Both releases ran the same `iggy-bench` workloads on the same AWS machines in eu-north-1: one i4i.4xlarge node with its own producer and consumer machines, and a 3-node i4i.4xlarge cluster with one client machine. Each server ran 8 shards, and every workload sent 1000-byte messages in batches of 250. The two versions took turns on those machines, one server start at a time, so changes in the machines during the session affected both versions alike.
+
+A 0.10.0 server refuses 0.9.0 clients at login, so each version ran its own build of `iggy-bench`, and the tables compare server and client together. Each cell reads `0.9.0 → 0.10.0`. Latencies are in milliseconds: *p50*, *p99* and *p999* are each actor's median, 99th and 99.9th percentile, averaged over the actors. With 200 actors, each producer sends only 1200 batches, so its p999 is close to its slowest batch. Each value comes from one run per version. Two runs of 0.9.0 on different machines differed by 5 to 7% in a typical p99 or p999, and by up to 82% in the worst case, so read small changes in the tails as noise. These runs used other machines and a new build of the 0.9.0 source, so the 0.9.0 values differ from the 0.9.0 post.
+
+- **Pinned producer / consumer**: each actor owns its own stream and partition. *Actors* counts the concurrent producers or consumers.
+- **Rate limit**: the aggregate cap of a run, 800 MB/s or 500 MB/s. *Achieved MB/s* is the total data over the time of the slowest actor, so it can be lower than the cap.
+- **Persisted**: a write succeeds only after recoverable copies are on stable storage at the replication quorum. The other producer rows use the default, `replicated`. See [Durability](/docs/server/durability).
+- **Cold / warm**: consumers read data that isn't in the page cache, or data that is.
+- **No rate limit**: these two rows measure throughput only.
+
+<div className="min-w-0 overflow-x-auto pb-4 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
+
+#### Single node: 0.9.0 → 0.10.0
+
+| Workload (configured rate limit) | Achieved MB/s | p50 ms | p99 ms | p999 ms |
+| --- | ---: | ---: | ---: | ---: |
+| pinned producer, 20 actors, 800 MB/s | 800.1 → 800.1 | 0.554 → 0.689 | 1.223 → 1.056 | 2.326 → 3.311 |
+| pinned producer, 20 actors, persisted, 800 MB/s | 800.0 → 800.0 | 1.651 → 1.988 | 2.140 → 2.466 | 2.615 → 3.179 |
+| pinned consumer, 20 actors, cold, 800 MB/s | 800.1 → 800.1 | 0.478 → 0.688 | 4.976 → 1.055 | 5.334 → 2.441 |
+| pinned consumer, 20 actors, warm, 800 MB/s | 800.1 → 800.1 | 0.480 → 0.604 | 0.942 → 0.974 | 1.471 → 1.594 |
+| pinned producer, 1 actor, 500 MB/s | 500.0 → 500.0 | 0.363 → 0.370 | 0.674 → 0.901 | 1.087 → 5.338 |
+| pinned consumer, 1 actor, warm, 500 MB/s | 500.0 → 500.0 | 0.307 → 0.312 | 0.519 → 0.514 | 0.556 → 0.560 |
+| pinned producer, 1 actor, persisted, 500 MB/s | 348.8 → 313.2 | 0.712 → 0.792 | 0.855 → 0.909 | 1.045 → 1.681 |
+| pinned producer, 200 actors, 800 MB/s | 800.6 → 799.0 | 1.727 → 1.604 | 3.384 → 2.198 | 14.350 → 14.082 |
+| pinned producer, 200 actors, persisted, 800 MB/s | 800.6 → 798.2 | 3.932 → 4.987 | 6.119 → 11.959 | 13.599 → 27.321 |
+| pinned producer, 20 actors, no rate limit | 2041.3 → 2093.2 | - | - | - |
+| pinned consumer, 20 actors, no rate limit | 2676.7 → 2654.0 | - | - | - |
+
+#### 3-node cluster: 0.9.0 → 0.10.0
+
+| Workload (configured rate limit) | Achieved MB/s | p50 ms | p99 ms | p999 ms |
+| --- | ---: | ---: | ---: | ---: |
+| pinned producer, 20 actors, 800 MB/s | 800.0 → 784.3 | 1.139 → 0.953 | 2.418 → 1.275 | 2.872 → 2.266 |
+| pinned producer, 20 actors, persisted, 800 MB/s | 800.0 → 787.2 | 2.099 → 1.711 | 5.390 → 2.190 | 10.697 → 2.896 |
+| pinned consumer, 20 actors, cold, 800 MB/s | 800.1 → 785.4 | 0.458 → 0.520 | 4.554 → 1.798 | 4.996 → 2.116 |
+| pinned consumer, 20 actors, warm, 800 MB/s | 800.1 → 789.0 | 0.491 → 0.449 | 1.234 → 0.756 | 1.630 → 1.213 |
+| pinned producer, 1 actor, 500 MB/s | 331.5 → 384.3 | 0.737 → 0.623 | 1.022 → 1.109 | 1.112 → 3.210 |
+| pinned consumer, 1 actor, warm, 500 MB/s | 500.0 → 500.0 | 0.319 → 0.338 | 0.530 → 0.551 | 0.562 → 0.591 |
+| pinned producer, 1 actor, persisted, 500 MB/s | 225.7 → 207.8 | 1.081 → 1.223 | 1.312 → 1.334 | 10.874 → 1.734 |
+| pinned producer, 200 actors, 800 MB/s | 800.6 → 782.7 | 3.718 → 1.090 | 6.689 → 1.675 | 49.611 → 11.091 |
+| pinned producer, 200 actors, persisted, 800 MB/s | 800.5 → 784.0 | 3.246 → 1.812 | 9.837 → 2.496 | 47.043 → 12.222 |
+| pinned producer, 20 actors, no rate limit | 1131.8 → 1880.1 | - | - | - |
+| pinned consumer, 20 actors, no rate limit | 2703.4 → 2933.4 | - | - | - |
+
+</div>
+
+On the cluster, multi-leader shows most clearly without a rate limit: 20 producers wrote 1880.1 MB/s, against 1131.8 MB/s on 0.9.0 (+66%). Every node now orders the writes of its own partitions. These runs don't separate this gain from the other changes above. Reads without a rate limit rose from 2703.4 to 2933.4 MB/s. With a rate limit and 20 or more actors, the tails fell: for 20 persisted producers, p99 went from 5.39 to 2.19 ms and p999 from 10.7 to 2.9 ms, and cold reads went from 4.55 to 1.80 ms at p99.
+
+With 200 producers on 200 streams, the cluster median fell from 3.72 to 1.09 ms, and from 3.25 to 1.81 ms with `persisted` topics. The 0.9.0 median of 3.72 ms is high: an earlier 0.9.0 run of the same workload, on other machines, had 1.96 ms, so that gain is smaller than the table shows. Still, 0.10.0 had a lower p50, p99 and p999 than both 0.9.0 runs, in both workloads.
+
+With 20 or 200 actors and a rate limit, the 0.10.0 cluster reached 782.7 to 789.0 MB/s, not 800. The 0.10.0 Rust SDK waits a random 0 to 2 seconds before its first request to each primary on another node. Actors that start late also finish late, so the average rate of the run falls short of the cap. The single-actor producers stay under their 500 MB/s cap on the cluster with both versions, because one actor waits for each reply before it sends the next batch. The single producer rose from 331.5 to 384.3 MB/s, and the single persisted producer fell from 225.7 to 207.8 MB/s.
+
+On a single node, there are no primaries to spread. The unlimited producer rose from 2041.3 to 2093.2 MB/s, and the unlimited consumer stayed level. Cold reads got faster in the tail, with p99 from 4.98 to 1.06 ms. But the medians of the 20-actor rows rose by 0.12 to 0.34 ms, the single producer's p999 went from 1.09 to 5.34 ms, and the single persisted producer reached 313.2 MB/s instead of 348.8 MB/s.
+
+The clearest loss is 200 persisted producers on one node. There, p50 went from 3.93 to 4.99 ms, p99 from 6.12 to 11.96 ms and p999 from 13.6 to 27.3 ms. Every earlier run of this workload, on 0.9.0 and on development builds, was faster, so this isn't noise. We haven't traced the cause yet.
+
+At the same rate, the 0.10.0 cluster as a whole used 11 to 27% more CPU in the producer rows, but its busiest node used 10 to 17% less. For reads by 20 consumers, the busiest node used 62 to 63% less, because reads now spread over the nodes, and the total stayed level. On a single node, producers used 6 to 20% more CPU and consumers 9 to 15% less. The table shows the CPU of the `iggy-server` process in % of one core, averaged over the seconds with traffic. Rows where the two versions ran at different rates are left out.
+
+<div className="min-w-0 overflow-x-auto pb-4 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
+
+#### Server CPU at the same rate: 0.9.0 → 0.10.0
+
+| Workload (configured rate limit) | Single node | Cluster, sum of 3 nodes | Cluster, busiest node |
+| --- | ---: | ---: | ---: |
+| pinned producer, 20 actors, 800 MB/s | 111 → 118 | 294 → 372 | 143 → 128 |
+| pinned producer, 20 actors, persisted, 800 MB/s | 130 → 149 | 422 → 475 | 186 → 163 |
+| pinned consumer, 20 actors, cold, 800 MB/s | 112 → 99 | 115 → 113 | 113 → 42 |
+| pinned consumer, 20 actors, warm, 800 MB/s | 95 → 81 | 100 → 102 | 98 → 37 |
+| pinned producer, 1 actor, 500 MB/s | 55 → 63 | - | - |
+| pinned consumer, 1 actor, warm, 500 MB/s | 47 → 43 | 47 → 50 | 45 → 47 |
+| pinned producer, 200 actors, 800 MB/s | 114 → 121 | 320 → 406 | 155 → 139 |
+| pinned producer, 200 actors, persisted, 800 MB/s | 142 → 170 | 472 → 526 | 215 → 179 |
+
+</div>
+
+The [benchmarking guide](/docs/server/benchmarking) shows how to run these workloads with `iggy-bench` on your own hardware, and the [Linux tuning guide](/docs/server/linux-tuning) covers the host preparation.
+
+---
+
+## Iggy Server
+
+### Resource options and per-stream keys
+
+**[One set of resource options](https://github.com/apache/iggy/pull/4615)** replaces the separate update commands for streams, topics and users. Each resource kind has a catalog of named options, and each option says whether it's set at creation, updated later or reset. One `UpdateResource` command changes any of them, and `iggy options <scope>` or `GET /options/{scope}` lists the catalog. The Rust methods keep their names and take an options struct, for example `create_stream("orders", &StreamCreateOptions::default())` or `update_topic(&stream_id, &topic_id, &TopicUpdateOptions { .. })`. Over HTTP, an update is one flat `PUT` body with a `reset` list.
+
+The same change gives each encrypted stream its own data key. When the server has an `encryption.key`, a client can pass its own 32-byte key at creation. With `encryption.enabled = true`, the server also generates a key for every stream created without one. Messages are encrypted with the stream key using AES-256-GCM-SIV. The server wraps each stream key with a key derived from its `encryption.key` and only stores the wrapped copy. Reads never return a key, just its source and a fingerprint. Whether a stream is encrypted is decided at creation and can't change.
+
+Rotating the server key takes no command and re-encrypts no messages:
+
+1. On every node, set `encryption.key` to the new key and `encryption.previous_keys` to the old one. The metadata primary then wraps every stream key with the new key as well.
+2. Once every stream reports the new fingerprint, empty `previous_keys` and put the old fingerprint in `encryption.retired_kek_fingerprints`. The primary drops the old wraps.
+3. Clear `retired_kek_fingerprints`.
+
+### External authentication
+
+The **[external authentication callout](https://github.com/apache/iggy/pull/4634)** lets the server ask an HTTP service about a login it can't answer itself. When `external_auth.enabled` is true and a password login names a user the server doesn't know, the server posts the transport, the client address and the credentials to `external_auth.url`. The service answers `allow` with the name of an existing Iggy user, or `deny`. The session then belongs to that Iggy user, with its permissions.
+
+The callout never creates a user. It doesn't run for a wrong password of a known user, or for a personal access token. The allowed user must be active and can't be root. In a cluster, only the metadata primary calls out, and the other nodes answer such a login with a retryable error. A deny or an invalid answer fails the login. A timeout (`external_auth.timeout`, 5 s by default), a 5xx or 429 answer, or a full callout limit (`external_auth.max_concurrent_callouts`, 64 per shard) gives a retryable error. The SDKs then send the login again, so the service has to give the same answer to the same request.
+
+### Following metadata
+
+A client that mirrored a server's streams and topics used to list them all again. With **[metadata changes](https://github.com/apache/iggy/pull/4625)**, every node keeps a bounded log of committed metadata changes in its metadata snapshot, and a client reads it page by page from a cursor. It's `get_metadata_changes` in Rust, `GET /metadata/changes` over HTTP and `iggy metadata changes` in the CLI, and reading it needs root or the `manage_servers` permission. When the log no longer holds a client's position, the reply says so and the client rebuilds from the current state. `metadata.change_log_resource_capacity` (65536 records) and `metadata.change_log_activity_capacity` (16384 records) set how deep the log goes.
+
+For tools that inspect one node, **[a raw request can go to a chosen replica](https://github.com/apache/iggy/pull/4639)**: `send_binary_request_to_replica(code, payload, replica_id)` in Rust. HTTP clients don't have it.
+
+### Operations
+
+- **[The server guards against running out of file descriptors](https://github.com/apache/iggy/pull/4318)**. At startup, it raises its soft open-file limit to the hard limit. If storage still runs out of descriptors, the server exits with status 4. The new `metadata.partitions_max` caps the partitions of all topics, and the default of 0 means no cap.
+- **[`/metrics` reports the size and message count of each topic](https://github.com/apache/iggy/pull/4480)** as `topic_size_bytes`, `topic_messages` and `topic_max_size_bytes`, labeled by stream and topic.
+- **[Logging honors `retention`, `level`, `path` and `file_enabled`](https://github.com/apache/iggy/pull/4354)**. Log files rotate by size only, at `max_file_size` (500 MB by default), and `retention` counts from a rotated file's last write. An invalid `logging.level` now stops the boot (**BREAKING**).
+- **[The server lists its configuration environment variables](https://github.com/apache/iggy/pull/4350)** with `--list-config-env-vars`, and so do `iggy-connectors` and `iggy-mcp`. **[An unknown `IGGY_` variable stops the boot only in a debug build](https://github.com/apache/iggy/pull/4200)**. A release build prints a warning.
+- **[A fresh server no longer generates a root password](https://github.com/apache/iggy/pull/4585)** (**BREAKING**). Set `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD`, or use `--with-default-root-credentials` for development. The server stores the root user as its first replicated metadata operation, so restarts recover it without the variables. The diagnostic snapshot now needs the `manage_servers` permission.
+- **[The session timeout derives from `heartbeat.interval`](https://github.com/apache/iggy/pull/4562)**: 1.2 times the interval, so 36 s at the default 30 s. A configuration that still sets `consumer_group.session_timeout` stops the boot (**BREAKING**).
+- **[Offsets of consumer groups that Iggy doesn't manage are stored](https://github.com/apache/iggy/pull/4392)** under the consumer kind `external-group`. Iggy checks no membership and no offset range for them, and they don't hold back retention. The Kafka gateway stores its group offsets this way.
+- **[A standalone server warns about a listener bound to loopback inside a container](https://github.com/apache/iggy/pull/4218)**.
+- **[The server skips NUMA memory binding on a host with one NUMA node](https://github.com/apache/iggy/pull/4243)**, such as Docker Desktop.
+
+### Fixes
+
+- **[Recovered consumer offsets are clamped after the write-ahead log replay](https://github.com/apache/iggy/pull/4737)**. Before, a crash clamped them to 0 first, and consumers with `replicated` offsets read again from the start.
+- **[Stalled consumer groups recover after restarts](https://github.com/apache/iggy/pull/4283)**. The primary expires dead members, so their partitions go back to live ones.
+- **[In a grouped fetch, a busy partition no longer starves a ready partition on another shard](https://github.com/apache/iggy/pull/4693)**.
+- **[Malformed user headers are rejected during deserialization](https://github.com/apache/iggy/pull/4670)**.
+- **[The cleaner of expired tokens no longer panics](https://github.com/apache/iggy/pull/4364)**.
+
+### Removed
+
+- **[Stream and topic purge](https://github.com/apache/iggy/pull/4477)**, with its commands, SDK methods, `iggy stream purge` and `iggy topic purge`, HTTP routes and MCP tools
+- **[The flush unsaved buffer command](https://github.com/apache/iggy/pull/4317)**, which the 0.9.0 server already refused as unavailable, and `iggy message flush`
+
+### Breaking changes
+
+This is a major upgrade. Read this list before you move an existing deployment:
+
+- A 0.10.0 server speaks protocol 0.12.2 and refuses every older client at login, 0.9.x clients included. Upgrade the server and the SDKs together.
+- The on-disk format changed, and there's no migration for 0.9.x data directories. As with 0.9.0, until 1.0.0 an upgrade starts from a fresh data directory.
+- Every node of a cluster must run the same build and the same `cluster.coordinator.replica_connections_per_peer`, so rolling upgrades don't work. HTTP relays between nodes need the same `http.jwt` secret or `cluster.auth.shared_secret` on every node, and clocks that agree within a few seconds.
+- A fresh server needs `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD`, or `--with-default-root-credentials`.
+- `consumer_group.session_timeout` is gone, and the server won't start while it's set. An invalid `logging.level` stops the boot, and log files rotate by size only. In `http.jwt.trusted_issuers`, `username` replaces `user_id`.
+- The diagnostic snapshot needs `manage_servers` instead of `read_servers`.
+- Stream and topic purge and flush unsaved buffer are gone. `UpdateResource` replaces `UpdateStream`, `UpdateTopic` and `UpdateUser`, and the Rust create and update methods take options structs.
+- The Rust high-level consumer and the Python and PHP consumer groups commit nothing by default (`CommitPolicy::Manual`). In 0.9.0, the Rust consumer stored offsets every second and on each poll. An application that never stores offsets reads everything again after a restart. The Rust stream builder starts at `PollingStrategy::next()` instead of `last()`.
+- A connector sink that still sets `poll_interval` fails to start. Use `max_wait` and `min_count` instead.
+- Every SDK has the new poll API, and the poll calls of Rust, Python, Go, C++ and PHP changed. The public APIs of the Rust, Go, Java, C#, Node.js and C++ SDKs changed for partition routing and recovery. The Rust stream configuration takes stream and topic names only, without ids. The Python SDK requires Python 3.11 or later.
+
+Docker images are on **[Docker Hub](https://hub.docker.com/u/apache?page=1&search=iggy)**: `apache/iggy:0.10.0` for the server, `apache/iggy-connect:0.6.0` for the connectors runtime, and the new `apache/iggy-kafka-gateway:0.2.0` for the Kafka gateway.
+
+---
+
+## SDKs
+
+Every SDK speaks protocol 0.12.2, routes partition requests to their primaries, and has the new poll API. Every SDK can also **[follow metadata changes without listing all resources again](https://github.com/apache/iggy/pull/4625)** and **[send a raw request to a chosen replica](https://github.com/apache/iggy/pull/4639)**.
+
+### Swift (new)
+
+The Swift SDK is new: a native Swift 6 package on SwiftNIO, with strict concurrency, for macOS 13, iOS 16, tvOS 16, watchOS 9, visionOS 1 and Linux.
+
+It grew step by step, from the **[package scaffold](https://github.com/apache/iggy/pull/4190)**, the **[XXH3 and XXH32 hashes](https://github.com/apache/iggy/pull/4306)**, the **[domain models](https://github.com/apache/iggy/pull/4335)** and the **[VSR protocol layer](https://github.com/apache/iggy/pull/4355)** to the **[TCP and TLS client](https://github.com/apache/iggy/pull/4503)**, **[messages, consumer groups and offsets](https://github.com/apache/iggy/pull/4553)**, the **[producer](https://github.com/apache/iggy/pull/4577)**, the **[consumer](https://github.com/apache/iggy/pull/4641)**, and **[connection strings, examples and the BDD suite](https://github.com/apache/iggy/pull/4679)**.
+
+What 0.2.0 covers:
+
+- A client that speaks the binary protocol over TCP with optional TLS, signs in, keeps its session alive with a heartbeat, reconnects, and sends partition requests to their primaries. It reads the same `iggy://` connection strings as every other SDK.
+- Streams, topics, partitions, segments, users, personal access tokens and consumer groups, with typed resource options and per-stream encryption keys.
+- Sends with balanced or key partitioning. Keys are hashed with XXH32, as in every other SDK, so a key lands on the same partition from any client.
+- The new poll API: `PollOptions` with `maxWait`, `minCount`, `maxBytes` and a commit policy (`.manual`, `.onRead` or `.auto`), plus continuations and checkpoints. Every Swift poll is deferred, and cancelling its task cancels the poll on the server.
+- A `PartitionReader` that sends one grouped fetch per primary, an `IggyConsumer` on top of it, and an `IggyProducer` that sends from the calling task or batches in the background.
+- Metadata changes, raw requests to a chosen replica, runnable examples in `examples/swift`, and the cross-SDK BDD scenarios in `bdd/swift`.
+
+The SDK is **[published to SwiftPM from the repository root](https://github.com/apache/iggy/pull/4714)**, so you depend on the Iggy repository itself:
+
+```swift
+// Package.swift
+dependencies: [
+    .package(url: "https://github.com/apache/iggy.git", .upToNextMinor(from: "0.2.0"))
+],
+targets: [
+    .target(name: "MyApp", dependencies: [.product(name: "Iggy", package: "iggy")])
+]
+```
+
+A producer and a consumer group member:
+
+```swift
+import Iggy
+
+let client = try IggyClient(connectionString: "iggy://iggy:iggy@localhost:8090")
+try await client.connect()
+
+let producer = try client.producer(streamID: "orders", topicID: "created")
+try await producer.initialize()
+try await producer.send(["placed", "paid"])
+
+let consumer = try client.consumerGroup(
+    name: "billing", streamID: "orders", topicID: "created",
+    configuration: ConsumerConfiguration(pollOptions: PollOptions(maxWait: .seconds(5), commit: .auto(.default))))
+try await consumer.initialize()
+for try await received in consumer {
+    print(received.partitionID, received.message.offset, received.message.payloadString)
+}
+```
+
+Unlike the Rust SDK, the Swift SDK doesn't resolve a write with an unknown outcome on its own yet. It reports such a write to the caller. Its producer has no idempotent mode, and its consumer has no encryptor yet.
+
+### Rust
+
+- Rust client 0.12.0, with the new poll API and the partition reader described above
+- With **[partition routing and recovery](https://github.com/apache/iggy/pull/4561)**, requests go to the primary of their partition. A write with an unknown outcome returns `OperationUncertain`, and later writes to its partition fail with `LaneBlocked` until `resolve_operation` proves the outcome or `abandon_operation` gives it up
+- **[Idempotent producers](https://github.com/apache/iggy/pull/4691)** with `.idempotent()` on the producer builder
+- **[The stream builder takes stream and topic names only](https://github.com/apache/iggy/pull/4249)**, without numeric ids
+- **[`ReadError::is_lasting_refusal` tells when the reader stopped a partition](https://github.com/apache/iggy/pull/4693)**, so the application can seek and resume it
+- Client lifecycle fixes: **[a shut down client stays shut down](https://github.com/apache/iggy/pull/4374)**, **[an explicit disconnect holds until the next connect](https://github.com/apache/iggy/pull/4388)**, a reconnect sweep **[stops when the client shuts down](https://github.com/apache/iggy/pull/4507)** and **[ends its pause on disconnect and shutdown](https://github.com/apache/iggy/pull/4569)**, and **[a full diagnostic queue drops its oldest event instead of blocking](https://github.com/apache/iggy/pull/4501)**, all first reproduced by **[client lifecycle tests](https://github.com/apache/iggy/pull/4344)**
+- **[IPv6 addresses in connection strings](https://github.com/apache/iggy/pull/4579)**
+- **[Offsets of consumer group members readable over HTTP](https://github.com/apache/iggy/pull/4348)**
+
+### Python
+
+- **[Python 3.11 or later required](https://github.com/apache/iggy/pull/4421)** (**BREAKING**)
+- **[Client disconnect and shutdown](https://github.com/apache/iggy/pull/4288)**, **[`delete_segments`](https://github.com/apache/iggy/pull/4357)**, and **[identity details returned from password and token login](https://github.com/apache/iggy/pull/4276)**
+
+### Java
+
+- **[`iggy://` connection strings in `TcpClientBuilder`](https://github.com/apache/iggy/pull/4504)**
+- **[Clients close without Netty's 2 s quiet period](https://github.com/apache/iggy/pull/4704)**
+- **[A queued sign-in no longer fails as replaced](https://github.com/apache/iggy/pull/4652)**
+- **[The Gradle wrapper JAR fetch is decoupled from the Gradle version](https://github.com/apache/iggy/pull/4564)**, and the **[0.9.0 SDK is documented](https://github.com/apache/iggy/pull/4247)**
+
+### C\#
+
+- **[Connection string parsing](https://github.com/apache/iggy/pull/4363)**
+- **[A refusal is reported when the routed budget expires before a resend](https://github.com/apache/iggy/pull/4547)**
+- **[A simpler README for the NuGet page](https://github.com/apache/iggy/pull/4316)**, and **[FluentAssertions removed from the tests](https://github.com/apache/iggy/pull/4578)**
+
+### Go
+
+- **[`iggy://` connection strings parsed into TCP client options](https://github.com/apache/iggy/pull/4497)**
+- **[`GetMe`](https://github.com/apache/iggy/commit/e4ff95b88)**
+- **[Malformed user headers rejected in `NewIggyMessage`](https://github.com/apache/iggy/pull/4481)**
+- Serialization tests for **[system](https://github.com/apache/iggy/pull/4305)**, **[session and user](https://github.com/apache/iggy/pull/4334)**, and **[offset, partition and consumer group](https://github.com/apache/iggy/pull/4370)** commands, and a test for **[a manual group commit on a split primary](https://github.com/apache/iggy/pull/4293)**
+
+### Node.js (TypeScript)
+
+- **[The snapshot command in the system client](https://github.com/apache/iggy/pull/4389)**
+- Node.js client 0.11.0
+
+### C++
+
+- The high-level client gained **[consumer and offset functions](https://github.com/apache/iggy/pull/4180)**, **[user management and client functions](https://github.com/apache/iggy/pull/4256)**, and **[`create_personal_access_token`](https://github.com/apache/iggy/pull/4614)**
+- **[Code coverage](https://github.com/apache/iggy/pull/4118)**
+
+### PHP
+
+- The PHP CI **[survived the mass yank of the zip crate](https://github.com/apache/iggy/pull/4574)**
+
+### CLI
+
+- CLI 0.15.0
+- **[`IGGY_TOKEN` environment variable](https://github.com/apache/iggy/pull/4478)**
+- **[`topic get` shows partitions and options](https://github.com/apache/iggy/pull/4558)**
+- **[Errors print with their causes instead of a Debug value](https://github.com/apache/iggy/pull/4590)**
+- Fixed **[the server address for the WebSocket transport](https://github.com/apache/iggy/pull/4482)**, **[the help text of user permissions `-g` and `-s`](https://github.com/apache/iggy/pull/4484)**, and **[the consumer kind wording in `consumer-offset set`](https://github.com/apache/iggy/pull/4620)**
+
+---
+
+## Connectors
+
+The connectors runtime, now 0.6.0, gained two connectors, and its sinks use deferred polls.
+
+### New connectors
+
+- A **[Google BigQuery sink](https://github.com/apache/iggy/pull/4394)** writes through the BigQuery Storage Write API. It either maps top-level JSON fields to columns or stores the whole payload in one column. It checks the table schema at startup, adds Iggy metadata columns for lineage and deduplication, and drops only the rows that fail, with their offsets logged.
+- An **[MQTT source](https://github.com/apache/iggy/pull/4303)** subscribes to MQTT 3.1.1 or MQTT 5 topics, wildcards included, with QoS 0, 1 and 2, and TLS or mutual TLS to the broker. For QoS 1 and 2, it holds the broker acknowledgment until Iggy has accepted the message.
+
+### Runtime and existing connectors
+
+- Sinks **[wait with deferred polls](https://github.com/apache/iggy/pull/4629)**. On a `[[streams]]` entry, `max_wait` (1 s by default) and `min_count` (1 by default, at most `batch_length`) replace `poll_interval`. A sink that still sets `poll_interval` fails to start (**BREAKING**). The server stores the offset of each sink poll when it answers the poll, before the plugin consumes the messages.
+- Sources can write **[each batch exactly once](https://github.com/apache/iggy/pull/4691)** with `exactly_once = true`, also after a lost reply, a NACK or a crash of the runtime. All batches of such a source go to one partition, and the plugin must produce the same messages from the same saved state.
+- A sink **[resumes a partition that the reader stopped](https://github.com/apache/iggy/pull/4693)**
+- **[Production improvements for S3 storage in the Delta Lake sink](https://github.com/apache/iggy/pull/4219)**, and **[a batch of Iceberg sink fixes](https://github.com/apache/iggy/pull/4736)**
+- **[Sink batches tagged with the schema of their payload](https://github.com/apache/iggy/pull/4204)**, **[JSON numbers preserved](https://github.com/apache/iggy/pull/4733)**, **[ambiguous protobuf field mappings rejected](https://github.com/apache/iggy/pull/4581)**
+- **[`Retry-After` honored on every retried status](https://github.com/apache/iggy/pull/4192)**, **[source NACK retries configurable and observable](https://github.com/apache/iggy/pull/4269)**, **[inner error messages propagated in `RuntimeError`](https://github.com/apache/iggy/pull/4342)**
+- **[`http_source` refuses bodies that Iggy can't store](https://github.com/apache/iggy/pull/4302)**, **[the Meilisearch sink URL scheme check is case-insensitive](https://github.com/apache/iggy/pull/4158)**, **[key and version excluded from connector environment mappings](https://github.com/apache/iggy/pull/4486)**
+- Tests: **[Floci replaces MinIO](https://github.com/apache/iggy/pull/4290)**, **[SELinux label checks disabled for WireMock containers](https://github.com/apache/iggy/pull/4265)**, and a **[connector-review agent skill](https://github.com/apache/iggy/pull/4121)**
+
+The [connectors documentation](/docs/connectors/introduction) has more, including the new [BigQuery sink](/docs/connectors/sinks/bigquery) and [MQTT source](/docs/connectors/sources/mqtt) pages.
+
+---
+
+## Deployment and tools
+
+- **[A Docker Compose file starts a three-node cluster](https://github.com/apache/iggy/pull/4499)** on one host (see below)
+- **[The Kafka gateway image is published to Docker Hub](https://github.com/apache/iggy/pull/4593)** as `apache/iggy-kafka-gateway`
+- **[The local Docker image sets a default advertised address](https://github.com/apache/iggy/pull/4635)**
+- The Web UI 0.5.0 follows the **[new resource options](https://github.com/apache/iggy/pull/4615)** and the **[metadata change API](https://github.com/apache/iggy/pull/4625)**
+- MCP server 0.6.0, with **[documentation of consumer offsets and HTTP access](https://github.com/apache/iggy/pull/4610)**
+- Bench dashboard 0.9.0
+
+To try a cluster, run `docker-compose.cluster.yml` from the root of the repository. It needs a root password and a shared cluster secret, and `IGGY_VERSION` picks the server image:
+
+```bash
+IGGY_VERSION=0.10.0 IGGY_ROOT_PASSWORD=change-me \
+IGGY_CLUSTER_SHARED_SECRET="$(openssl rand -hex 32)" \
+docker compose -f docker-compose.cluster.yml up -d
+```
+
+Clients on the host then reach the three nodes over TCP at `127.0.0.1:8090`, `8091` and `8092`.
+
+---
+
+## CI/CD & Infrastructure
+
+- An **[RFC process with a template](https://github.com/apache/iggy/pull/4385)**, and **[RFC labels and the flow after acceptance](https://github.com/apache/iggy/pull/4705)**
+- Contributor guidance: **[in AGENTS.md](https://github.com/apache/iggy/pull/4286)**, **[how to report a bug found by an agent](https://github.com/apache/iggy/pull/4309)**, **[agent review, comment replies and fewer rebases](https://github.com/apache/iggy/pull/4384)**, **[PR reviews from contributors welcome](https://github.com/apache/iggy/pull/4494)**, the **[dev@ mailing list in the README and CONTRIBUTING](https://github.com/apache/iggy/pull/4189)**, and a **[refreshed README](https://github.com/apache/iggy/pull/4208)**
+- PR automation: a **[`/skill review` command that runs the repository skills](https://github.com/apache/iggy/pull/4244)** and **[sets `S-waiting-on-author`](https://github.com/apache/iggy/pull/4320)** when needed, **[PR commands for committers with private org membership](https://github.com/apache/iggy/pull/4319)**, **[PRs that skip the issue-first step closed](https://github.com/apache/iggy/pull/4403)**, **[prolific authors labeled](https://github.com/apache/iggy/pull/4622)**, and the **[repository skills available to Codex](https://github.com/apache/iggy/pull/4360)**
+- Faster, cheaper CI: **[jobs off `ubuntu-latest`](https://github.com/apache/iggy/pull/4479)**, **[no redundant Rust coverage builds](https://github.com/apache/iggy/pull/4546)**, **[covered runtimes shared across test jobs](https://github.com/apache/iggy/pull/4560)**, **[less runner usage](https://github.com/apache/iggy/pull/4594)**, **[better cache reuse and a smaller Miri workload](https://github.com/apache/iggy/pull/4624)**, **[four sliced test shards](https://github.com/apache/iggy/pull/4637)**, and **[license checks skipped where nothing changed](https://github.com/apache/iggy/pull/4428)**
+- **[clippy runs on macOS](https://github.com/apache/iggy/pull/4248)**, **[flaky downloads are retried](https://github.com/apache/iggy/pull/4216)**, **[jobs have timeouts](https://github.com/apache/iggy/pull/4466)**, and **[Cargo-Rail planning moved to v0.30.1](https://github.com/apache/iggy/pull/3999)**
+- Rust toolchain moved to **[1.99.0](https://github.com/apache/iggy/pull/4430)** and then **[1.99.1](https://github.com/apache/iggy/pull/4591)**
+
+---
+
+## What's Next
+
+Tiered storage is in design. An [RFC](https://github.com/apache/iggy/pull/4404) proposes to move a partition's sealed segments to an object store, S3 and compatible stores first, and to serve them back through a local chunk cache, with no change for clients. The [tracking issue](https://github.com/apache/iggy/issues/4686) and the [discussion](https://github.com/apache/iggy/discussions/4685) are open for comments.
+
+On performance, explicit group commit and Direct I/O are still ahead, as the 0.9.0 post planned, along with more copy-free paths. The Swift SDK still needs recovery APIs and an idempotent producer, and the PHP SDK is on its way to a published package.
+
+---
+
+Thank you to everyone who contributed to 0.10.0, and welcome aboard to our first-time contributors.
+
+Find us on [Discord](https://discord.gg/apache-iggy) with questions, ideas or bug reports.
