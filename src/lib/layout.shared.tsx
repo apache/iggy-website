@@ -62,7 +62,6 @@ const sharedLinks: BaseLayoutProps["links"] = [
   {
     type: "custom",
     on: "nav",
-    secondary: true,
     children: <ASFDropdown />,
   },
   {
