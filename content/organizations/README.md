@@ -40,14 +40,12 @@ Three required fields; a committer opens the pull request for you.
    Use a lowercase hyphenated slug: `acme.mdx`.
 2. Fill in the frontmatter. Delete every field you do not use.
 3. Commit any logo files to `public/img/organizations/`.
-4. Leave `draft: true`. A committer flips it to `false` once verified, and
-   that is what publishes the entry.
+4. Set `draft: false`. The entry goes live when a committer merges the PR.
 5. Open the PR. Conventional commit style, e.g.
    `content(site): add Acme Inc to Powered By`.
 
 Run `npm install && npm run dev`, then open <http://localhost:3000/powered-by>
-to preview. Setting `draft: false` locally shows your entry; set it back to `draft: true`
-before committing.
+to preview.
 
 ## How the page decides what to show
 
@@ -81,7 +79,7 @@ complete answer.
 | `logo` | no | Artwork legible on a **light** background. |
 | `logoDark` | no | Artwork legible on a **dark** background. |
 | `permissionConfirmed` | no | Defaults to `false`. **No logo renders until this is `true`.** |
-| `draft` | no | Defaults to `true`. Committers publish by setting `false`. |
+| `draft` | no | Defaults to `false`. Set `true` to hold an entry back. |
 | `submittedBy` | no | GitHub handle, so committers know who to follow up with. |
 
 Anything below the frontmatter is maintainer notes. It is not rendered, but it
@@ -104,18 +102,16 @@ image, so a PR can safely land the frontmatter and the artwork separately.
 
 ### Logo permission
 
-`permissionConfirmed` is not a formality. Setting it to `true` is your
-statement that you are authorized to grant the ASF permission to display your
-mark on iggy.apache.org. Reviewers will ask who confirmed it.
+`permissionConfirmed` must be `true` for a logo to render. Listing an
+organization that uses Iggy, with its logo, is a statement of fact and needs no
+permission. Use artwork from the organization's own public materials and say in
+the maintainer notes where it came from.
 
-Adding an organization you do not work for? Leave it `false` and say so in the
-PR. Someone from that organization can grant permission in a follow-up.
+## What committers check before merging
 
-## What committers check before publishing
-
-- The submission comes from the organization, or the PR says who confirmed it.
+- The usage is on public record, such as the organization's own repository or site, or the PR says who confirmed it.
 - Any `description` describes real usage and reads as a record, not an advert.
-- `permissionConfirmed` is `true` only where permission was actually granted.
+- Any logo comes from the organization's own materials, and the notes say where.
 - Logo files are committed to the repo, not hotlinked.
 - No field was filled in by guessing. An empty field is always better.
 

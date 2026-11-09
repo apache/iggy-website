@@ -8,6 +8,7 @@
     "server",
     "clustering",
     "binary-protocol",
+    "gateways",
     "connectors",
     "sdk",
     "cli",

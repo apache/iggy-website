@@ -20,6 +20,6 @@ If you already know Apache Kafka, most of Apache Iggy will feel familiar. This p
 
 ## What works differently
 
-**Iggy has its own protocol.** A Kafka client can't talk to Iggy yet, so you use an [Iggy SDK](/docs/sdk/introduction), the HTTP API or the [binary protocol](/docs/binary-protocol). A Kafka protocol gateway is being built (see [issue #3421](https://github.com/apache/iggy/issues/3421)), but it can't serve consumers yet.
+Iggy has its own protocol, and the [Kafka gateway](/docs/gateways/kafka) serves Kafka producers, consumers and supported admin APIs. Run it as a separate service with the Iggy bridge enabled. The gateway has a defined API subset and does not support transactions. Native applications can use an [Iggy SDK](/docs/sdk/introduction) or the HTTP API.
 
 **There is an extra level above topics.** Every topic lives in a stream, so you create a stream before you create its topics.

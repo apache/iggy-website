@@ -3,15 +3,15 @@ title: Intro
 description: "The Rust SDK, the primary and most complete Iggy client, and where its source lives."
 ---
 
-The Rust SDK is the primary and most feature-complete client for Iggy. It is available on [crates.io](https://crates.io/crates/iggy) and the source code is part of the [core repository](https://github.com/apache/iggy/tree/master/core/sdk).
+The Rust SDK is the primary and most feature-complete client for Iggy. It is available on [crates.io](https://crates.io/crates/iggy) and the source code is part of the [core repository](https://github.com/apache/iggy/tree/server-0.10.0/core/sdk).
 
 Run from your application crate to add the published SDK:
 
 ```bash
-cargo add iggy
+cargo add iggy@0.12.0
 ```
 
-Use an SDK release compatible with your server. For unreleased changes, build both from the same checkout; the [Getting Started](/docs/introduction/getting-started) guide shows the source dependency setup.
+Use an SDK release compatible with your server. For unreleased changes, build both from the same checkout. The [Getting Started](/docs/introduction/getting-started) guide shows the source dependency setup.
 
 ## Prerequisites
 
@@ -21,7 +21,7 @@ The examples below log in with `iggy`/`iggy`. For a new local development instan
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-`--fresh` **wipes this replica's local data directory**. Environment credentials take precedence over the flag, and bootstrap settings do not replace recovered credentials. In a cluster, a fresh replica can recover credentials from peers. Use disposable development data. A new standalone server without explicit credentials generates a root password; a new cluster requires explicit credentials.
+`--fresh` **wipes this replica's local data directory**. Environment credentials take precedence over the flag, and bootstrap settings do not replace recovered credentials. In a cluster, a fresh replica can recover credentials from peers. Use disposable development data. A fresh server requires explicit credentials or the development flag.
 
 ## High-level vs low-level API
 
@@ -90,11 +90,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client.connect().await?;
 
     // Re-running this example is fine: an existing stream or topic is not an error.
-    match client.create_stream("my-stream").await {
+    match client.create_stream("my-stream", &StreamCreateOptions::default()).await {
         Ok(_) | Err(IggyError::StreamNameAlreadyExists(_)) => {}
         Err(e) => return Err(e.into()),
     }
-    // Every topic knob rides `TopicCreateOptions`; fields left as `None`
+    // Every topic knob rides `TopicCreateOptions`. Fields left as `None`
     // resolve against the server's defaults at admission.
     match client
         .create_topic(
@@ -127,11 +127,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .poll_messages(
             &"my-stream".try_into()?,
             &"my-topic".try_into()?,
-            Some(0),
+            0,
             &Consumer::default(),
             &PollingStrategy::next(),
-            10,
-            true,
+            PollOptions {
+                count: 10,
+                commit: CommitPolicy::OnRead,
+                ..PollOptions::default()
+            },
         )
         .await?;
 
@@ -144,6 +147,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Partition IDs are **0-based**: the first partition of a topic is partition `0`. The consumer uses the default consumer identity and requests auto-commit; its offset can advance before application processing finishes. Use explicit offset storage after successful processing when that distinction matters.
+Partition IDs are **0-based**: the first partition of a topic is partition `0`. The consumer uses the default consumer identity and requests auto-commit. Its offset can advance before application processing finishes. Use explicit offset storage after successful processing when that distinction matters.
 
 For the full getting started tutorial, see [Getting Started](/docs/introduction/getting-started). For the high-level producer/consumer builders, see [High-level SDK](/docs/sdk/rust/high-level-sdk) and [Stream Builder](/docs/sdk/rust/stream-builder).

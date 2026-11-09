@@ -7,7 +7,7 @@ The Elasticsearch source connector polls documents from an Elasticsearch index a
 
 ## Configuration
 
-Use the broker credentials and main runtime configuration from the [source guide](/docs/connectors/sources/source#configuration). From the matching 0.9.0/edge Iggy checkout root, build the plugin:
+Use the broker credentials and main runtime configuration from the [source guide](/docs/connectors/sources/source#configuration). From the matching 0.10.0 Iggy checkout root, build the plugin:
 
 ```bash
 cargo build --release -p iggy_connector_elasticsearch_source
@@ -70,11 +70,11 @@ Start the runtime as described in the source guide. After the configured 30-seco
 | Option | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
 | `url` | string | required | Elasticsearch cluster URL |
-| `index` | string | required | Index to poll; must exist when the connector starts |
+| `index` | string | required | Index to poll. Must exist when the connector starts |
 | `username` / `password` | string | none | Basic authentication is enabled only when both are present |
 | `query` | table | `match_all` | Elasticsearch query DSL applied on each poll |
-| `polling_interval` | string | `"10s"` | Delay before each poll cycle; invalid strings fall back to `10s`, and zero is accepted |
-| `batch_size` | integer | `100` | Search size per poll; `0` returns no hits, and Elasticsearch enforces its own result-window limit |
+| `polling_interval` | string | `"10s"` | Delay before each poll cycle. Invalid strings fall back to `10s`, and zero is accepted |
+| `batch_size` | integer | `100` | Search size per poll. `0` returns no hits, and Elasticsearch enforces its own result-window limit |
 | `timestamp_field` | string | none | Top-level RFC3339 string field used to advance the watermark |
 
 A custom `query` must be a structured object. In TOML that means nested tables (an inline JSON string won't work):
@@ -84,26 +84,26 @@ A custom `query` must be a structured object. In TOML that means nested tables (
 value = "error"
 ```
 
-The connector file remains TOML. `plugin_config_format = "json"` only selects the default format of the HTTP API's plugin-config response; it does not change how the local file is parsed. The [upstream config example](https://github.com/apache/iggy/tree/master/core/connectors/sources/elasticsearch_source) also uses TOML with a structured `[plugin_config]` table.
+The connector file remains TOML. `plugin_config_format = "json"` only selects the default format of the HTTP API's plugin-config response. It does not change how the local file is parsed. The [upstream config example](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sources/elasticsearch_source) also uses TOML with a structured `[plugin_config]` table.
 
 ## How Polling Works
 
-Each cycle the connector waits `polling_interval`, then runs a search against `index` with the configured `query`, `size = batch_size`, sorted ascending by `timestamp_field` (`@timestamp` when unset). Every hit with `_source` becomes one JSON message. Elasticsearch `_id` is not copied into the payload or used as the Iggy message ID; headers and timestamps are also unset by this plugin.
+Each cycle the connector waits `polling_interval`, then runs a search against `index` with the configured `query`, `size = batch_size`, sorted ascending by `timestamp_field` (`@timestamp` when unset). Every hit with `_source` becomes one JSON message. Elasticsearch `_id` is not copied into the payload or used as the Iggy message ID. Headers and timestamps are also unset by this plugin.
 
-When `timestamp_field` is set, the query is also filtered to values strictly greater than the last acknowledged timestamp. Only top-level strings that parse as RFC3339 update the watermark; numeric timestamps, date-only strings and nested paths do not. Without a `timestamp_field` there is no incremental cursor and each poll returns the first `batch_size` matching documents.
+When `timestamp_field` is set, the query is also filtered to values strictly greater than the last acknowledged timestamp. Only top-level strings that parse as RFC3339 update the watermark. Numeric timestamps, date-only strings and nested paths do not. Without a `timestamp_field` there is no incremental cursor and each poll returns the first `batch_size` matching documents.
 
-The connector does not use scroll, `search_after` or a document-ID tiebreaker. If a timestamp group spans multiple batches, advancing past that timestamp skips the remaining tied documents. Late arrivals and updates at or below the watermark are also skipped. `scroll_timeout` is accepted but unused. Without a usable timestamp, repeated polls can produce duplicates; the default `@timestamp` sort still requires a sortable field in the index mapping.
+The connector does not use scroll, `search_after` or a document-ID tiebreaker. If a timestamp group spans multiple batches, advancing past that timestamp skips the remaining tied documents. Late arrivals and updates at or below the watermark are also skipped. `scroll_timeout` is accepted but unused. Without a usable timestamp, repeated polls can produce duplicates. The default `@timestamp` sort still requires a sortable field in the index mapping.
 
-Search and JSON-decoding failures, `timed_out: true`, and a nonzero `_shards.failed` count are returned as poll errors without advancing the watermark. The next polling cycle retries from the previous watermark. Poll errors are logged by the SDK; they do not increment the runtime's forwarding-error counter or change the runtime connector status. There is no per-query retry loop or configured HTTP request timeout. The source stages a candidate watermark and applies it only after runtime `Ack`; `Nack` keeps the previous watermark so the next search can fetch the rejected records again. Fetched-document and byte counters include these repeated attempts. This does not remove the timestamp limitations above or provide exactly-once delivery.
+Search and JSON-decoding failures, `timed_out: true`, and a nonzero `_shards.failed` count are returned as poll errors without advancing the watermark. The next polling cycle retries from the previous watermark. Poll errors are logged by the SDK. They do not increment the runtime's forwarding-error counter or change the runtime connector status. There is no per-query retry loop or configured HTTP request timeout. The source stages a candidate watermark and applies it only after runtime `Ack`. `Nack` keeps the previous watermark so the next search can fetch the rejected records again. Fetched-document and byte counters include these repeated attempts. This does not remove the timestamp limitations above or provide exactly-once delivery.
 
 ## State
 
-Along with each successful poll, including an empty one, the connector returns a MessagePack checkpoint containing its timestamp watermark and counters. After sending the batch, the runtime saves that checkpoint and acknowledges it. With the default file state backend, it uses `source_<key>.state` under the runtime `[state]` path (default `local_state`); the runtime also supports an HTTP state backend. On restart, the saved checkpoint is passed to the plugin. Invalid MessagePack state logs a warning and starts fresh.
+Along with each successful poll, including an empty one, the connector returns a MessagePack checkpoint containing its timestamp watermark and counters. After sending the batch, the runtime saves that checkpoint and acknowledges it. With the default file state backend, it uses `source_<key>.state` under the runtime `[state]` path (default `local_state`). The runtime also supports an HTTP state backend. On restart, the saved checkpoint is passed to the plugin. Invalid MessagePack state logs a warning and starts fresh.
 
 Runtime state persistence requires no plugin configuration. To reset its position with the file backend, stop the runtime and delete the source's state file.
 
-The optional `[plugin_config.state]` enables a separate JSON snapshot loaded during `open()` and saved during `close()`. Its loaded values can override the runtime checkpoint. It defaults to `./connector_states/elasticsearch_source_<numeric_id>.json`; `state_id` and `storage_config.base_path` customize that location. Only file storage is implemented. Selecting `elasticsearch`, `redis` or an unknown storage type warns and falls back to `./connector_states`, ignoring the supplied backend location.
+The optional `[plugin_config.state]` enables a separate JSON snapshot loaded during `open()` and saved during `close()`. Its loaded values can override the runtime checkpoint. It defaults to `./connector_states/elasticsearch_source_<numeric_id>.json`. `state_id` and `storage_config.base_path` customize that location. Only file storage is implemented. Selecting `elasticsearch`, `redis` or an unknown storage type warns and falls back to `./connector_states`, ignoring the supplied backend location.
 
-`state.auto_save_interval` and `state.tracked_fields` do not affect the runtime plugin. Its JSON snapshot is a direct file write, separate from the runtime's atomic checkpoint protocol, and snapshot errors only warn. If enabled, account for this second snapshot when resetting or restoring progress; removing only the runtime state file does not reset the plugin snapshot.
+`state.auto_save_interval` and `state.tracked_fields` do not affect the runtime plugin. Its JSON snapshot is a direct file write, separate from the runtime's atomic checkpoint protocol, and snapshot errors only warn. If enabled, account for this second snapshot when resetting or restoring progress. Removing only the runtime state file does not reset the plugin snapshot.
 
 The saved counters include fetched documents, successful polls (including empty polls), empty polls, serialized payload bytes, errors and the last error text. The average successful-poll duration includes the configured polling delay. Document-ID, scroll-ID and offset fields are retained in state but do not drive polling. These plugin counters are separate from the runtime's sent/error metrics.

@@ -1,55 +1,46 @@
 ---
 title: Client Failover
-description: Local reads, leader redirection, and retryable errors from the client side
+description: "Route requests to partition primaries and handle reconnects without losing an uncertain operation's identity."
 ---
 
-A clustered deployment changes what a client can expect from any single node: reads are served locally where possible, writes must reach the right primary, and the SDKs follow the primary as it moves.
+A cluster has a metadata primary and separate partition primaries. SDKs discover both. Reaching the metadata primary does not mean that the same node owns every partition request.
 
 ## Where requests are served
 
-**Reads** use the local replicated state by default on whichever node owns the namespace locally, followers included. A client connected to a follower can poll messages and read metadata without touching the primary.
+Metadata reads can use a replica's local state. A caller that needs a known metadata change can carry a minimum metadata operation and wait for that node to catch up. Counters on other nodes can lag a successful write until a later prepare or commit broadcast.
 
-**Writes** go through consensus and are admitted on the plane's primary *only*: metadata operations on the metadata primary, message and offset writes on the primary of that partition's consensus group. An acknowledged write returns after the required VSR commit, or returns a retryable error when the replica is changing view or catching up. HTTP `ack=none` returns after dispatch instead.
+Partition requests use the partition route. It identifies the primary, view, partition incarnation and metadata progress. An incarnation identifies one history of a partition. Recreating a partition changes that identity. Consumer group operations also carry an ownership generation, so a former member cannot store progress for a new owner.
 
-One caveat on follower reads: server-managed offset auto-commit replicates the polled offset through the partition consensus, which only the partition primary may do. A poll served by a follower **does not advance the durable consumer offset**. Auto-commit is best-effort and the poll response does not await offset persistence. On a primary, the offset submission precedes delivery of the poll reply, so it does not guarantee that the application received or processed the batch. Store offsets explicitly after processing when that ordering is required.
+The SDK retains this context with a request. A route refresh does not replace the history of an already uncertain operation. `HistoryUnavailable` requires an application decision about the new history. Readers expose a seek operation to choose a new start.
 
-## Leader redirection
+## Reconnect and bind
 
-Leader-aware SDKs discover the metadata primary. Rust binary clients follow this sequence:
+Binary login registers a logical session and a binding secret. Additional connections and reconnects bind that session. The client can therefore keep connections to several partition primaries without creating an unrelated identity for every link.
 
-1. The client connects and authenticates to its configured node, then fetches cluster metadata, which lists every node with its name, client endpoints, role, and status.
-2. When the connected node isn't the leader, the client reconnects to the leader's advertised endpoint for the transport in use.
-3. When the cluster is transiently leaderless, the client polls metadata every 250ms for up to 5s. If no healthy leader appears within that window, it continues on the contacted node and lets subsequent requests report their outcome.
-4. Redirects are **capped** (three in the Rust SDK) so a flapping roster can't bounce the client forever.
+A stale link does not always mean the logical session ended. The SDK closes that link and tries to bind again. A terminal session refusal requires new registration. Logout, session expiry and account deactivation end the session. A password or PAT change does not revoke a session already established with those credentials.
 
-The address a client is redirected to is the node's `advertised_address` (or the matching `advertised_addresses` selector), falling back to the roster `ip`. Getting those right matters: the client redials **exactly what the metadata advertises**. See [Configuration](/docs/clustering/configuration) for the selector rules.
+Advertised endpoints must be reachable from the client network. The SDK uses the endpoints returned by cluster metadata. See [Configuration](/docs/clustering/configuration) for network selectors and TLS names.
 
-Metadata and partition primaries can differ. After a `TransientNotAccepted` response, Rust binary clients check the metadata leader and can then try the remaining advertised endpoints in a bounded roster walk. This fallback is separate from the three-redirect limit.
+## Retain uncertain mutations
 
-The Rust implementation lives in [`core/sdk/src/leader_aware.rs`](https://github.com/apache/iggy/blob/master/core/sdk/src/leader_aware.rs).
+A request rejected before admission can be retried within its deadline. A lost reply after sending is different: the operation can already be committed. Retained-operation SDKs preserve its original identity and payload instead of submitting a fresh mutation.
 
-## Retryable errors
+Resolution requires a matching final committed-result proof. A successful status or a nonzero log position alone is insufficient. A committed business rejection is also a definitive result. An uncertain operation remains retained when resolution times out.
 
-During a view change or while a replica catches up, writes can return transient errors. Rust binary clients retry within their request budgets. `TransientNotAccepted` proves that the request was never admitted and permits retry on another node. `TransientNotCommitted` has an uncertain outcome and is replayed with the same session and request identity, then returned if the budget expires. Disconnects and exhausted routing attempts can still reach the caller. Definitive validation and permission errors are **not replayed**.
+`resolve_operation` and its language equivalents retry a retained mutation. `abandon_operation` frees local state without undoing or determining the server result. `OperationNotRetained` does not prove that nothing committed. Keep the same client for recovery and handle the error before retrying application work.
 
-## SDK support
+Once the original session ends, the client cannot recover its receipt through a new login. Bounded client retention can also prevent recovery. The [SDK guides](/docs/sdk/introduction) describe each language's error types and limits. Swift does not expose retained mutation resolution.
 
-Every SDK speaks the VSR wire protocol and can connect to any node of a cluster. Client-side leader redirection is exercised by the shared `leader_redirection` BDD suite, which runs against a real two-node cluster:
+## Consumer progress
 
-| SDK | VSR wire protocol | Leader redirection suite |
-| --- | --- | --- |
-| Rust | yes | yes |
-| Go | yes | yes |
-| C# | yes | yes |
-| Java | yes | yes |
-| Python | yes | not yet |
-| Node.js | yes | not yet |
-| C++ | yes | not yet |
+Use [checkpoint commits](/docs/sdk/deferred-polling) after processing. A checkpoint retains the partition history and owner that delivered the data. Committing only a numeric offset loses that context.
 
-Run the suite for one SDK with:
+A committing deferred read can lose its reply after storing an offset. The client reports uncertain fetch progress and blocks affected progress calls until recovery or explicit abandonment. Stateless reads and offset inspection remain available. Abandonment does not roll back a stored offset.
 
-```bash
-./scripts/run-bdd-tests.sh rust leader_redirection
-```
+Readers group targets by primary and refresh routes after changes. They can stop a partition on a history change or an undecodable message. Inspect the reported error before seeking past it.
 
-For SDKs without redirection coverage, connect clients to the current primary for write-heavy workloads, or front the cluster's HTTP transport with a load balancer and rely on [follower HTTP forwarding](/docs/clustering/security) for control-plane operations and acknowledged partition writes.
+## HTTP forwarding
+
+A contacted HTTP node can forward to the correct primary in one hop. The route and request carry a signed relay proof, and the destination authenticates the bearer independently. Configure shared JWT key material and synchronize clocks. Proofs expire after ten seconds.
+
+Forwarding does not make every ambiguous operation safe to replay. HTTP `ack=none` confirms dispatch only. A deferred read that commits uses POST, and a lost reply can leave its progress uncertain. See [Cluster security](/docs/clustering/security).

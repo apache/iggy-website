@@ -49,7 +49,7 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 - Client components must be marked with `"use client"`.
 - Mermaid diagrams are supported in MDX via `src/components/mermaid.tsx` (client-rendered, theme-aware).
 - Blog frontmatter schema is defined in `source.config.ts` using Zod.
-- Node.js v24+ required (`.nvmrc`).
+- Node.js v26+ required (`.nvmrc`).
 - `.npmrc` sets `legacy-peer-deps=true`.
 - Commits follow conventional commits: `type(scope): subject`, e.g. `fix(docs): ...`.
 - `scripts/generate-docs-markdown.mjs` writes a Markdown copy of every docs page and blog post (its URL plus `.md`) before each dev and build run. `src/app/llms.txt/route.ts`, `src/app/llms-full.txt/route.ts` and `src/app/llms-full/[section]/route.ts` (one file per docs section) build on those copies, through `src/lib/llms.ts`. The copies keep code fences as written, so give every fence a language. Site-relative links become absolute.
@@ -70,3 +70,13 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 - `asf-site` and `asf-staging` are generated artifacts. Never edit them by hand.
 - Both workflows copy `.asf.yaml` and `.htaccess` into `out/` before publishing. The `.htaccess` sets `ErrorDocument 404 /404.html`; without it the ASF web server answers unknown paths with its own bare "Not Found" body instead of the site's 404 page (the status code is 404 either way).
 - Branch-to-URL mapping is configured via `.asf.yaml` (Apache infrastructure).
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

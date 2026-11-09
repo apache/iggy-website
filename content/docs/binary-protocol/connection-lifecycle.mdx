@@ -3,6 +3,8 @@ title: Connection lifecycle
 description: "How the protocol version is packed and checked, and the login-register handshake that authenticates a connection."
 ---
 
+Server 0.10.0 uses binary protocol 0.12.0. Clients must use a compatible release.
+
 ## Protocol version
 
 The protocol version is a semver packed into one u32, 10 bits per component (each must be below 1024):
@@ -19,7 +21,7 @@ Integer order equals semver order. The value tracks the `iggy_binary_protocol` c
 
 ## Login-register
 
-The only way to authenticate is the register handshake: command code **40** (`LOGIN_REGISTER`, username and password) or **45** (`LOGIN_REGISTER_WITH_PAT`, personal access token). Both ride `operation = 1` (`Register`) with `session = 0`, `request = 0`, and a non-zero `client` id. Mint a fresh id for a new logical client. A client resuming an existing identity must retain its request counter and use the new session epoch returned by registration.
+A new logical session authenticates through the register handshake: command code **40** (`LOGIN_REGISTER`, username and password) or **45** (`LOGIN_REGISTER_WITH_PAT`, personal access token). Both ride `operation = 1` (`Register`) with `session = 0`, `request = 0`, and a non-zero `client` id. Mint a fresh id for a new logical client. A reconnect retains its request identities and binds the existing session. A matching registration retry preserves its epoch.
 
 Both request bodies begin with the `ClientVersionInfo` prefix, so the server can gate on the version before touching credentials:
 
@@ -37,6 +39,7 @@ After the prefix:
 
 ```text
 [ClientVersionInfo]
+[bind_secret: 32 bytes]
 [username_len: u8][username: N]
 [password_len: u8][password: N]
 [context_len: u32][context: N, only when context_len > 0]
@@ -46,6 +49,7 @@ After the prefix:
 
 ```text
 [ClientVersionInfo]
+[bind_secret: 32 bytes]
 [token_len: u8][token: N]
 [context_len: u32][context: N, only when context_len > 0]
 ```
@@ -64,4 +68,18 @@ A successful login is a normal `Reply` with `status = 0`. Its body includes an e
 
 The client stores `session` and echoes it in every subsequent request header. Logout is command code **39** (`LOGOUT_USER`), `operation = 3` (`Logout`), empty body.
 
-The legacy login commands **38** (`LOGIN_USER`) and **44** (`LOGIN_WITH_PERSONAL_ACCESS_TOKEN`) are refused: the server answers them with an `Eviction` frame, reason `15` (`MalformedLogin`). Only `PING` is accepted before login. Every other command on an unauthenticated connection is denied.
+The legacy login commands **38** (`LOGIN_USER`) and **44** (`LOGIN_WITH_PERSONAL_ACCESS_TOKEN`) are refused: the server answers them with an `Eviction` frame, reason `15` (`MalformedLogin`). Before authentication, a connection can ping or use the registration and binding flows. Protected commands require an authenticated session.
+
+## Bind a retained session
+
+BindSession, code 15, authenticates another connection for the same logical session without another Register:
+
+```text
+[ClientVersionInfo]
+[client_id: u128][session: u64][metadata_watermark: u64]
+[bind_secret: 32 bytes]
+```
+
+The client creates and protects the random binding secret for its session. The server stores a verifier. Session zero can resolve a lost registration reply using this retained secret. Binding supports connections to different partition primaries while preserving one session identity.
+
+Transport loss alone does not end a retained session. Logout, session expiry and account deactivation do. A password or PAT change does not revoke an already established session. Once the original session ends, unresolved operations cannot recover their old receipts through a new login.

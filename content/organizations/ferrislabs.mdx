@@ -1,0 +1,47 @@
+---
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+name: FerrisLabs
+website: https://ferrislabs.fr/
+useCaseCategory: Identity and access management, AI agents
+description: >-
+  FerrisLabs, a French company building business software in Rust, uses Iggy
+  as the message bus inside the data plane of Autharie, its IAM-as-a-service
+  platform, where it replaced RabbitMQ so queued actions survive a broker
+  restart. Its Capitainerie agent orchestration platform also runs on Iggy.
+logo: /img/organizations/ferrislabs.svg
+logoDark: /img/organizations/ferrislabs.svg
+showText: false
+permissionConfirmed: true
+deploymentStatus: integration
+featured: false
+draft: false
+---
+
+## Maintainer notes
+
+This entry was written from FerrisLabs' public repositories rather than
+submitted by them, and nobody there has confirmed it. The evidence is ADR 0005,
+"Apache Iggy carries actions and outcomes inside a data plane" (status
+proposed, dated 2026-10-20), the libs/autharie-iggy crate and the Iggy Helm
+template in [ferrislabs/autharie](https://github.com/ferrislabs/autharie), and
+the libs/bus-iggy crate used by the API and worker in
+[ferrislabs/capitainerie](https://github.com/ferrislabs/capitainerie), read
+2026-10-22.
+
+The logo is taken from the organisation's own public materials: the mark
+served on ferrislabs.fr (/logo.svg).

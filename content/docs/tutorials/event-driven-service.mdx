@@ -3,16 +3,16 @@ title: An event-driven service with a consumer group
 description: "Build a small order-processing service in Python: key messages by customer, share a topic between two service instances with a consumer group, and see them take over from each other and resume."
 ---
 
-You will build a small order-processing service. A producer writes order events to a topic, keyed by customer. Two copies of the service share the topic through a consumer group. You stop one and watch the other take over, then start it again and see it resume where it left off.
+You will build a small order-processing service. A producer writes order events to a topic, keyed by customer. Two copies of the service share the topic through a consumer group. You stop one and watch the other take over, then start it again and see it resume from stored progress.
 
 ## Before we start
 
-You need Docker, Python 3.10 to 3.13, and the Python SDK in a virtual environment. On Linux the server needs kernel 5.19 or newer, but macOS has no kernel requirement (see [System requirements](/docs/server/introduction#system-requirements)).
+You need Docker, Python 3.11 or later, and the Python SDK in a virtual environment. On Linux the server needs kernel 5.19 or newer, but macOS has no kernel requirement (see [System requirements](/docs/server/introduction#system-requirements)).
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install apache-iggy
+pip install apache-iggy==0.10.0
 ```
 
 Consumer groups need a binary transport, so this tutorial uses TCP. HTTP cannot join a group (see [Consumer groups](/docs/introduction/concepts#consumer-groups) and the [FAQ](/docs/faq/faq)).
@@ -27,10 +27,10 @@ docker run --rm --name iggy \
   -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
   -e IGGY_SHARDING_CPU_ALLOCATION=all \
-  apache/iggy:0.9.0
+  apache/iggy:0.10.0
 ```
 
-The flags are explained on [Docker & Helm](/docs/server/docker). `IGGY_SHARDING_CPU_ALLOCATION=all` turns off NUMA binding, which Docker Desktop does not support.
+Apache Iggy 0.10.0 skips memory binding on a single-NUMA-node topology. The older Docker Desktop workaround is no longer required for that case. Use `IGGY_SHARDING_CPU_ALLOCATION=all` when you explicitly want CPU pinning without NUMA memory binding.
 
 ## The producer
 
@@ -42,7 +42,7 @@ import json
 import os
 import random
 
-from apache_iggy import IggyClient, Partitioning, SendMessage
+from apache_iggy import IggyClient, Partitioning, SendMessage, TopicOptions
 
 CONNECTION_STRING = os.environ.get(
     "IGGY_CONNECTION_STRING", "iggy+tcp://iggy:iggy@127.0.0.1:8090"
@@ -62,7 +62,7 @@ async def main():
         await client.create_stream(name=STREAM)
     if await client.get_topic(STREAM, TOPIC) is None:
         await client.create_topic(
-            stream=STREAM, name=TOPIC, partitions_count=PARTITIONS
+            stream=STREAM, name=TOPIC, options=TopicOptions(partitions_count=PARTITIONS)
         )
 
     for order_id in range(1, 16):
@@ -72,7 +72,7 @@ async def main():
             "customer": customer,
             "total": round(random.uniform(5, 200), 2),
         }
-        # One partition per customer: the key is hashed, so every order
+        # The key selects a partition, so every order
         # from the same customer lands on the same partition, in order.
         response = await client.send_messages(
             stream=STREAM,
@@ -80,11 +80,12 @@ async def main():
             partitioning=Partitioning.messages_key(customer),
             messages=[SendMessage(json.dumps(event))],
         )
-        confirmation = response.confirmations[0]
-        print(
-            f"order {order_id:>2} customer={customer:<3} "
-            f"-> partition {confirmation.partition_id} offset {confirmation.base_offset}"
-        )
+        for confirmation in response.confirmations:
+            print(
+                f"order {order_id:>2} customer={customer:<3} "
+                f"-> partition {confirmation.partition_id} offset {confirmation.base_offset}"
+            )
+    await client.shutdown()
 
 
 asyncio.run(main())
@@ -98,7 +99,7 @@ Run it:
 python orders_producer.py
 ```
 
-This is the output from one run. Yours will differ because customers are picked at random.
+The following output illustrates the message shape. Customer choices, offsets and partition scheduling vary.
 
 ```
 order  1 customer=eve -> partition 2 offset 0
@@ -131,7 +132,9 @@ import sys
 
 from apache_iggy import (
     AutoCommit,
-    AutoCommitAfter,
+    CommitPolicy,
+    CommitEvery,
+    PollOptions,
     IggyClient,
     PollingStrategy,
     ReceiveMessage,
@@ -151,14 +154,14 @@ async def main():
     await client.connect()
 
     # Joins the group (creating it if needed). The server assigns this
-    # member a share of the partitions; Next() resumes after the group's
+    # member a share of the partitions. Next() resumes after the group's
     # stored offset, and the offset is stored after each message is handled.
     consumer = await client.consumer_group(
         GROUP,
         STREAM,
         TOPIC,
         polling_strategy=PollingStrategy.Next(),
-        auto_commit=AutoCommit.After(AutoCommitAfter.ConsumingEachMessage()),
+        poll_options=PollOptions(commit=CommitPolicy.Auto(AutoCommit(every=CommitEvery.Message()))),
     )
 
     shutdown = asyncio.Event()
@@ -175,7 +178,11 @@ async def main():
         )
 
     print(f"[{INSTANCE}] joined group {GROUP}, waiting for orders", flush=True)
-    await consumer.consume_messages(handle, shutdown)
+    try:
+        await consumer.consume_messages(handle, shutdown)
+    finally:
+        await consumer.shutdown()
+        await client.shutdown()
     print(f"[{INSTANCE}] shutting down", flush=True)
 
 
@@ -184,7 +191,7 @@ asyncio.run(main())
 
 `consume_messages` runs until the shutdown event is set. Ctrl-C, or a SIGTERM from a supervisor, sets it, and the current message finishes before the call returns. The instance name is only used in the log.
 
-`AutoCommit.After` stores the offset once the handler returns, even if it raised an exception. Handle errors inside `handle`, or a failed message is skipped rather than retried.
+The automatic policy counts a message after its handler succeeds. A handler exception ends the run and leaves that message uncounted. A later run can read it again. Await consumer shutdown to finish pending progress and leave the group.
 
 ## Run it
 
@@ -225,7 +232,7 @@ python order_service.py svc-b
 python orders_producer.py
 ```
 
-The server rebalances the group. In this run `svc-b` took partition 2 and `svc-a` kept 0 and 1, and no order was printed by both.
+The server rebalances the group. The following example shows `svc-b` reading partition 2 while `svc-a` reads 0 and 1. Rebalances and retries can replay messages.
 
 ```
 [svc-b] joined group order-processors, waiting for orders
@@ -277,4 +284,4 @@ When a partition moves, the server stops the old owner polling it before handing
 
 The producer creates the stream and topic only if they are missing, so it can be run any number of times. A restarted service resumes from the group's stored offset. To start from nothing, stop the container, and `--rm` removes it along with its data.
 
-The service is the same consumer shape as the [high-level consumer example](https://github.com/apache/iggy/blob/master/examples/python/high-level/consumer.py) in the repository, with a JSON handler and signal handling added.
+The service is the same consumer shape as the [high-level consumer example](https://github.com/apache/iggy/blob/server-0.10.0/examples/python/high-level/consumer.py) in the repository, with a JSON handler and signal handling added.

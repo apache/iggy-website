@@ -7,11 +7,11 @@ Iggy provides multiple layers of security covering authentication, authorization
 
 ## Authentication
 
-Iggy supports two authentication mechanisms:
+Iggy supports local credentials and personal access tokens. HTTP also accepts configured JWT issuers. An optional [external authentication service](/docs/server/external-authentication) handles unknown local usernames.
 
 ### Username and password
 
-Users authenticate with a username and password, for example via the Rust SDK's `login_user()`. Passwords are hashed using **Argon2id** (a memory-hard hashing algorithm). On first single-node startup, the server generates a random password for the initial root account (username `iggy` by default) and writes it to the logs. A first cluster boot requires explicit root credentials. You can override this by setting environment variables:
+Users authenticate with a username and password, for example via the Rust SDK's `login_user()`. Passwords are hashed using **Argon2id** (a memory-hard hashing algorithm). A fresh server requires explicit root credentials. It does not generate or log a root password. Set both environment variables:
 
 ```bash
 export IGGY_ROOT_USERNAME=iggy
@@ -20,7 +20,7 @@ export IGGY_ROOT_PASSWORD=my-secret-password
 
 Or use the `--with-default-root-credentials` flag for development (sets root credentials to `iggy`/`iggy`).
 
-These variables initialize the root account only when it is first created. Supplied values are still validated on later starts, but they do not replace the stored credentials. Use the password-change API or `iggy user password` with the current password to change an existing account. The `--fresh` flag deletes all data; it is not needed for a password change.
+These variables initialize the root account only when it is first created. Supplied values are still validated on later starts, but they do not replace the stored credentials. Use the password-change API or `iggy user password` with the current password to change an existing account. The `--fresh` flag deletes all data. It is not needed for a password change.
 
 The root user **cannot be deleted**, and its permissions are fixed: it always holds every permission.
 
@@ -38,7 +38,7 @@ iggy -t "$IGGY_TOKEN" stream list
 
 An automatic cleaner removes expired tokens at a configurable interval.
 
-Broker API commands require an authenticated session or bearer credential, except for ping and the login/refresh flows that establish or prove a credential. The Prometheus `/metrics` scrape requires a JWT or personal access token. HTTP CORS preflight responses and embedded `/ui` static assets are public; the UI's broker API calls still require authentication.
+Broker API commands require an authenticated session or bearer credential, except for ping and the login/refresh flows that establish or prove a credential. The Prometheus `/metrics` scrape requires a JWT or personal access token. HTTP CORS preflight responses and embedded `/ui` static assets are public. The UI's broker API calls still require authentication.
 
 ## Authorization
 
@@ -57,8 +57,9 @@ The global permissions and the operations they unlock:
 | Operation | Required global permission |
 |-----------|---------------------------|
 | Get server stats | `read_servers` |
+| Diagnostic snapshot and metadata changes | `manage_servers` |
 | List clients, get client | `read_servers` |
-| Create, update, delete users; update permissions; change passwords | `manage_users` |
+| Create, update, delete users. Update permissions. Change passwords | `manage_users` |
 | Get user, list users | `read_users` |
 | Create, update, delete streams | `manage_streams` |
 | Get stream, list streams | `read_streams` |
@@ -98,7 +99,7 @@ Each transport configures TLS in its own section, and the `self_signed` semantic
 
 | Transport | Section | Behavior |
 |-----------|---------|----------|
-| TCP | `[tcp.tls]` | `self_signed = true` generates an ephemeral certificate only while `cert_file` does not exist; an existing PEM pair is loaded instead. |
+| TCP | `[tcp.tls]` | `self_signed = true` generates an ephemeral certificate only while `cert_file` does not exist. An existing PEM pair is loaded instead. |
 | WebSocket | `[websocket.tls]` | Same load-or-generate rule as TCP. |
 | QUIC | `[quic.certificate]` | TLS is mandatory (part of the QUIC spec). `self_signed = true` **always** generates an ephemeral certificate and ignores `cert_file`/`key_file`, logging a warning if the files exist. |
 | HTTP | `[http.tls]` | No `self_signed` option: HTTPS requires certificate and key files in `cert_file`/`key_file`. |
@@ -107,13 +108,18 @@ For production deployments, provide proper certificates via `cert_file` and `key
 
 ## Data encryption at rest
 
-Iggy supports optional **AES-256-GCM** encryption for message payloads and user headers. They are encrypted before storage and decrypted for polling. Metadata journals, metadata snapshots, and structural record headers remain unencrypted. This option does not provide whole-directory encryption. The encryption key must decode from base64 to 32 bytes.
+Each encrypted stream has its own AES-256-GCM-SIV data key. The server encrypts message payloads and user headers before storage and decrypts them for polling. Metadata journals, metadata snapshots and structural headers are not encrypted as a whole.
+
+When `encryption.enabled` is true, the server generates a key for each new stream. A client can also supply a stream key at creation. The server wraps that key with a key derived from `encryption.key`. Reads expose fingerprints, never keys.
 
 ```toml
 [encryption]
-enabled = false
-key = ""  # 32-byte base64-encoded key
+enabled = true
+previous_keys = []
+retired_kek_fingerprints = []
 ```
+
+Set `IGGY_ENCRYPTION_KEY` to the standard base64 encoding of 32 random bytes before starting this configuration. Enabling encryption does not change existing unencrypted streams. Follow [Stream options](/docs/server/stream-options) to create keyed streams and rotate the server key without re-encrypting messages.
 
 ## JWT (HTTP API)
 
@@ -134,7 +140,7 @@ Further keys (`valid_issuers`, `valid_audiences`, `not_before`, `use_base64_secr
 
 **Refresh tokens**: `POST /users/refresh-token` re-issues an access token from a still-valid one presented in the request body, answering the same identity shape as login, so HTTP clients can extend a session without re-sending credentials.
 
-**Federated issuers**: the opt-in `[[http.jwt.trusted_issuers]]` list accepts tokens minted by external identity providers for application-to-application flows. Each entry names an `issuer`, `audience`, and `jwks_url`. Signatures are verified against the issuer's JWKS (fetches are rate-limited), and every token from that issuer is remapped onto the configured non-root `user_id`. With no entries configured, the listener accepts only self-issued tokens. See [Configuration](/docs/server/configuration) for the key reference.
+**Federated issuers**: the opt-in `[[http.jwt.trusted_issuers]]` list accepts tokens minted by external identity providers for application-to-application flows. Each entry names an `issuer`, `audience`, and `jwks_url`. Signatures are verified against the issuer's JWKS (fetches are rate-limited), and every token from that issuer is remapped onto the configured non-root `username`. With no entries configured, the listener accepts only self-issued tokens. See [Configuration](/docs/server/configuration) for the key reference.
 
 ## Cluster security
 

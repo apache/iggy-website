@@ -7,7 +7,7 @@ The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open p
 
 ## Getting started
 
-Start an Iggy 0.9.0 or edge broker using the [getting started guide](/docs/introduction/getting-started). From the matching `apache/iggy` checkout, run:
+Start an Iggy 0.10.0 or edge broker using the [getting started guide](/docs/introduction/getting-started). From the matching `apache/iggy` checkout, run:
 
 ```bash
 IGGY_MCP_IGGY_USERNAME=iggy IGGY_MCP_IGGY_PASSWORD=iggy cargo run --bin iggy-mcp
@@ -15,7 +15,7 @@ IGGY_MCP_IGGY_USERNAME=iggy IGGY_MCP_IGGY_PASSWORD=iggy cargo run --bin iggy-mcp
 
 These are the development credentials configured in that guide. Use your broker's credentials or a PAT when connecting to an existing installation.
 
-The [docker image](https://hub.docker.com/r/apache/iggy-mcp) is available, and can be fetched via `docker pull apache/iggy-mcp:0.5.0`.
+The [Docker image](https://hub.docker.com/r/apache/iggy-mcp) for this release is `apache/iggy-mcp:0.6.0`.
 
 ## Configuration
 
@@ -78,7 +78,9 @@ Set `telemetry.enabled = true` to export to a running collector. For HTTP export
 
 The configuration file must be in the `toml` format. By default, the server looks for `core/ai/mcp/config.toml` relative to its working directory. Set `IGGY_MCP_CONFIG_PATH` to use another path. Embedded defaults are loaded first, then the file if it exists, then environment overrides.
 
-Each setting can also be overridden using `IGGY_MCP_<SECTION>_<KEY>`, for example `IGGY_MCP_IGGY_USERNAME` or `IGGY_MCP_HTTP_ADDRESS`. Nested settings use the same underscore convention, such as `IGGY_MCP_IGGY_TLS_ENABLED`. Set `IGGY_MCP_ENV_PATH` to load a particular dotenv file; otherwise `.env` is searched for in the current directory and its parents. Existing environment variables take precedence over dotenv values.
+Each setting can also be overridden using `IGGY_MCP_<SECTION>_<KEY>`, for example `IGGY_MCP_IGGY_USERNAME` or `IGGY_MCP_HTTP_ADDRESS`. Nested settings use the same underscore convention, such as `IGGY_MCP_IGGY_TLS_ENABLED`. Set `IGGY_MCP_ENV_PATH` to load a particular dotenv file. Otherwise `.env` is searched for in the current directory and its parents. Existing environment variables take precedence over dotenv values.
+
+Run `iggy-mcp --list-config-env-vars` to print every supported MCP configuration variable and exit before loading dotenv or configuration files or creating the Tokio runtime. The output is sorted and contains names only. If a configuration field is an indexed vector, its template uses `<N>` for indices from `0` through `255`. Whole-value vectors are listed once without a placeholder.
 
 The `token` value can be either a literal PAT or a `file:` reference such as `token = "file:/run/secrets/iggy_pat"`, in which case the token is read from the given file and surrounding whitespace is removed (`~/` is expanded to the home directory). A non-empty token takes precedence over the username and password.
 
@@ -98,6 +100,15 @@ The MCP server exposes these 41 tools:
 | `get_cluster_metadata` | Cluster information |
 | `snapshot` | Collect troubleshooting data |
 
+### Operation recovery
+
+| Tool | Description |
+| --- | --- |
+| `resolve_operation` | Retry a retained mutation with its original identity |
+| `abandon_operation` | Release retained local state without undoing the server result |
+
+An uncertain result is not proof that the operation failed. Keep the same MCP process for retained-operation recovery. Abandoning a request does not make a fresh retry safe from duplicates.
+
 ### Streams
 
 | Tool | Description |
@@ -107,7 +118,6 @@ The MCP server exposes these 41 tools:
 | `create_stream` | Create a new stream |
 | `update_stream` | Update stream name |
 | `delete_stream` | Delete a stream |
-| `purge_stream` | Purge all messages from a stream |
 
 ### Topics
 
@@ -118,7 +128,6 @@ The MCP server exposes these 41 tools:
 | `create_topic` | Create a new topic |
 | `update_topic` | Update topic settings |
 | `delete_topic` | Delete a topic |
-| `purge_topic` | Purge all messages from a topic |
 
 ### Partitions & Segments
 
@@ -167,6 +176,10 @@ The MCP server exposes these 41 tools:
 | `create_personal_access_token` | Create a PAT |
 | `delete_personal_access_token` | Delete a PAT |
 
+## Resource options
+
+Create and update tools use the current resource option contract. Updates change only supplied fields and reset keys. Stream keys are create-only and never returned. Topic compression and storage policies cannot change after creation. Tool schemas describe the accepted fields.
+
 ## Permissions
 
 The `[permissions]` section provides a first layer of access control, checked before any request is forwarded to the Iggy server. This lets you restrict the MCP server to read-only operations, for example:
@@ -179,7 +192,7 @@ update = false
 delete = false
 ```
 
-`poll_messages` requires `update` as well as `read` when `auto_commit` is true or the `next` strategy is used. The `next` strategy enables auto-commit automatically. Storing an offset requires `update`; deleting an offset requires `delete`. PAT creation and deletion require `create` and `delete`, respectively.
+`poll_messages` requires `update` as well as `read` when `auto_commit` is true or the `next` strategy is used. The `next` strategy enables auto-commit automatically. Storing an offset requires `update`. Deleting an offset requires `delete`. PAT creation and deletion require `create` and `delete`, respectively.
 
 On top of this, the Iggy user account used by the MCP server has its own granular permissions. For production use, create a dedicated user with the minimum required permissions.
 
@@ -215,7 +228,7 @@ docker run -d --name iggy-server --network iggy-mcp \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
   -e IGGY_TCP_ADDRESS=0.0.0.0:8090 \
   -e IGGY_NODE_ADVERTISED_ADDRESS=iggy-server \
-  apache/iggy:0.9.0
+  apache/iggy:0.10.0
 ```
 
 After the broker is ready, run the MCP server on the same network:
@@ -227,7 +240,7 @@ docker run --rm --network iggy-mcp -e IGGY_MCP_TRANSPORT=http \
   -e IGGY_MCP_IGGY_USERNAME=iggy \
   -e IGGY_MCP_IGGY_PASSWORD=iggy \
   -p 127.0.0.1:8082:8082 \
-  apache/iggy-mcp:0.5.0
+  apache/iggy-mcp:0.6.0
 ```
 
 The HTTP endpoint uses the configured Iggy account for every MCP client. This example publishes it only on the host loopback interface.

@@ -72,10 +72,11 @@ quoteAuthor: Name, Role at Acme Streaming
 # SVG preferred, transparent PNG at least 400px wide is fine. Commit files to
 # public/img/organizations/ and reference them from /img/organizations/.
 #
-# permissionConfirmed MUST be true for any logo to render. Setting it is your
-# statement that you are authorized to grant the ASF permission to display the
-# mark on iggy.apache.org. The build also checks the file is actually present,
-# so a missing file falls back to text rather than shipping a broken image.
+# permissionConfirmed MUST be true for any logo to render. Listing a user and its
+# logo is factual and needs no permission. Use artwork from the organization's
+# own public materials and say where it came from in the notes.
+# The build also checks the file is actually present, so a missing file falls
+# back to text rather than shipping a broken image.
 # ---------------------------------------------------------------------
 logo: /img/organizations/acme-streaming.svg
 logoDark: /img/organizations/acme-streaming-dark.svg
@@ -90,9 +91,8 @@ deploymentStatus: production
 # Reserved for entries with a quote or case study. Sorts them first.
 featured: false
 
-# Leave as true. A committer sets it to false once the submission is verified,
-# and that is what publishes the entry.
-draft: true
+# The entry goes live when the PR merges. Set true only to hold it back.
+draft: false
 
 # Optional. GitHub handle of whoever submitted this.
 submittedBy: "@your-github-handle"

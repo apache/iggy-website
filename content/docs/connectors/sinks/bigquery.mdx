@@ -1,0 +1,71 @@
+---
+title: BigQuery
+description: "Write Iggy messages to an existing BigQuery table through the Storage Write API."
+---
+
+The BigQuery sink writes Arrow record batches through the Storage Write API `_default` stream. The target table must already exist. Startup reads its schema and rejects unsupported column types before consuming messages.
+
+## Configuration
+
+Build `iggy_connector_bigquery_sink` with the same release source as the runtime. Add this connector file to the [local provider](/docs/connectors/runtime#local-file-provider), then set your project, dataset and table:
+
+```toml
+type = "sink"
+key = "bigquery"
+enabled = true
+version = 0
+name = "BigQuery sink"
+path = "target/release/libiggy_connector_bigquery_sink"
+verbose = false
+
+[[streams]]
+stream = "example_stream"
+topics = ["example_topic"]
+schema = "json"
+batch_length = 1000
+consumer_group = "bigquery_sink_connector"
+
+[plugin_config]
+project_id = "my-project"
+dataset = "iggy"
+table = "events"
+
+mode = "mapped"
+
+
+include_metadata = true
+include_headers = false
+
+missing_value = "default"
+
+max_request_bytes = 8388608
+max_retries = 3
+retry_delay = "1s"
+max_retry_delay = "30s"
+timeout = "30s"
+verbose_logging = false
+```
+
+With metadata enabled, the table needs `iggy_stream` and `iggy_topic` as STRING, `iggy_partition_id` and `iggy_offset` as INT64, `iggy_timestamp` as TIMESTAMP and `iggy_id` as STRING. `include_headers=true` also needs `iggy_headers` as JSON or STRING.
+
+## Credentials
+
+Set either `credentials_path` or `credentials_json`, never both. Without either, the connector uses Application Default Credentials. The identity needs table schema read and row append permissions, `bigquery.tables.get` and `bigquery.tables.updateData`.
+
+The optional `emulator_endpoint` and `emulator_grpc_endpoint` must be supplied together. They disable credentials and use plaintext connections. Use them only for local test services.
+
+## Row mapping
+
+In `mapped` mode, each payload must be a JSON object. Top-level fields map to table columns by name. Unknown fields are ignored. Required columns without defaults must have non-null values. Missing or null repeated columns become empty arrays.
+
+In `raw` mode, `payload_column` defaults to `payload`. A JSON column requires valid JSON. A STRING column requires text or UTF-8 bytes. A BYTES column accepts raw bytes from any payload type. Other required columns must have defaults.
+
+NUMERIC and BIGNUMERIC values must fit the declared precision and scale without rounding. Strings preserve decimal precision when JSON floating-point values cannot. INTERVAL and RANGE columns are unsupported.
+
+## Batching and failures
+
+`max_request_bytes` defaults to 8 MiB and is clamped from 64 KiB through 9 MiB. The sink splits batches to stay below the API request limit. `max_retries` defaults to three total attempts, including the first. Retry delay starts at one second and is capped at 30 seconds. Each request and startup operation has a 30-second default timeout.
+
+A row that cannot be encoded or accepted is logged and dropped while other rows can proceed. Transient request failures retry with jittered exponential backoff. The `_default` stream does not provide exactly-once append semantics. A lost response can lead to duplicate rows.
+
+The runtime commits offsets on read and does not replay a failed sink callback. A successful processed count does not prove that every row reached BigQuery. Preserve Iggy metadata when downstream deduplication or reconciliation is required. See the [source reference](https://github.com/apache/iggy/blob/server-0.10.0/core/connectors/sinks/bigquery_sink/README.md) for type mappings and row-error handling.

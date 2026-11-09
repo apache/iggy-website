@@ -12,13 +12,13 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -40,19 +40,18 @@ jobs:
       - name: Check licence headers
         run: npm run check:headers
 
+      # ubuntu-slim has yq preinstalled but not PyYAML.
       - name: Validate .asf.yaml
-        run: >-
-          python3 -c "import sys,yaml; yaml.safe_load(open('.asf.yaml'));
-          print('.asf.yaml parses')"
+        run: yq '.' .asf.yaml > /dev/null
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm

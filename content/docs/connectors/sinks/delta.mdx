@@ -5,11 +5,11 @@ description: "Write messages from Iggy streams into Delta Lake tables on local d
 
 The Delta Lake sink connector consumes messages from Iggy streams and writes them to Delta Lake tables on the local filesystem, AWS S3, Azure Blob Storage, or Google Cloud Storage. Each successful nonempty batch is flushed and appended in one Delta transaction.
 
-This page is a curated subset of the documentation. The canonical reference is the upstream [delta_sink README](https://github.com/apache/iggy/tree/master/core/connectors/sinks/delta_sink) in the `apache/iggy` repository.
+This page is a curated subset of the documentation. The canonical reference is the upstream [delta_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/delta_sink) in the `apache/iggy` repository.
 
 ## Configuration
 
-Use the broker credentials and runtime setup from the [sink guide](/docs/connectors/sinks/sink#configuration). Save the configuration below in the runtime's connector directory. From the matching 0.9.0/edge repository root, build the plugin:
+Use the broker credentials and runtime setup from the [sink guide](/docs/connectors/sinks/sink#configuration). Save the configuration below in the runtime's connector directory. From the matching 0.10.0 repository root, build the plugin:
 
 ```bash
 cargo build --release -p iggy_connector_delta_sink
@@ -28,7 +28,8 @@ stream = "events"
 topics = ["user_events"]
 schema = "json"
 batch_length = 100
-poll_interval = "5ms"
+max_wait = "1s"
+min_count = 1
 consumer_group = "delta_sink_connector"
 
 [plugin_config]
@@ -45,7 +46,7 @@ For a table with columns `id` (long) and `name` (string), create the Iggy resour
 ./target/release/iggy --username iggy --password iggy message send --partition-id 0 events user_events '{"id":1,"name":"hello"}'
 ```
 
-Use a `file:///...` URI for an absolute local path; bare filesystem paths are not accepted.
+Use a `file:///...` URI for an absolute local path. Bare filesystem paths are not accepted.
 
 ### Options
 
@@ -56,7 +57,7 @@ Use a `file:///...` URI for an absolute local path; bare filesystem paths are no
 
 When `storage_backend_type` selects a backend, the connector validates these credential options:
 
-- **S3**: `aws_s3_access_key`, `aws_s3_secret_key`, and `aws_s3_region` are required. `aws_s3_endpoint_url` is optional, for S3-compatible stores like MinIO. `aws_s3_allow_http` is optional and defaults to `false`.
+- **S3**: `aws_s3_region` is required. Explicit `aws_s3_access_key` and `aws_s3_secret_key` are optional and must be supplied together. Without them, credentials come from the supported provider chain. `aws_s3_endpoint_url` is optional, for S3-compatible stores like MinIO. `aws_s3_allow_http` is optional and defaults to `false`.
 - **Azure**: `azure_storage_account_name`, `azure_container_name`, and either `azure_storage_account_key` or `azure_storage_sas_token` (not both).
 - **GCS**: `gcs_service_account_key` (the service account JSON as a string, with the bucket taken from the `gs://` URI).
 
@@ -70,6 +71,8 @@ aws_s3_access_key = "your-access-key"
 aws_s3_secret_key = "your-secret-key"
 aws_s3_region = "us-east-1"
 ```
+
+A custom S3 endpoint restricts the default credential chain. Set `AWS_FORCE_CREDENTIAL_LOAD=true` in the runtime environment when shared profile or SSO credentials are required. Static keys, web identity, container credentials and instance metadata remain available without that override.
 
 ## Type Coercion
 

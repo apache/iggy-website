@@ -36,6 +36,10 @@ export const docs08 = defineDocs({
   dir: "content/docs-0.8",
 });
 
+export const docs09 = defineDocs({
+  dir: "content/docs-0.9",
+});
+
 export const blogPosts = defineCollections({
   type: "doc",
   dir: "content/blog",
@@ -68,8 +72,7 @@ export const organizations = defineCollections({
     // set as text for whichever theme has no artwork.
     logo: z.string().optional(),
     logoDark: z.string().optional(),
-    // Logos render only when the submitter has confirmed they are authorized
-    // to grant the ASF permission to display the mark, AND the file is
+    // Logos render only when permissionConfirmed is true AND the file is
     // actually committed. See content/organizations/README.md.
     permissionConfirmed: z.boolean().optional().default(false),
     // Whether the description is published as a use-case card. On by default,
@@ -105,8 +108,8 @@ export const organizations = defineCollections({
 
     // Reserved for entries that earn a richer treatment (quote, case study).
     featured: z.boolean().optional().default(false),
-    // Entries stay hidden until a committer has verified the submission.
-    draft: z.boolean().optional().default(true),
+    // Entries publish when merged; true holds one back.
+    draft: z.boolean().optional().default(false),
     submittedBy: z.string().optional(),
   }),
 });
@@ -114,24 +117,5 @@ export const organizations = defineCollections({
 export default defineConfig({
   mdxOptions: {
     remarkPlugins: [remarkMdxMermaid],
-    // Search snippets are rendered as plain text. The stock stringifier
-    // serialises back to markdown, so emphasis, inline code and character
-    // escapes leak into the index as literal syntax.
-    remarkStructureOptions: {
-      stringify: {
-        handlers: {
-          strong: (node, _parent, state, info) =>
-            state.containerPhrasing(node, info),
-          emphasis: (node, _parent, state, info) =>
-            state.containerPhrasing(node, info),
-          delete: (node, _parent, state, info) =>
-            state.containerPhrasing(node, info),
-          blockquote: (node, _parent, state, info) =>
-            state.containerFlow(node, info),
-          inlineCode: (node) => node.value,
-          text: (node) => node.value,
-        },
-      },
-    },
   },
 });

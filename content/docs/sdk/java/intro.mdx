@@ -3,11 +3,11 @@ title: Java SDK
 description: "The Java SDK, with blocking and CompletableFuture clients over TCP, and which servers they pair with."
 ---
 
-The Iggy Java SDK is a client library for interacting with the Iggy server from Java applications. It provides a blocking client and an async client (based on `CompletableFuture`) over TCP, plus a blocking HTTP client. The artifact is published to [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy) and the source code lives in [foreign/java](https://github.com/apache/iggy/tree/master/foreign/java).
+The Iggy Java SDK is a client library for interacting with the Iggy server from Java applications. It provides a blocking client and an async client (based on `CompletableFuture`) over TCP, plus a blocking HTTP client. The artifact is published to [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy) and the source code lives in [foreign/java](https://github.com/apache/iggy/tree/server-0.10.0/foreign/java).
 
 ## Server compatibility
 
-This documentation targets server **0.9.0** and SDK **0.9.0**. The TCP transport speaks the VSR (Viewstamped Replication) wire protocol. The Java artifact `0.8.0` uses the older protocol. When working from source, build the SDK and the server from the same repository checkout.
+This documentation targets server **0.10.0** and SDK **0.10.0**. The TCP transport speaks the VSR (Viewstamped Replication) wire protocol. The Java artifact `0.8.0` uses the older protocol. When working from source, build the SDK and the server from the same repository checkout.
 
 ## Installation
 
@@ -22,7 +22,7 @@ Add the dependency under the `project` element in `pom.xml`:
     <dependency>
         <groupId>org.apache.iggy</groupId>
         <artifactId>iggy</artifactId>
-        <version>0.9.0</version>
+        <version>0.10.0</version>
     </dependency>
 </dependencies>
 ```
@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.apache.iggy:iggy:0.9.0'
+    implementation 'org.apache.iggy:iggy:0.10.0'
 }
 ```
 
@@ -43,7 +43,7 @@ Check [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy
 
 ## Quick start
 
-The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/master/examples/java/src/main/java/org/apache/iggy/examples/gettingstarted). Stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
+The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/server-0.10.0/examples/java/src/main/java/org/apache/iggy/examples/gettingstarted). Stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
 
 Start a development server using the [example setup](/docs/sdk/java/examples#starting-the-server), with `iggy`/`iggy` credentials, then run the producer before the consumer. Bootstrap credentials do not replace recovered credentials.
 
@@ -55,7 +55,7 @@ import org.apache.iggy.identifier.StreamId;
 import org.apache.iggy.identifier.TopicId;
 import org.apache.iggy.message.Message;
 import org.apache.iggy.message.Partitioning;
-import org.apache.iggy.topic.CompressionAlgorithm;
+import org.apache.iggy.topic.TopicOptions;
 import java.math.BigInteger;
 import java.util.List;
 
@@ -80,11 +80,9 @@ public class Producer {
             if (client.topics().getTopic(STREAM_ID, TOPIC_ID).isEmpty()) {
                 client.topics().createTopic(
                         STREAM_ID,
+                        TOPIC_NAME,
                         1L,
-                        CompressionAlgorithm.None,
-                        BigInteger.ZERO,
-                        BigInteger.ZERO,
-                        TOPIC_NAME);
+                        TopicOptions.builder().build());
             }
 
             Partitioning partitioning = Partitioning.partitionId(0L);
@@ -102,7 +100,7 @@ public class Producer {
 }
 ```
 
-`createTopic` also has an overload with a trailing `Map<String, HeaderValue>` of named topic options, for option keys the server catalog gained after the SDK build shipped.
+Creation uses `StreamOptions` and `TopicOptions`. Updates use `StreamUpdate`, `TopicUpdate` and `UserUpdate`. Their builders send only named fields and explicit reset keys. Compression and other creation-only options cannot change later.
 
 ### Consumer
 
@@ -113,6 +111,7 @@ import org.apache.iggy.identifier.StreamId;
 import org.apache.iggy.identifier.TopicId;
 import org.apache.iggy.message.Message;
 import org.apache.iggy.message.PolledMessages;
+import org.apache.iggy.message.PollOptions;
 import org.apache.iggy.message.PollingStrategy;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -137,11 +136,10 @@ public class SampleConsumer {
                 PolledMessages polledMessages = client.messages().pollMessages(
                         STREAM_ID,
                         TOPIC_ID,
-                        Optional.of(0L),
+                        0L,
                         consumer,
                         PollingStrategy.offset(offset),
-                        10L,
-                        false);
+                        PollOptions.defaults().withCount(10));
 
                 if (polledMessages.messages().isEmpty()) {
                     break;
@@ -157,7 +155,7 @@ public class SampleConsumer {
 }
 ```
 
-The consumer reads partition `0` independently and stops on an empty poll. Its cursor starts at offset `0` or the earliest retained message each time it runs; `autoCommit` is disabled, so this sample does not store its progress on the server.
+The consumer reads partition `0` independently and stops on an empty poll. Its cursor starts at offset `0` or the earliest retained message each time it runs. `autoCommit` is disabled, so this sample does not store its progress on the server.
 
 ## Client types and configuration
 
@@ -213,8 +211,18 @@ var client = Iggy.tcpClientBuilder()
     .buildAndLogin();
 ```
 
-Beyond streams, topics, and messages, the client exposes consumer groups, partitions, users, and personal access tokens through `client.consumerGroups()`, `client.partitions()`, `client.users()`, and `client.personalAccessTokens()`. The SDK's custom exception types inherit from `IggyException`; failed futures can wrap them in `CompletionException` when joined.
+Beyond streams, topics, and messages, the client exposes consumer groups, partitions, users, and personal access tokens through `client.consumerGroups()`, `client.partitions()`, `client.users()`, and `client.personalAccessTokens()`. The SDK's custom exception types inherit from `IggyException`. Failed futures can wrap them in `CompletionException` when joined.
+
+## Deferred reads and recovery
+
+`PollOptions.waitFor(Duration.ofSeconds(5))` enables deferred polling. `CommitPolicy.manual()` is the default. A reader or consumer also accepts `CommitPolicy.auto(...)`. One-shot polls reject automatic policies. The async client exposes a partition reader through `client.reader(...)`. A blocking wrapper is available as `org.apache.iggy.client.blocking.reader.PartitionReader`.
+
+TCP retains uncertain mutation identities. Keep the client and use `resolveOperation` or `abandonOperation` when an exception reports a retained operation. An uncertain committing poll blocks progress for its partition until abandonment. HTTP supports standalone consumers and deferred reads, but not consumer group membership.
+
+The TCP builders accept `fromConnectionString`. Only `iggy://` and `iggy+tcp://`, username/password credentials, `tls` and `tls_ca_file` are supported. PAT connection strings and additional options are rejected. The builder also exposes shutdown quiet-period configuration for applications that need prompt close.
+
+`getMetadataChanges` follows metadata history, and raw requests can target a named replica. See [Metadata changes](/docs/sdk/metadata-changes) and [Client failover](/docs/clustering/client-failover).
 
 ## Examples
 
-Runnable examples covering the async client, message headers and envelopes, multi-tenant setups, and TLS live in [examples/java](https://github.com/apache/iggy/tree/master/examples/java). See the [examples page](/docs/sdk/java/examples) for how to run them.
+Runnable examples covering the async client, message headers and envelopes, multi-tenant setups, and TLS live in [examples/java](https://github.com/apache/iggy/tree/server-0.10.0/examples/java). See the [examples page](/docs/sdk/java/examples) for how to run them.

@@ -3,16 +3,9 @@ title: High-level SDK
 description: "IggyProducer and IggyConsumer: batching, consumer groups and offset commits without the boilerplate."
 ---
 
-If you've read through the [getting started](/docs/introduction/getting-started) guide, you might have noticed that it's quite verbose and requires a lot of boilerplate code to get started. This is where the High-level SDK comes in, as it does provide a more user-friendly interface to interact with the Iggy API for both, producer and consumer. Let's consider the following features:
+`IggyProducer` batches writes and `IggyConsumer` reads messages through a partition reader. Both share the client's routing, session and recovery behavior. The consumer manages group membership and tracks checkpoints. Select when it stores those checkpoints through `PollOptions`.
 
-- **Automatically creating & joining** the consumer groups
-- **Committing the offset** depending on the particular mode (e.g. in the background based on some interval, when an offset matches the configured trigger etc.)
-- **Batching the messages**, whether it's about producing or consuming
-- **Processing the messages** as if the stream was an async iterator
-- **Reusing the same client** for both, producing and consuming on the same topic without repeating the configuration
-- And more...
-
-The Rust snippets assume an async function returning `Result<(), Box<dyn std::error::Error>>`, with `iggy`, Tokio and `futures-util` dependencies. Use the [Rust SDK setup](/docs/sdk/rust/intro) and a server with the sample credentials.
+The snippets assume an async function with a `Result` return type and the `iggy`, Tokio and `futures-util` dependencies. Use the [Rust SDK setup](/docs/sdk/rust/intro) and a development server with the sample credentials.
 
 ## Connection string
 
@@ -37,7 +30,7 @@ let client = IggyClient::from_connection_string("iggy://iggy:iggy@127.0.0.1:8090
 client.connect().await?;
 ```
 
-HTTP requires an explicit login after construction. Consumer groups require a binary transport; use an ordinary consumer with an explicit partition over HTTP.
+HTTP requires an explicit login after construction. Consumer groups require a binary transport. Use an ordinary consumer with an explicit partition over HTTP.
 
 Options are appended as query parameters. For TCP:
 
@@ -49,7 +42,7 @@ The option keys differ per transport (for example QUIC uses `reconnection_max_re
 
 Unless you need client-side encryption, a custom `Partitioner`, or other settings outside the connection-string options, you should be good to go with the connection string. On the other hand, you can always make use of `IggyClientBuilder::from_connection_string()` to extend the options on top of the provided connection string.
 
-The `IggyClient` internally wraps its transport in an `IggyRwLock`, but the client itself does not implement `Clone`. Share an `Arc<IggyClient>` across tasks; cloning the `Arc` keeps the same client and connection. Typically, it's a good idea to create a separate connection for producing and consuming, but it's not a requirement.
+The `IggyClient` internally wraps its transport in an `IggyRwLock`, but the client itself does not implement `Clone`. Share an `Arc<IggyClient>` across tasks. Cloning the `Arc` keeps the same client and connection. Typically, it's a good idea to create a separate connection for producing and consuming, but it's not a requirement.
 
 ## Producer
 
@@ -69,7 +62,7 @@ let producer = client
 producer.init().await?;
 ```
 
-The direct producer splits each `send()` call into requests of at most 1000 messages. For sequential calls, the 5 ms linger setting delays a call until at least 5 ms after the previous successful send; it does not buffer messages between calls or delay individual chunks within a call. Choose `background` to buffer sends on worker tasks. `balanced` routes requests round-robin across partitions. By default, `init()` creates a missing stream and topic, requiring the corresponding permissions.
+The direct producer splits each `send()` call into requests of at most 1000 messages. For sequential calls, the 5 ms linger setting delays a call until at least 5 ms after the previous successful send. It does not buffer messages between calls or delay individual chunks within a call. Choose `background` to buffer sends on worker tasks. `balanced` routes requests round-robin across partitions. By default, `init()` creates a missing stream and topic, requiring the corresponding permissions.
 
 Finally, you can use the `send()` method to send the messages to the topic. The producer **never needs to be a mutable binding**: both `init()` and `send()` take `&self`, so a plain `let producer` is enough for its whole life. Here's how you can send the messages:
 
@@ -89,18 +82,18 @@ The `background` mode buffers messages and sends them from shard workers, tradin
 | Field | Default | Description |
 |-------|---------|-------------|
 | `num_shards` | `1` | Number of shard workers running in parallel |
-| `sharding` | `OrderedSharding` | Routes each send to a worker. `OrderedSharding` keeps a stream/topic pair on one sequential worker; `BalancedSharding` round-robins across workers for maximum throughput and can reorder sends |
+| `sharding` | `OrderedSharding` | Routes each send to a worker. `OrderedSharding` keeps a stream/topic pair on one sequential worker. `BalancedSharding` round-robins across workers for maximum throughput and can reorder sends |
 | `linger_time` | `1ms` | How long a shard may wait before flushing an incomplete batch |
-| `batch_size` | 1 MiB | Per-worker flush threshold in bytes; `0` disables this trigger |
-| `batch_length` | `1000` | Per-worker flush threshold in **queued sends**, not individual messages; `0` disables this trigger |
+| `batch_size` | 1 MiB | Per-worker flush threshold in bytes. `0` disables this trigger |
+| `batch_length` | `1000` | Per-worker flush threshold in **queued sends**, not individual messages. `0` disables this trigger |
 | `failure_mode` | `Block` | Behavior when the byte budget is exhausted: `Block`, `BlockWithTimeout(duration)`, or `FailImmediately` |
-| `max_buffer_size` | 32 MiB | Budget for message bytes buffered or in flight across all workers; `0` disables this budget |
-| `max_in_flight` | `1` | Maximum concurrent writes across workers; each worker remains sequential. `0` uses the semaphore's maximum capacity |
+| `max_buffer_size` | 32 MiB | Budget for message bytes buffered or in flight across all workers. `0` disables this budget |
+| `max_in_flight` | `1` | Maximum concurrent writes across workers. Each worker remains sequential. `0` uses the semaphore's maximum capacity |
 | `error_callback` | `LogErrorCallback` | Async callback invoked on errors the producer cannot recover from |
 
-`batch_size` and `batch_length` are flush triggers checked after adding a send. The final send can take the buffer past the byte threshold. The linger deadline starts when an empty buffer receives a send; the first trigger reached causes a flush. Each worker also has a bounded queue, which can make dispatch wait independently of `failure_mode`. A send larger than the entire byte budget fails under every backpressure mode. Nonzero `max_buffer_size` and `max_in_flight` values must not exceed `tokio::sync::Semaphore::MAX_PERMITS`; constructing the dispatcher with a larger value panics.
+`batch_size` and `batch_length` are flush triggers checked after adding a send. The final send can take the buffer past the byte threshold. The linger deadline starts when an empty buffer receives a send. The first trigger reached causes a flush. Each worker also has a bounded queue, which can make dispatch wait independently of `failure_mode`. A send larger than the entire byte budget fails under every backpressure mode. Nonzero `max_buffer_size` and `max_in_flight` values must not exceed `tokio::sync::Semaphore::MAX_PERMITS`. Constructing the dispatcher with a larger value panics.
 
-Stop all senders, then call `producer.shutdown().await` to drain background queues and wait for writes and error callbacks. Dropping the producer without shutdown can lose buffered messages. Shutdown does not turn failed writes into successful ones; the default error callback logs and drops failed sends.
+Stop all senders, then call `producer.shutdown().await` to drain background queues and wait for writes and error callbacks. Dropping the producer without shutdown can lose buffered messages. Shutdown does not turn failed writes into successful ones. The default error callback logs and drops failed sends.
 
 ### Send confirmations
 
@@ -108,85 +101,87 @@ Every send method returns a `SendMessagesResponse` carrying the commit confirmat
 
 ## Consumer
 
-The consumer is a high-level abstraction that allows you to receive the messages from the topic. It's quite simple to use and doesn't require you to handle the offsets, partitions or any other low-level details. To begin with, you can simply invoke `client.consumer()` to get the `IggyConsumerBuilder` allowing you to configure the consumer. Let's take a look at the basic example:
+A consumer group reads its assigned partitions. A standalone consumer requires an explicit `.partitions(...)` list. The builder uses `PollingStrategy::next()`, a five-second server wait, up to 1000 messages and a 1 MiB reply. It stores no offsets by default.
 
 ```rust
 let mut consumer = client
     .consumer_group("my-consumer-group", "my-stream", "my-topic")?
-    .auto_commit(AutoCommit::IntervalOrWhen(
-        NonZeroIggyDuration::ONE_SECOND,
-        AutoCommitWhen::ConsumingAllMessages,
-    ))
-    .create_consumer_group_if_not_exists()
-    .auto_join_consumer_group()
-    .polling_strategy(PollingStrategy::next())
-    .poll_interval(IggyDuration::from_str("1ms")?)
-    .batch_length(1000)
+    .poll_options(PollOptions {
+        count: 1000,
+        commit: CommitPolicy::Manual,
+        ..PollOptions::wait(IggyDuration::from_str("5s")?)
+    })
     .build();
-```
-
-The consumer polls at most 1000 messages per request with a minimum 1 ms gap between polls. It requests offset commits every second or when the current message buffer becomes empty; these triggers do not observe application processing. The polling strategy is set to `next` which means that the consumer will try to consume the next available message from the partition currently assigned to the consumer group (you can also invoke a regular `consumer()` builder if you do not plan to use the consumer groups). The `build()` method is used to create the consumer.
-
-Finally, you can use the `next()` method to receive the messages from the topic. Unlike the producer, the consumer **must stay a mutable binding** for its whole life: `init()` takes `&mut self`, and `next()` comes from the futures `Stream` implementation which also requires mutable access. The `init()` is used to ensure that the consumer is ready to receive the messages by validating the existence of the stream, topic, consumer group etc. Here's how you can consume the messages:
-
-```rust
 consumer.init().await?;
 
-// Start consuming the messages
-while let Some(message) = consumer.next().await {
-    match message {
-        Ok(received) => {
-            println!("{}", String::from_utf8_lossy(&received.message.payload));
-        }
-        Err(error) => eprintln!("Error while receiving message: {error}"),
-    }
+while let Some(received) = consumer.next().await {
+    let received = received?;
+    println!("{}", std::str::from_utf8(&received.message.payload)?);
+    consumer.commit(received.checkpoint()).await?;
 }
+consumer.shutdown().await?;
 ```
 
-In order to use the async iterator extension, add [futures-util](https://crates.io/crates/futures-util) dependency and import `futures_util::StreamExt`.
+Import `futures_util::StreamExt` to use `next()`. The mutable consumer drives reads and retries when polled. A checkpoint keeps the partition history and ownership that delivered the message. Committing it after recreation or an ownership change is refused. Process messages before committing their checkpoints.
 
-### Consumer builder options
+### Consumer configuration
 
-Defaults and lesser-known knobs on `IggyConsumerBuilder`:
+| Method | Default | Behavior |
+| --- | --- | --- |
+| `poll_options(...)` | Five-second wait, manual commit | Read limits and commit policy |
+| `partitions(...)` | Required for standalone consumer | Explicit partition IDs. Refused for a group |
+| `prefetch_bytes(...)` | 16 MiB | Encoded bytes reserved for buffered and in-flight replies |
+| `prefetch_messages(...)` | 16000, or the larger poll count | Reserved messages |
+| `polling_strategy(...)` | `next()` | Start of a partition without a position |
+| `create_consumer_group_if_not_exists()` | Enabled | Create the group before joining |
+| `polling_retry_interval(...)` | One second | Delay after a refused read |
+| `init_retries(...)` | Disabled | Retry missing stream or topic during initialization |
+| `allow_replay()` | Disabled | Permit reads at or below stored progress |
+| `offset_drain_timeout(...)` | Five seconds | Shutdown budget for automatic stores |
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `polling_strategy(...)` | `next()` | Where to start polling |
-| `batch_length(n)` | `1000` | Maximum messages polled per request |
-| `auto_commit(...)` | `IntervalOrWhen(1s, PollingMessages)` | See the matrix below |
-| `auto_join_consumer_group()` | enabled | Join the consumer group automatically |
-| `create_consumer_group_if_not_exists()` | enabled | Create the group automatically |
-| `poll_interval(d)` / `without_poll_interval()` | none | Delay between poll requests |
-| `polling_retry_interval(d)` | `1s` | Retry interval when the server is disconnected |
-| `init_retries(retries, interval)` | disabled | Retry `init()` when the stream or topic does not exist yet (e.g. created dynamically by a producer) |
-| `allow_replay()` | disabled | Allow re-consuming messages at or below the stored offset |
-| `offset_drain_timeout(d)` | `5s` | How long `shutdown()` waits for background auto-commit tasks to drain before leaving the group |
-| `encryptor(...)` | inherited from the client; none by default | Client-side payload and user-header decryption |
+Group membership is managed by the reader. The old `auto_join_consumer_group`, `poll_interval`, `batch_length` and enum-based auto-commit consumer configuration are replaced by the current reader and `PollOptions` API.
 
-With an encryptor, `init()` rejects the `PollingMessages` auto-commit trigger because a batch might fail decryption after its offset was committed. Use a compatible mode, such as `AutoCommit::Disabled`, and store offsets explicitly after successful processing.
+### Automatic commits
 
-### Auto-commit matrix
+To store progress after successful processing, use:
 
-`AutoCommit` decides when the consumer requests offset storage:
+```rust
+let options = PollOptions {
+    commit: CommitPolicy::Auto(AutoCommit::default()),
+    ..PollOptions::wait(IggyDuration::ONE_SECOND)
+};
+```
 
-| Variant | Commit trigger |
-|---------|------------------|
-| `Disabled` | Never automatically; store it manually |
-| `Interval(d)` | Every `d` in the background |
-| `IntervalOrWhen(d, when)` | Every `d`, plus at the `when` trigger |
-| `IntervalOrAfter(d, after)` | Every `d`, plus at the `after` trigger |
-| `When(when)` | At the `when` trigger |
-| `After(after)` | At the `after` trigger |
+The default automatic policy stores every 10,000 messages or five seconds, after processing. `CommitAfter::Delivery` counts a yielded message immediately. `CommitAfter::Marked` counts checkpoints that the application marks. A handler failure leaves its message uncounted when using processing-based commits.
 
-`AutoCommitWhen` triggers fire while receiving: `PollingMessages` accompanies the poll request, `ConsumingEachMessage` runs before yielding a message, and `ConsumingAllMessages` runs when the current buffer is empty. `ConsumingEveryNthMessage(n)` checks whether the message offset is divisible by `n`, rather than counting processed messages; `n = 0` disables that trigger.
+`CommitPolicy::OnRead` submits offsets with the read and can advance them before processing. The consumer refuses this policy with a client-side encryptor because decryption can fail after the store. Use manual or automatic commits instead.
 
-`AutoCommitAfter` triggers run after the handler returns, including when it returns an error. `ConsumingEachMessage` and `ConsumingEveryNthMessage(n)` use the handled message's offset. `ConsumingAllMessages` fires when that offset reaches the partition head reported by the poll, so a lagging consumer may process several batches before it fires. For commits only after successful processing, disable auto-commit and store offsets explicitly.
+Always await `consumer.shutdown()` before dropping it. Shutdown flushes automatic progress, adjusts on-read progress to delivered messages, and leaves the group. It is not a substitute for successful application processing. See [Deferred polling](/docs/sdk/deferred-polling) for the shared contract.
 
-The `After` triggers require `consume_messages()` from the `IggyConsumerMessageExt` trait (see [Stream Builder](/docs/sdk/rust/stream-builder)). The plain `next()` loop cannot observe when processing finished, though `IntervalOrAfter` still commits on its interval. Background commits can fail; use an explicit offset-store result when completion must be confirmed.
+### Read errors
+
+`ReadError` identifies the failed partition and contains its underlying error. Recoverable read failures are retried. A history change, uncertain read or undecodable message can stop a partition. Inspect the error before calling `seek(partition_id, strategy)` to select a new start. A `skip` continuation lets an application deliberately move past a record it cannot decode.
+
+An uncertain committing read can require `abandon_operation` before seeking. Abandon does not undo a store. The [source consumer example](https://github.com/apache/iggy/blob/server-0.10.0/examples/rust/src/new-sdk/consumer/main.rs) shows explicit recovery choices.
+
+## Idempotent producer
+
+An idempotent producer prevents duplicate appends when the same producer batch is retried. Enable it with `.idempotent()` before `build()` and call `init()` to obtain a producer ID. The default is disabled, and this mode requires a binary transport.
+
+```rust
+let producer = client
+    .producer("my-stream", "my-topic")?
+    .idempotent()
+    .build();
+producer.init().await?;
+producer.send_one(IggyMessage::from_str("hello")?).await?;
+producer.shutdown().await;
+```
+
+Each chunk carries a producer ID, epoch and per-partition sequence. This is separate from message IDs and session retry protection. Upgrade all topic readers to compatible 0.10 clients before writing these batches. See [Idempotent producers](/docs/sdk/idempotent-producers) for limits.
 
 ## Raw requests
 
-For custom commands the `IggyClient` exposes two escape hatches below the typed API:
+`send_binary_request(code, payload)` sends a raw request through a binary transport. `send_binary_request_to_replica(code, payload, replica_id)` targets a replica. Session-management commands remain restricted so a raw call cannot replace the client's session state. HTTP returns `FeatureUnavailable` for binary calls.
 
-- `send_binary_request(code, payload)` sends a raw binary command and returns the raw response. Binary transports only. On HTTP it returns `FeatureUnavailable`. Login, registration and logout codes are rejected with `InvalidCommand`, use `login_user`/`logout_user` so the SDK session state stays correct. Custom codes are forwarded to the server, which decides whether it implements them.
-- `send_http_request(method, path, body)` invokes an arbitrary HTTP endpoint and returns the raw response body. HTTP transport only. Binary transports return `FeatureUnavailable`.
+`send_http_request(method, path, body)` sends an HTTP request and returns its raw body. Binary transports return `FeatureUnavailable` for that call. Use typed APIs for commands whose route, ownership or recovery identity the SDK must manage.

@@ -3,7 +3,7 @@ title: Examples
 description: "Build the local Node.js SDK and run its TypeScript examples."
 ---
 
-Examples are available in the [examples/node](https://github.com/apache/iggy/tree/master/examples/node) directory, written in TypeScript. They use the SDK from the same checkout:
+Examples are available in the [examples/node](https://github.com/apache/iggy/tree/server-0.10.0/examples/node) directory, written in TypeScript. They use the SDK from the same checkout:
 
 - **getting-started** - basic producer and consumer
 - **basic** - producer and consumer with utilities
@@ -16,13 +16,13 @@ Examples are available in the [examples/node](https://github.com/apache/iggy/tre
 
 ## Running the examples
 
-These examples target server **0.9.0**. See [Getting started](/docs/introduction/getting-started) for prerequisites:
+These examples target server **0.10.0**. See [Getting started](/docs/introduction/getting-started) for prerequisites:
 
 ```bash
 cargo run --bin iggy-server -- --fresh --with-default-root-credentials
 ```
 
-The default-root flag sets the `iggy`/`iggy` credentials used by the examples. `--fresh` deletes existing local server data. Explicit credential environment variables override the default-root flag; bootstrap settings do not replace recovered credentials.
+The default-root flag sets the `iggy`/`iggy` credentials used by the examples. `--fresh` deletes existing local server data. Explicit credential environment variables override the default-root flag. Bootstrap settings do not replace recovered credentials.
 
 From the repository root, build the local SDK before installing the examples. The stream-builder example creates a stream and topic, sends and consumes three messages, and deletes its resources:
 
