@@ -3,7 +3,7 @@ title: Cluster Configuration
 description: Reference for the [cluster] settings, consensus timing, and node roster
 ---
 
-All clustering settings live in the `[cluster]` section of the server configuration. The authoritative defaults with detailed comments are in [`core/server/config.toml`](https://github.com/apache/iggy/blob/master/core/server/config.toml). Every value can also be set through an `IGGY_`-prefixed environment variable, for example `IGGY_CLUSTER_ENABLED=true` or `IGGY_CLUSTER_NODES_0_IP=10.0.1.5`.
+All clustering settings live in the `[cluster]` section of the server configuration. The authoritative defaults with detailed comments are in [`core/server/config.toml`](https://github.com/apache/iggy/blob/server-0.10.0/core/server/config.toml). Every value can also be set through an `IGGY_`-prefixed environment variable, for example `IGGY_CLUSTER_ENABLED=true` or `IGGY_CLUSTER_NODES_0_IP=10.0.1.5`.
 
 With clustering enabled, the server validates the section at boot and **refuses to start** on an invalid value, printing the rule that failed. The repair chunk limit and superblock failure timeout are validated even when clustering is disabled.
 
@@ -23,14 +23,14 @@ Consensus runs on a **fixed 10ms tick**. Every duration below is converted to wh
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `heartbeat_timeout` | `5s` | Backup liveness window: a replica that sees no primary traffic for this long starts a view change |
-| `commit_broadcast_interval` | `500ms` | How often the primary broadcasts its commit point; this broadcast is the cluster's liveness signal |
+| `commit_broadcast_interval` | `500ms` | How often the primary broadcasts its commit point. This broadcast is the cluster's liveness signal |
 | `prepare_retransmit_interval` | `250ms` | Retry prepares that backups have not acknowledged |
 | `view_change_retransmit_interval` | `500ms` | Retry `StartViewChange` / `DoViewChange` while a view change is in progress |
 | `view_change_status_timeout` | `5s` | Escalate a view change that does not conclude within this window to a fresh election |
 | `request_start_view_retransmit_interval` | `1s` | How often a recovering replica re-requests the current view's `StartView` |
 | `view_probe_attempts_max` | `5` | Unanswered `RequestStartView` probes a recovering replica tolerates before falling back to an election |
 | `repair_retry_interval` | `1s` | How long a stalled journal-repair stream waits before re-requesting its remaining window |
-| `repair_gap_debounce_interval` | `1s` | How long a committed-history gap waits before opening a repair session; floored at 500ms |
+| `repair_gap_debounce_interval` | `1s` | How long a committed-history gap waits before opening a repair session. Floored at 500ms |
 | `repair_chunk_max` | `128` | Prepares a peer serves per repair round |
 
 Raise `heartbeat_timeout` on oversubscribed hosts where scheduling stalls fake primary death. Otherwise keep the defaults unless tests show a specific scheduling or network problem.
@@ -45,9 +45,15 @@ Boot-time validation enforces these constraints:
 - `view_probe_attempts_max` must be between 1 and 100.
 - `repair_chunk_max` must be between 1 and 1024, and strictly below `message_bus.peer_queue_capacity`: each repair frame rides the per-peer message-bus queue, and a full round above that capacity would overrun the queue and drop frames.
 
+## Default replication factor
+
+`cluster.default_replication_factor` defaults to `"all"`. It applies to new topics whose creation request omits `replication_factor`. An explicit value must be from 1 through 32 and no greater than the cluster node count. The resolved value is stored with the topic. Changing this default does not change existing topics.
+
+See [Multi-leader partitions](/docs/clustering/multi-leader) for primary placement and the availability consequences of each factor.
+
 ## Superblock failure handling
 
-`superblock_wedged_fatal_timeout` defaults to `2m`. It controls how long repeated superblock persistence failures can continue before the process exits. The affected consensus group stays fenced while persistence is failing. `0`, `disabled`, or `unlimited` disables the process exit, leaving the group fenced; a nonzero value must be at least `30s`.
+`superblock_wedged_fatal_timeout` defaults to `2m`. It controls how long repeated superblock persistence failures can continue before the process exits. The affected consensus group stays fenced while persistence is failing. `0`, `disabled`, or `unlimited` disables the process exit, leaving the group fenced. A nonzero value must be at least `30s`.
 
 ## Coordinator placement
 
@@ -56,6 +62,7 @@ These settings live under `[cluster.coordinator]` and apply when the server has 
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `skip_shard_zero_for_replicas` | `true` | Places replica connections on peer shards instead of shard 0 |
+| `replica_connections_per_peer` | `1` | Replica links per peer. Every node must use the same value. |
 | `skip_shard_zero_for_clients` | `false` | When enabled, excludes shard 0 from client connection placement |
 
 ## Node roster
@@ -83,7 +90,7 @@ The node's roster address. Replica-to-replica consensus traffic and follower-to-
 
 ### `replica_id`
 
-Numeric replica id for VSR consensus, `0`-based. Ids must be unique and strictly less than the roster size, which makes them contiguous from `0`. Rosters with more than 255 replicas are unsupported.
+Numeric replica id for VSR consensus, `0`-based. Ids must be unique and strictly less than the roster size, which makes them contiguous from `0`. Rosters with more than 32 replicas are rejected at startup.
 
 ### `ports`
 
@@ -119,7 +126,7 @@ Rules and caveats:
 - Matching sees the transport-level peer address, so clients behind a proxy or load balancer match the proxy's network, not their own.
 - Every `address` must be routable from inside its own `client_cidr`: leader-aware clients redial whatever address metadata advertises, and a selector pointing at an unreachable host strands them mid-redirect.
 - Prefer literal IPs over hostnames. SDKs differ in how they compare an advertised hostname against the address they dialed, and a mismatch costs a reconnect on every fresh connect.
-- Rolling upgrades: VSR builds predating selector support reject a TOML config containing `advertised_addresses`. Their release builds warn and ignore the equivalent `IGGY_CLUSTER_NODES_*_ADVERTISED_ADDRESSES_*` env vars; debug builds can panic on them. Upgrade every binary first, then add selectors.
+- Every node must run the same server version. Do not mix 0.9 and 0.10 nodes during an upgrade.
 
 ## Authentication and TLS
 

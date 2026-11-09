@@ -41,6 +41,7 @@ const sharedLinks: BaseLayoutProps["links"] = [
   { text: "Docs", url: "/docs" },
   { text: "Blogs", url: "/blogs" },
   { text: "Downloads", url: "/downloads" },
+  { text: "Meetups", url: "/meetups" },
   { text: "Powered By", url: "/powered-by" },
   {
     type: "custom",
@@ -61,7 +62,6 @@ const sharedLinks: BaseLayoutProps["links"] = [
   {
     type: "custom",
     on: "nav",
-    secondary: true,
     children: <ASFDropdown />,
   },
   {
@@ -121,6 +121,7 @@ export function docsOptions(): BaseLayoutProps {
       { text: "Home", url: "/" },
       { text: "Blogs", url: "/blogs" },
       { text: "Downloads", url: "/downloads" },
+      { text: "Meetups", url: "/meetups" },
       { text: "Powered By", url: "/powered-by" },
       {
         type: "custom",

@@ -14,7 +14,7 @@ By default, runtime will look for the configuration file, to decide which connec
 
 Set the broker credentials and connector configuration directory before starting the runtime. The embedded default has an empty connector directory and cannot start unchanged. For a complete setup, follow the [quick start](/docs/connectors/introduction#quick-start).
 
-The [docker image](https://hub.docker.com/r/apache/iggy-connect) is available, and can be fetched via `docker pull apache/iggy-connect:0.5.0`.
+The [Docker image](https://hub.docker.com/r/apache/iggy-connect) for this release is `apache/iggy-connect:0.6.0`.
 
 ## How configuration is resolved
 
@@ -27,7 +27,7 @@ Run `iggy-connectors --list-config-env-vars` to print the supported names and te
 
 - `<N>` is a vector index from `0` through `255` for connector stream fields. Whole-value vectors are listed once without a placeholder.
 - `<KEY>` is the configured connector key, uppercased. These per-connector overrides are available only with the local configuration provider.
-- `<FIELD>` sets one lowercased top-level plugin configuration key. Underscores are preserved (`A_B` becomes `a_b`, not nested `a.b`), and nested plugin configuration keys cannot be set through environment variables. `FORMAT` is reserved and is listed separately as `..._PLUGIN_CONFIG_FORMAT`; the passthrough template does not guarantee that a plugin accepts every field.
+- `<FIELD>` sets one lowercased top-level plugin configuration key. Underscores are preserved (`A_B` becomes `a_b`, not nested `a.b`), and nested plugin configuration keys cannot be set through environment variables. `FORMAT` is reserved and is listed separately as `..._PLUGIN_CONFIG_FORMAT`. The passthrough template does not guarantee that a plugin accepts every field.
 
 ## How plugins are resolved
 
@@ -74,7 +74,7 @@ Beyond these sections, the runtime configuration also supports `[http]` for the 
 
 ## State storage
 
-Source plugins supply optional checkpoint bytes. The default `file` backend writes them to `{state.path}/source_{key}.state` using a temporary file, file synchronization and atomic rename. On Unix, it also synchronizes the parent directory. The runtime stores these bytes unchanged; the SDK provides MessagePack serialization helpers.
+Source plugins supply optional checkpoint bytes. The default `file` backend writes them to `{state.path}/source_{key}.state` using a temporary file, file synchronization and atomic rename. On Unix, it also synchronizes the parent directory. The runtime stores these bytes unchanged. The SDK provides MessagePack serialization helpers.
 
 To use an HTTP state server, replace the `[state]` section above and add:
 
@@ -99,7 +99,7 @@ max_backoff = "2s"
 backoff_multiplier = 2
 ```
 
-The runtime appends `source_{key}` as a URL path segment, preserving any query string. URL query values are redacted from runtime configuration logs and transport errors. Static request headers are passed to the state server; configure this map in TOML. The other state settings support environment overrides such as `IGGY_CONNECTORS_STATE_STORAGE` and `IGGY_CONNECTORS_STATE_HTTP_URL`.
+The runtime appends `source_{key}` as a URL path segment, preserving any query string. URL query values are redacted from runtime configuration logs and transport errors. Static request headers are passed to the state server. Configure this map in TOML. The other state settings support environment overrides such as `IGGY_CONNECTORS_STATE_STORAGE` and `IGGY_CONNECTORS_STATE_HTTP_URL`.
 
 The HTTP server must implement this checkpoint contract:
 
@@ -229,7 +229,7 @@ key_file = "core/certs/iggy_key.pem"
 Currently, it does expose the following endpoints:
 
 - `GET /`: welcome message.
-- `GET /health`: process liveness response. It does not check connector health; inspect `/stats`, `/sources` or `/sinks` for connector status.
+- `GET /health`: process liveness response. It does not check connector health. Inspect `/stats`, `/sources` or `/sinks` for connector status.
 - `GET /stats`: runtime statistics (process info plus per-connector status and message counters).
 - `GET /metrics`: Prometheus metrics, available when `[http.metrics]` is enabled (path configurable via its `endpoint` key).
 - `GET /sinks`: list of sinks.
@@ -254,3 +254,41 @@ Currently, it does expose the following endpoints:
 - `GET /sources/{key}/configs/plugin`: source plugin config, including the optional `format` query parameter to specify the config format.
 - `GET /sources/{key}/transforms`: source transforms to be applied to the fields.
 - `POST /sources/{key}/restart`: restart the source connector.
+
+## Deferred sink reads
+
+Sink stream entries use `max_wait` and `min_count`. The default wait is one second and the minimum count is one. `batch_length` limits returned messages. A wait must be positive, and `min_count` must be from one through the batch length. The server can cap a requested wait.
+
+```toml
+[[streams]]
+stream = "events"
+topics = ["users"]
+schema = "json"
+batch_length = 1000
+min_count = 1000
+max_wait = "5s"
+```
+
+The sink starts processing when the read is ready, its byte budget is reached or the wait ends. Replace the old `poll_interval` field. A sink that still supplies it fails to start, even when `max_wait` is also present.
+
+The runtime selects `CommitPolicy::OnRead`. Offsets can advance before a plugin finishes its callback. A failed sink callback is recorded and does not cause the runtime to replay that batch. Deferred reads change waiting and batching, not this delivery guarantee.
+
+## Exactly-once sources
+
+`exactly_once=true` enables producer batch identity for a source. The plugin must reproduce the same messages from its saved state. The runtime stores producer ID, epoch, sequence and partition with the plugin checkpoint before sending.
+
+```toml
+exactly_once = true
+
+[[streams]]
+stream = "orders"
+topic = "created"
+schema = "json"
+partition_id = 0
+```
+
+All batches go to one partition, zero when omitted. Each plugin batch is one request. `batch_length` and `linger_time` do not apply in this mode. Use a topic with `persisted` durability and upgrade every node and reader before enabling producer-aware batches.
+
+The guarantee has limits. A partition retains five batches per producer, at most 4096 producers, and expires producers idle for 24 hours. A changed batch count, a changed partition, expired producer state, or more than five unsaved batches can cause duplicates after recovery. The plugin must return new checkpoint state often enough to preserve its replay position.
+
+Turning the mode off preserves plugin state in the ordinary format after the next save. Before rolling back to an older runtime, disable it and wait for that save. Older runtimes do not understand the producer record. See [Idempotent producers](/docs/sdk/idempotent-producers).

@@ -34,14 +34,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {...docsOptions()}
         sidebar={{
           footer: (
-            <Link
-              key="archive-link"
-              href="/docs/0.8"
-              className="mt-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/50 hover:text-fd-accent-foreground"
-            >
-              <History className="size-4" />
-              0.8 docs (archived)
-            </Link>
+            <>
+              <Link
+                key="archive-09-link"
+                href="/docs/0.9"
+                className="mt-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/50 hover:text-fd-accent-foreground"
+              >
+                <History className="size-4" />
+                0.9 docs (archived)
+              </Link>
+              <Link
+                key="archive-link"
+                href="/docs/0.8"
+                className="mt-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/50 hover:text-fd-accent-foreground"
+              >
+                <History className="size-4" />
+                0.8 docs (archived)
+              </Link>
+            </>
           ),
         }}
       >

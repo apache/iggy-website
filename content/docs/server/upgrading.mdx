@@ -1,33 +1,49 @@
 ---
-title: Upgrading from 0.8 to 0.9
-description: "What you need to change when moving from Apache Iggy 0.8 to 0.9: a fresh data directory, matching SDKs, and config changes."
+title: Upgrading from 0.9 to 0.10
+description: "Prepare a fresh data directory, matching clients and updated configuration for Apache Iggy 0.10.0."
 ---
 
-0.9.0 is a major upgrade with breaking changes to the data format, the wire protocol and the server configuration. Work through this list before moving an existing deployment. The [0.9.0 release post](/blogs/2026/09/21/release-0.9.0/) has the full list of changes.
+Apache Iggy 0.10.0 changes the wire protocol, data directory format and public SDK APIs. Upgrade the server and clients together.
 
-## Start from a fresh data directory
+## Preserve data before the upgrade
 
-The on-disk format changed, and 0.9.0 can't read a data directory written by 0.8. There is no migration. Copy out anything you need to keep before switching over, then start 0.9.0 with an empty data directory.
+There is no migration from a 0.9.x data directory. Keep a backup and export messages that you need with the old server and compatible clients. Start 0.10.0 with a separate, empty data directory. Import the retained data through a compatible client. Do not point the new server at the old directory.
 
-## Upgrade the server and every SDK together
+Do not use a rolling upgrade between server versions. Every cluster node must run the same server version. Keep the old deployment and its data available until you finish the cutover checks.
 
-0.8 clients can't talk to a 0.9.0 server, and 0.9 clients can't talk to a 0.8 server. There is no fallback between the two protocols, so plan a cutover where the server and all your clients change at the same time, rather than a rolling upgrade.
+## Upgrade clients and tools
 
-Check [Server compatibility](/docs/sdk/introduction#server-compatibility) for the SDK version that goes with the 0.9.0 server in each language.
+Server 0.10.0 uses protocol 0.12.0. The server rejects incompatible binary clients at login. Use the versions in [Server compatibility](/docs/sdk/introduction#server-compatibility). The [0.9 documentation](/docs/0.9) remains available for the old deployment.
 
-## Review your configuration
+Review API changes before recompiling applications. Resource creation uses typed options. Updates change only the fields supplied through set/reset patches. Stream and topic purge, flush unsaved buffer, and the old UpdateStream, UpdateTopic and UpdateUser wire commands are removed. The SDK update methods use UpdateResource internally.
 
-Don't carry the old `config.toml` or `IGGY_*` environment variables across unchanged. The server refuses to start if it finds a setting that has moved or been removed.
+Rust stream builders take stream and topic names, without caller-assigned IDs. Python requires Python 3.11 or later. The [SDK guides](/docs/sdk/introduction) describe the release APIs and examples.
 
-- **The `[system]` table is gone.** Its `path` key and the tables under it (`runtime`, `logging`, `encryption`, `partition`, `sharding` and `memory_pool`) move to the top level of the config. Environment variables lose `SYSTEM_`, so `IGGY_SYSTEM_PATH` becomes `IGGY_PATH`.
-- **The `[stream]` and `[topic]` tables are gone.** Settings like `segment_size`, `messages_required_to_save` and `size_of_messages_required_to_save` are now set per topic when the topic is created. See [Topic options](/docs/server/topic-options).
-- **`enforce_fsync` and `consumer_offset_enforce_fsync` are gone.** Durability is now chosen per topic, with `durability` and `consumer_offset_durability`. See [Durability](/docs/server/durability).
-- **The `[cluster]` and sharding sections were reworked.** Compare yours with [Configuration](/docs/server/configuration).
+## Review server configuration
 
-## Set an advertised address when listening on all interfaces
+Compare your configuration with the [0.10 reference](/docs/server/configuration). Do not copy obsolete keys into the new deployment.
 
-If a listener binds to a wildcard address such as `0.0.0.0`, the server now needs an advertised address too, set with `IGGY_NODE_ADVERTISED_ADDRESS` or `node.advertised_address`. 0.8 allowed a wildcard bind without one; 0.9.0 won't start. This affects most Docker deployments. See [Docker & Helm](/docs/server/docker).
+- Set `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD` before first boot. The server no longer generates a root password. Use `--with-default-root-credentials` only for development.
+- Remove `consumer_group.session_timeout`. Session expiry derives from `heartbeat.interval` with a factor of 1.2. `consumer_group.heartbeat_interval` controls membership heartbeat pacing.
+- Replace `user_id` with `username` in `http.jwt.trusted_issuers`. The mapped account must exist and cannot be root. HTTP clients and the Web UI must log in again because old self-issued access and refresh tokens are rejected.
+- Supply a valid `logging.level`. An invalid filter stops startup. Log files rotate by size, with retention and total-size cleanup.
+- Keep `cluster.coordinator.replica_connections_per_peer` identical on all nodes. Cluster membership is limited to 32 nodes.
+- Keep node clocks synchronized. Authenticated HTTP forwarding uses short-lived proofs.
 
-## If you build connectors in Rust
+New topics inherit `cluster.default_replication_factor`, which defaults to `all`. Select a different factor at topic creation with `replication_factor`. Existing topics retain their stored value. See [Multi-leader partitions](/docs/clustering/multi-leader).
 
-In the connector SDK, `ConnectivityConfig` is replaced by `RetryPolicy`. This only affects Rust code written against the SDK. Connector plugins that are already built are unaffected.
+## Review consumer checkpoints
+
+A checkpoint records how far a consumer processed a partition. The current poll API defaults to manual commits. Rust high-level consumers also default to manual commits, and the stream builder starts with `PollingStrategy::next()`.
+
+Store offsets after processing, or select an explicit automatic commit policy. Without stored offsets, a restarted consumer can read retained messages again. Committing on read can advance the offset before application processing. See [Deferred polling](/docs/sdk/deferred-polling).
+
+Connector sinks use deferred polling. Replace `poll_interval` with `max_wait` and `min_count`. The runtime rejects a sink configuration that still sets `poll_interval`.
+
+## Review encryption
+
+Encryption is selected when a stream is created. Each encrypted stream has its own data key. Enabling server encryption does not encrypt an existing unencrypted stream. Keep all keys required to read retained streams and backups. See [Stream options](/docs/server/stream-options) for key creation and rotation.
+
+## Check the cutover
+
+Run producers and consumers against the new deployment before moving application traffic. Test resource creation, permissions, message payloads and headers, checkpoints, and reconnects. For a cluster, also test requests to different partition primaries and node failure. An accepted write and a processed message are different events. Select the required [durability policies](/docs/server/durability) and commit behavior explicitly.

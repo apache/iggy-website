@@ -61,7 +61,7 @@ Segments store **batch records**, not individual messages. The record is byte-id
 frame = [frame header: 48 bytes][payload][user_headers]
 ```
 
-The 256-byte batch header carries `partition_id`, `base_offset`, `base_timestamp`, `origin_timestamp`, `batch_length`, `batch_checksum` (XxHash3-64), and `message_count`. The rest is reserved and must be zero. Each 48-byte frame header carries `checksum` (XxHash3-64), `id` (u128), `offset_delta` (u32), `timestamp_delta` (u32), and the two lengths. A message's absolute offset is `base_offset + offset_delta`; its server timestamp is the flat `base_timestamp`, while `timestamp_delta` resolves producer time against `origin_timestamp`. All fields are **little-endian**, and records are stored contiguously with no padding.
+The 256-byte batch header carries `partition_id`, `base_offset`, `base_timestamp`, `origin_timestamp`, `batch_length`, `batch_checksum` (XxHash3-64), and `message_count`. An optional producer section carries a producer ID, epoch and sequence. Remaining reserved bytes must be zero. Each 48-byte frame header carries `checksum` (XxHash3-64), `id` (u128), `offset_delta` (u32), `timestamp_delta` (u32), and the two lengths. A message's absolute offset is `base_offset + offset_delta`. Its server timestamp is the flat `base_timestamp`, while `timestamp_delta` resolves producer time against `origin_timestamp`. All fields are **little-endian**, and records are stored contiguously with no padding.
 
 The full byte-level tables live on the [Message batches](/docs/binary-protocol/messages) page. Absent at-rest encryption, what lands on disk is exactly what the producer sent, with the server stamping `partition_id` at admission and `base_offset` / `base_timestamp` (plus a `batch_checksum` recompute) at journal append.
 
@@ -103,7 +103,7 @@ The flush thresholds and completion policies are **per-topic creation options**:
 
 - `messages_required_to_save` (default `1024`): count threshold.
 - `size_of_messages_required_to_save` (default `1 MiB`): byte threshold.
-- `durability` (default `replicated`): message completion policy; `persisted` requires recoverable stable storage at the replication quorum.
+- `durability` (default `replicated`): message completion policy. `persisted` requires recoverable stable storage at the replication quorum.
 - `consumer_offset_durability` (default `replicated`): the independent policy for explicit offset stores and deletes.
 
 A full active segment also triggers an ordinary flush. These are soft limits: a flush writes whole committed batches, so the actual count or size can overshoot. Required persistence, capacity pressure, and lifecycle operations can flush below the thresholds. The settings do not define a periodic flush interval. The `MessagesWriter` uses **vectored I/O** with up to 1024 buffers per syscall, so many buffered batches can land in one write.
@@ -129,7 +129,7 @@ Disk reads are verified before they reach a consumer:
 validate_checksum = true
 ```
 
-With `validate_checksum = true` (the default), every batch a disk poll reads is re-hashed and compared against its stored checksum. A mismatch stops the disk walk and logs an error on the server. The consumer receives any valid prefix already read, or an ordinary empty poll if none was read; the protocol does not report the checksum failure to the consumer. Repeated polls can therefore wait indefinitely at damaged data. Setting it to `false` skips the re-hash and serves whatever decodes, which can hand a consumer bytes provably not the ones written. Only disable it with a corruption guard elsewhere in the stack.
+With `validate_checksum = true` (the default), every batch a disk poll reads is re-hashed and compared against its stored checksum. A mismatch stops the disk walk and logs an error on the server. The consumer receives any valid prefix already read, or an ordinary empty poll if none was read. The protocol does not report the checksum failure to the consumer. Repeated polls can therefore wait indefinitely at damaged data. Setting it to `false` skips the re-hash and serves whatever decodes, which can hand a consumer bytes provably not the ones written. Only disable it with a corruption guard elsewhere in the stack.
 
 Binary polls reuse the stored batch layout. A reply may slice a larger stored batch and rewrite its header, and at-rest encryption requires decryption before the reply. HTTP additionally serializes the result as JSON.
 
@@ -174,7 +174,7 @@ Partition directories carry the same superblock mechanism for their own consensu
 
 ## Encryption
 
-Iggy supports optional **AES-256-GCM** encryption for message payloads and user headers. They are encrypted before storage and decrypted for polling. Metadata journals, metadata snapshots, and structural record headers remain unencrypted. The key must decode from base64 to 32 bytes. See [Security](/docs/server/security#data-encryption-at-rest).
+Iggy encrypts message payloads and user headers with a separate AES-256-GCM-SIV key per encrypted stream. They are encrypted before storage and decrypted for polling. Metadata journals, metadata snapshots, and structural record headers remain unencrypted. The key must decode from base64 to 32 bytes. See [Security](/docs/server/security#data-encryption-at-rest).
 
 ```toml
 [encryption]
@@ -184,16 +184,22 @@ key = ""  # 32-byte base64-encoded key
 
 ## Compression
 
-The `compression_algorithm` topic option accepts `none` (default) and `gzip`, but it is a **placeholder today**: the value is persisted and reported back, but no message compression is applied. Payload encryption still applies when enabled. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/master/examples/rust/src/message-headers) in the Iggy repo.
+The `compression_algorithm` topic option accepts `none` (default) and `gzip`, but it is a **placeholder today**: the value is persisted and reported back, but no message compression is applied. Payload encryption still applies when enabled. To compress today, do it client-side and tag messages via user headers - see the [message headers examples](https://github.com/apache/iggy/tree/server-0.10.0/examples/rust/src/message-headers) in the Iggy repo.
 
 ## Removed and relocated settings
 
 Earlier releases documented several storage features and `[system.*]` keys that no longer exist:
 
 - **`cache_indexes`**: removed. Index caching is internal now (see [Indexes](#indexes)).
-- **`[system.message_deduplication]`**: removed configuration; it does not configure the partition request deduplication table.
+- **`[system.message_deduplication]`**: removed configuration. It does not configure the partition request deduplication table.
 - **Segment archiving / S3 backup placeholders**: removed. Delete `archive_expired` and the old `[system.segment]` table rather than retaining a `false` value.
 - **`enforce_fsync`**: replaced by the topic `durability` policy. Consumer-offset completion has its own `consumer_offset_durability` policy. Both default independently to `replicated`.
 - **`[system.*]` tables**: removed or moved to root tables. Retention, segment size, preallocation, and flush thresholds are per-topic options.
 
 The config loader rejects the old `[system]` table and `IGGY_SYSTEM_*` environment mappings. The full mapping is in [Relocated configuration keys](/docs/server/configuration#relocated-configuration-keys).
+
+## Bounded partition file work
+
+Partition file operations run as bounded jobs. `sharding.partition_io_capacity` limits active jobs and results waiting for their owner. `partition_io_bytes_max` limits retained allocations. Exhausted capacity queues work instead of letting one slow disk operation block every partition on its shard.
+
+The current storage format is incompatible with 0.9 data directories. Boot checks it before metadata replay. Preserve old files for rollback and use a fresh directory for 0.10. See [Upgrading](/docs/server/upgrading).

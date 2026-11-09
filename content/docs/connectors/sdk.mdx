@@ -41,7 +41,7 @@ pub trait Sink: Send + Sync {
 }
 ```
 
-Expose the implementation with `sink_connector!(MySink)` or `source_connector!(MySource)`. The sink constructor has the signature `new(id: u32, config: MySinkConfig) -> Self`; the source constructor also takes `state: Option<ConnectorState>`. The **[sink guide](/docs/connectors/sinks/sink)** and **[source guide](/docs/connectors/sources/source)** provide complete plugin implementations and build setup.
+Expose the implementation with `sink_connector!(MySink)` or `source_connector!(MySource)`. The sink constructor has the signature `new(id: u32, config: MySinkConfig) -> Self`. The source constructor also takes `state: Option<ConnectorState>`. The **[sink guide](/docs/connectors/sinks/sink)** and **[source guide](/docs/connectors/sources/source)** provide complete plugin implementations and build setup.
 
 The macros generate the C FFI symbols loaded by the runtime: `iggy_sink_open`, `iggy_sink_consume`, `iggy_sink_close`, and `iggy_sink_version` for sinks, and `iggy_source_open`, `iggy_source_handle_v2`, `iggy_source_batch_result`, `iggy_source_close`, and `iggy_source_version` for sources. Configurations cross FFI as JSON, message batches and metadata use postcard, and source checkpoint bytes are opaque. The SDK creates one Tokio runtime per loaded plugin library, shared by that library's connector instances.
 
@@ -49,7 +49,7 @@ The macros generate the C FFI symbols loaded by the runtime: `iggy_sink_open`, `
 
 Source connectors can persist their position between restarts. Each batch of `ProducedMessages` may carry an optional `ConnectorState`. After processing and sending the batch to Iggy, the runtime saves that state through the configured file or HTTP backend before acknowledging the batch. The last saved state is passed to `new()` on the next startup. `ConnectorState` wraps raw bytes and provides `serialize`/`deserialize` helpers backed by MessagePack.
 
-Sources with cursors or destructive operations must stage changes during `poll()` and apply them on `SourceBatchResult::Ack`; `Nack` discards staged progress so the batch can be polled again. The SDK allows one batch in flight and stops polling if `on_batch_result()` returns an error. Its default no-op is suitable only for sources without staged work.
+Sources with cursors or destructive operations must stage changes during `poll()` and apply them on `SourceBatchResult::Ack`. `Nack` discards staged progress so the batch can be polled again. The SDK allows one batch in flight and stops polling if `on_batch_result()` returns an error. Its default no-op is suitable only for sources without staged work.
 
 Sinks can keep in-memory state, but the runtime does not persist it. Their consumer-group offsets are tracked by Iggy. See the **[Observability page](/docs/connectors/observability)** for checkpoint storage and the **[sink guide](/docs/connectors/sinks/sink)** for offset handling.
 
@@ -169,7 +169,7 @@ The source sends 100 records, then continues polling without new messages. Stdou
 
 The format-conversion transforms define no per-key defaults. Every non-optional key shown above must be present, or the configuration fails to deserialize (`schema_path`, `message_type`, `field_mappings`, and `descriptor_set` are optional).
 
-The two `[[streams]]` shapes differ: a source produces to a single `topic` and can tune batching via `batch_length` and `linger_time`, while a sink consumes from a list of `topics` and can additionally set `batch_length`, `poll_interval`, and `consumer_group`.
+The two `[[streams]]` shapes differ: a source produces to a single `topic` and can tune batching via `batch_length` and `linger_time`, while a sink consumes from a list of `topics` and can additionally set `batch_length`, `max_wait`, `min_count`, and `consumer_group`.
 
 ### Key Configuration Options
 
@@ -179,7 +179,7 @@ These are SDK configuration fields, not Random or Stdout `plugin_config` keys. T
 
 - **`schema_path`**: Path to the `.proto` file containing message definitions
 - **`message_type`**: Fully qualified name of the protobuf message type to use
-- **`use_any_wrapper`**: Selects the Any fallback when no message descriptor is loaded; a loaded descriptor takes precedence
+- **`use_any_wrapper`**: Selects the Any fallback when no message descriptor is loaded. A loaded descriptor takes precedence
 
 #### Transform Options
 
@@ -194,9 +194,9 @@ The `schema_registry_url` field is reserved and currently not implemented. The S
 
 ### Supported Features
 
-- **Encoding**: A loaded message descriptor encodes matching JSON fields. The encoder supports booleans, strings, all protobuf integer types, and base64 strings for bytes or already-encoded nested messages. Float, double, and enum fields are unsupported by the encoder; nested JSON objects, repeated fields, maps, and proto2 groups are not a general-purpose schema conversion path.
-- **Decoding**: A loaded descriptor extracts present fields. Integer, boolean, and string fields become JSON values; bytes become base64 and nested messages become metadata with base64 content. Missing fields are not filled with protobuf defaults, and float/double fields produce `unsupported_wire_type` placeholders. Without a descriptor, the default decoder returns an Any envelope's `type_url` and base64 `value`.
-- **Transforms**: `proto_convert` supports JSON-to-protobuf schema encoding for scalar fields, including floating-point numbers and numeric enum values; bytes and already-encoded nested messages use base64 strings. It logs and omits fields it cannot encode. Its protobuf-to-JSON path exposes Any metadata or raw-data metadata rather than decoding a custom message descriptor. Converting protobuf to `flat_buffer` or `avro` rewraps bytes without transcoding them.
+- **Encoding**: A loaded message descriptor encodes matching JSON fields. The encoder supports booleans, strings, all protobuf integer types, and base64 strings for bytes or already-encoded nested messages. Float, double, and enum fields are unsupported by the encoder. Nested JSON objects, repeated fields, maps, and proto2 groups are not a general-purpose schema conversion path.
+- **Decoding**: A loaded descriptor extracts present fields. Integer, boolean, and string fields become JSON values. Bytes become base64 and nested messages become metadata with base64 content. Missing fields are not filled with protobuf defaults, and float/double fields produce `unsupported_wire_type` placeholders. Without a descriptor, the default decoder returns an Any envelope's `type_url` and base64 `value`.
+- **Transforms**: `proto_convert` supports JSON-to-protobuf schema encoding for scalar fields, including floating-point numbers and numeric enum values. Bytes and already-encoded nested messages use base64 strings. It logs and omits fields it cannot encode. Its protobuf-to-JSON path exposes Any metadata or raw-data metadata rather than decoding a custom message descriptor. Converting protobuf to `flat_buffer` or `avro` rewraps bytes without transcoding them.
 - **Field Mapping**: Encoder/decoder mappings use protobuf field names as keys and JSON field names as values. The encoder applies that mapping in reverse. Transform mappings rename JSON input keys directly.
 - **Any Wrapper**: The default encoder puts JSON/text in a `google.protobuf.StringValue`, or binary data in a `google.protobuf.BytesValue`, inside `google.protobuf.Any`. The default decoder exposes the envelope without unpacking its inner message.
 
@@ -346,10 +346,10 @@ fn main() -> Result<(), Error> {
 
 ### Usage Notes
 
-- **Automatic Loading**: Constructors attempt to load `schema_path` or `descriptor_set`; `schema_path` takes precedence when both are set. Constructors log loading errors and return an instance without a loaded schema.
-- **Manual Loading**: `load_schema()` reloads the configured source. A returned error preserves an already-loaded schema. `update_config(config, true)` also restores the previous configuration on error; `false` changes the configuration while retaining the cached schema.
+- **Automatic Loading**: Constructors attempt to load `schema_path` or `descriptor_set`. `schema_path` takes precedence when both are set. Constructors log loading errors and return an instance without a loaded schema.
+- **Manual Loading**: `load_schema()` reloads the configured source. A returned error preserves an already-loaded schema. `update_config(config, true)` also restores the previous configuration on error. `false` changes the configuration while retaining the cached schema.
 - **Fallbacks**: Missing files, compilation failures, absent schema sources, or an unmatched `message_type` can return `Ok(())` without an active message descriptor. Successful reloads into fallback mode clear the previous descriptor. Invalid protobuf syntax and malformed descriptor bytes return errors. Check the actual encoded/decoded result when validating a schema setup.
 - **Encoding Errors**: Errors encoding a loaded message descriptor are returned to the caller. The encoder does not retry that message as Any. The decoder attempts Any after a schema decoding error.
 - **Transform Configuration**: Create a new converter to change its configuration. `load_schema()` can reload its existing source. Without a descriptor, JSON-to-protobuf conversion produces JSON text in `Payload::Proto`, not a schema-encoded binary message.
-- **Format Options**: Encoder `preserve_unknown_fields`, `compact_encoding`, `validate_message`, and `deterministic_encoding` are accepted but have no effect. Decoder `preserve_unknown_fields` retains unknown varints as numbers and length-delimited data as base64; fixed-width unknown fields become placeholders. It does not retain the original wire encoding. See the [Transforms page](/docs/connectors/transforms) for conversion-specific limits.
+- **Format Options**: Encoder `preserve_unknown_fields`, `compact_encoding`, `validate_message`, and `deterministic_encoding` are accepted but have no effect. Decoder `preserve_unknown_fields` retains unknown varints as numbers and length-delimited data as base64. Fixed-width unknown fields become placeholders. It does not retain the original wire encoding. See the [Transforms page](/docs/connectors/transforms) for conversion-specific limits.
 - Protocol Buffers provide efficient binary serialization compared to JSON
