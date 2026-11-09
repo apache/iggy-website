@@ -135,7 +135,7 @@ Also, when implementing the source connector, make sure to use the `source_conne
 
 And finally, each source should have its own, custom configuration, which is passed along with the unique plugin ID and optional state via expected `new()` method.
 
-The reference crate is [core/connectors/sources/random_source](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sources/random_source). Use its `Cargo.toml` from the matching checkout, including `[lib] crate-type = ["cdylib", "lib"]` and its workspace dependency features. The Rust blocks in this sample implementation section combine into `src/lib.rs`. The trait above is an API reference and is not part of that file.
+The reference crate is [core/connectors/sources/random_source](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sources/random_source). Use its `Cargo.toml` from the matching checkout, including `[lib] crate-type = ["cdylib", "lib"]` and its workspace dependency features. The Rust blocks in this sample implementation section combine into `src/lib.rs`. The trait above is an API reference and is not part of that file.
 
 Start with the imports, then define the internal state and the public source connector along with its configuration.
 
@@ -415,4 +415,4 @@ IGGY_CONNECTORS_SOURCE_RANDOM_ENABLED=true IGGY_CONNECTORS_CONFIG_PATH=connector
 
 And that's all, enjoy using the source connector!
 
-On a side note, if you'd like to process the messages consumed from the Iggy stream instead, you can implement your own **[Sink connector](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks)** too :)
+On a side note, if you'd like to process the messages consumed from the Iggy stream instead, you can implement your own **[Sink connector](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks)** too :)

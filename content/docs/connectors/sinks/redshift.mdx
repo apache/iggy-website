@@ -21,7 +21,7 @@ Use the [sink runtime setup](/docs/connectors/sinks/sink) and build `iggy_connec
 | `retry_delay` | One second | Pause between attempts |
 | `archive` | `false` | Retain successfully loaded staging files under the archive prefix |
 
-`aws_access_key_id` and `aws_secret_access_key` supply explicit staging credentials. `s3_endpoint` supports an alternate S3 endpoint. The [complete example configuration](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/connectors/sinks/redshift_sink/config.toml) includes a local staging service setup. Replace its credentials and role before use.
+`aws_access_key_id` and `aws_secret_access_key` supply explicit staging credentials. `s3_endpoint` supports an alternate S3 endpoint. The [complete example configuration](https://github.com/apache/iggy/blob/server-0.10.0/core/connectors/sinks/redshift_sink/config.toml) includes a local staging service setup. Replace its credentials and role before use.
 
 ## Payloads and delivery
 
@@ -29,4 +29,4 @@ Use the [sink runtime setup](/docs/connectors/sinks/sink) and build `iggy_connec
 
 With `archive=false`, a successfully loaded staging file is deleted. With it enabled, the file is moved under the archive prefix. A staged file alone does not prove that COPY completed.
 
-The runtime commits offsets on read. A COPY failure that outlasts plugin retries is logged and is not replayed by the runtime. A retry after an uncertain load can duplicate rows. See the [source reference](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/connectors/sinks/redshift_sink/README.md).
+The runtime commits offsets on read. A COPY failure that outlasts plugin retries is logged and is not replayed by the runtime. A retry after an uncertain load can duplicate rows. See the [source reference](https://github.com/apache/iggy/blob/server-0.10.0/core/connectors/sinks/redshift_sink/README.md).

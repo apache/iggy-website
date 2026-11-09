@@ -328,4 +328,4 @@ State transfer handles larger gaps. RequestStateTransfer obtains a manifest, the
 
 The offset artifact also retains partition history, retry state and producer state. These internal readability windows do not provide migration from a 0.9 data directory. Use the [upgrade procedure](/docs/server/upgrading).
 
-The [header definitions](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/binary_protocol/src/consensus/header.rs) and [command registry](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/binary_protocol/src/consensus/command.rs) define the layouts. The [replica transport](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/message_bus/src/replica) implements preamble admission and authentication.
+The [header definitions](https://github.com/apache/iggy/blob/server-0.10.0/core/binary_protocol/src/consensus/header.rs) and [command registry](https://github.com/apache/iggy/blob/server-0.10.0/core/binary_protocol/src/consensus/command.rs) define the layouts. The [replica transport](https://github.com/apache/iggy/tree/server-0.10.0/core/message_bus/src/replica) implements preamble admission and authentication.

@@ -100,4 +100,4 @@ let (producer, consumer) = IggyStream::build(&client, &config).await?;
 
 The reader reserves up to 16 MiB and 16000 messages for buffered and in-flight replies. If the poll count is larger, that count is the default message reservation. Configure `prefetch_bytes` and `prefetch_messages` to bound read-ahead independently of each fetch.
 
-The [stream-builder examples](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/stream-builder) cover producer, consumer and combined configurations. The [source consumer configuration](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/sdk/src/stream_builder/config/config_iggy_consumer.rs) defines each builder field.
+The [stream-builder examples](https://github.com/apache/iggy/tree/server-0.10.0/examples/rust/src/stream-builder) cover producer, consumer and combined configurations. The [source consumer configuration](https://github.com/apache/iggy/blob/server-0.10.0/core/sdk/src/stream_builder/config/config_iggy_consumer.rs) defines each builder field.

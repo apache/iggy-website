@@ -17,7 +17,7 @@ For examples in other programming languages, see the [SDK section](/docs/sdk/int
 
 We will build a **producer** (publishing messages to a stream) and a **consumer** (reading those messages back). In a real system, a service can be both at the same time - publishing its own events while consuming events from other services.
 
-The completed sample can be found in the [repository](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/rust/src/getting-started). We will go through the implementation step by step so you get a clear understanding of how it all fits together.
+The completed sample can be found in the [repository](https://github.com/apache/iggy/tree/server-0.10.0/examples/rust/src/getting-started). We will go through the implementation step by step so you get a clear understanding of how it all fits together.
 
 ## Starting the Iggy server
 
@@ -59,12 +59,6 @@ cd iggy-sample
 cargo add iggy@0.12.0
 cargo add tokio --features macros,rt-multi-thread,time
 mkdir -p src/bin
-```
-
-Until the release packages are published, use the SDK from the same release candidate as the server. Replace the `iggy` dependency in `Cargo.toml` with:
-
-```toml
-iggy = { git = "https://github.com/apache/iggy", tag = "server-0.10.0-rc.1" }
 ```
 
 Save the producer in `src/bin/producer.rs` and the consumer in `src/bin/consumer.rs`. The programs use resource names, so they do not depend on the IDs assigned to other streams.

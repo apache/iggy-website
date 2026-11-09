@@ -21,7 +21,7 @@ cargo run -p iggy-gateway-kafka
 
 Use these credentials only for local development. In a deployment, provision a separate bridge account with the required permissions. A transient connection failure retries at startup for up to 60 seconds. Bad credentials or missing required permissions stop startup. The gateway does not silently switch back to storage-free responses.
 
-The [Docker Compose example](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/gateways/kafka/docker-compose.yml) starts a local Iggy server and gateway. Review its image selection and development credentials before running it. The gateway image is `apache/iggy-kafka-gateway`.
+The [Docker Compose example](https://github.com/apache/iggy/blob/server-0.10.0/gateways/kafka/docker-compose.yml) starts a local Iggy server and gateway. Review its image selection and development credentials before running it. The gateway image is `apache/iggy-kafka-gateway`.
 
 ## Create, produce and consume
 
@@ -54,7 +54,7 @@ Topic auto-creation is disabled by default. Enable `IGGY_KAFKA_AUTO_CREATE_TOPIC
 
 The gateway supports Produce, Fetch, ListOffsets, Metadata, topic creation and deletion, partition additions, and topic retention changes. Consumer group APIs support membership, rebalances, static membership, offset commits, group inspection and offset deletion. It also supports ApiVersions, InitProducerId and DescribeCluster.
 
-Topic configuration changes support `retention.ms`. The gateway is not a complete Kafka broker implementation. Unsupported API keys and most unsupported versions close the connection. ApiVersions has a discovery error response for unsupported versions. Use the [protocol coverage](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/gateways/kafka/docs/SCOPE.md) for exact API version ranges.
+Topic configuration changes support `retention.ms`. The gateway is not a complete Kafka broker implementation. Unsupported API keys and most unsupported versions close the connection. ApiVersions has a discovery error response for unsupported versions. Use the [protocol coverage](https://github.com/apache/iggy/blob/server-0.10.0/gateways/kafka/docs/SCOPE.md) for exact API version ranges.
 
 Kafka offsets identify the next record to read. The gateway stores externally managed group offsets in Iggy. These are separate from native Iggy consumer group membership. Deleting a Kafka topic deletes its backing Iggy topic, but retains the stream.
 
@@ -74,7 +74,7 @@ Listeners support `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT` and `SASL_SSL`. SASL uses
 
 Data operations run as the bridge's Iggy account. Authentication does not provide complete per-principal data authorization in this release. In particular, CreateTopics does not yet apply the principal management gate. Other topic management operations and offset deletion add principal permission checks when the listener identifies a user. Do not expose an unauthenticated listener as a tenant-isolation boundary.
 
-Configure `metadata.partitions_max` on Iggy to bound topic creation. Its default is zero, which means no cap. DescribeAcls presents Iggy permissions, but CreateAcls and DeleteAcls are not supported. The [authentication reference](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/gateways/kafka/docs/AUTHENTICATION.md) describes the exact limits.
+Configure `metadata.partitions_max` on Iggy to bound topic creation. Its default is zero, which means no cap. DescribeAcls presents Iggy permissions, but CreateAcls and DeleteAcls are not supported. The [authentication reference](https://github.com/apache/iggy/blob/server-0.10.0/gateways/kafka/docs/AUTHENTICATION.md) describes the exact limits.
 
 ## Listener and bridge configuration
 
@@ -98,7 +98,7 @@ Configure `metadata.partitions_max` on Iggy to bound topic creation. Its default
 
 Do not mix `LISTENERS` with the single-listener advertised host/port or SASL toggle. Use matching `ADVERTISED_LISTENERS`. TLS needs `IGGY_KAFKA_TLS_CERT_FILE` and `IGGY_KAFKA_TLS_KEY_FILE`. The bridge hop uses `IGGY_KAFKA_IGGY_TLS_ENABLED`, `IGGY_KAFKA_IGGY_TLS_DOMAIN` and `IGGY_KAFKA_IGGY_TLS_CA_FILE`.
 
-The [gateway configuration reference](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/gateways/kafka/README.md) also lists timeouts, TLS reload, client-certificate mapping, authentication capacity and producer session expiry.
+The [gateway configuration reference](https://github.com/apache/iggy/blob/server-0.10.0/gateways/kafka/README.md) also lists timeouts, TLS reload, client-certificate mapping, authentication capacity and producer session expiry.
 
 ## Run several gateways
 
@@ -108,4 +108,4 @@ With the bridge and broker list configured, the shared coordinator log is enable
 
 The coordinator log uses 16 partitions. The owner of partition zero is the controller for topic management. Other gateways return `NOT_CONTROLLER`, and the Kafka admin client follows it. After a gateway fails, another gateway takes over its assigned groups once the Iggy session expires and ownership moves.
 
-Use consistent coordinator-log configuration across gateways. With it disabled, the gateway with the lowest node ID coordinates all groups, and groups wait while it is down. See the [multi-gateway deployment reference](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/gateways/kafka/README.md#several-gateways-4515) for permissions and takeover timing.
+Use consistent coordinator-log configuration across gateways. With it disabled, the gateway with the lowest node ID coordinates all groups, and groups wait while it is down. See the [multi-gateway deployment reference](https://github.com/apache/iggy/blob/server-0.10.0/gateways/kafka/README.md#several-gateways-4515) for permissions and takeover timing.

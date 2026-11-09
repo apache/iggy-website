@@ -5,7 +5,7 @@ description: "Write messages from Iggy streams into SurrealDB over the HTTP API,
 
 The SurrealDB sink connector writes messages from Iggy streams into SurrealDB over the HTTP API. Each poll is split into chunks of at most `batch_size` messages, with one SurrealQL bulk `INSERT IGNORE ... RETURN NONE` for each chunk containing valid records. Every record gets a deterministic record id derived from stream, topic, partition, offset, and message id, so replaying the same identities leaves existing records untouched. Messages are not buffered across polls.
 
-This page is a curated subset of the documentation. The canonical reference is the upstream [surrealdb_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/surrealdb_sink) in the `apache/iggy` repository.
+This page is a curated subset of the documentation. The canonical reference is the upstream [surrealdb_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/surrealdb_sink) in the `apache/iggy` repository.
 
 ## Configuration
 
@@ -84,7 +84,7 @@ curl --fail --user root:root -H 'Accept: application/json' -H 'Surreal-NS: iggy'
 | `payload_format` | string | `auto` | `auto`, `json`, `text`, `base64`, or `binary` (alias for `base64`) |
 | `include_metadata` | bool | `true` | Store stream/topic/partition/offset/timestamp/schema fields |
 
-The `include_headers`, `include_checksum`, and `include_origin_timestamp` flags also default to `true` and work independently of `include_metadata`. Retry and timeout options are `query_timeout` (`30s` per HTTP request), `max_retries` (`3` total write attempts, with `0` raised to `1`), `retry_delay` (`100ms`), and `max_retry_delay` (`5s`). Invalid duration strings log a warning and fall back to `1s`. Zero durations are accepted. The maximum delay is raised to the base delay if configured smaller. `verbose_logging` defaults to `false` and raises per-poll submission logs from debug to info. See the upstream [surrealdb_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/surrealdb_sink) for the full table.
+The `include_headers`, `include_checksum`, and `include_origin_timestamp` flags also default to `true` and work independently of `include_metadata`. Retry and timeout options are `query_timeout` (`30s` per HTTP request), `max_retries` (`3` total write attempts, with `0` raised to `1`), `retry_delay` (`100ms`), and `max_retry_delay` (`5s`). Invalid duration strings log a warning and fall back to `1s`. Zero durations are accepted. The maximum delay is raised to the base delay if configured smaller. `verbose_logging` defaults to `false` and raises per-poll submission logs from debug to info. See the upstream [surrealdb_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/surrealdb_sink) for the full table.
 
 Namespace, database and table names must start with an ASCII letter or underscore and contain only ASCII letters, digits and underscores. Endpoint URLs cannot contain credentials, a path beyond `/`, a query or a fragment. An explicit `http://` or `https://` scheme takes precedence over `use_tls`. Payload-format and authentication-scope names are case-insensitive. Unknown values prevent startup.
 

@@ -29,7 +29,7 @@ Iggy's replication quorum is not a strict majority for every group size:
 | 5 | 3 | 3 |
 | 6 | 3 | 4 |
 
-Except for two replicas, the replication quorum is `min(ceil(n / 2), 3)` and the view-change quorum is `n - replication_quorum + 1`. Two replicas require both for either quorum. The quorums therefore intersect. These are the [implemented quorum rules](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/consensus/src/impls.rs), not a configurable acknowledgement count.
+Except for two replicas, the replication quorum is `min(ceil(n / 2), 3)` and the view-change quorum is `n - replication_quorum + 1`. Two replicas require both for either quorum. The quorums therefore intersect. These are the [implemented quorum rules](https://github.com/apache/iggy/blob/server-0.10.0/core/consensus/src/impls.rs), not a configurable acknowledgement count.
 
 ## Replicated completion
 
@@ -70,4 +70,4 @@ Use `durability=persisted` when acknowledged messages must be recoverable after 
 
 Neither policy turns HTTP `ack=none` or a poll's auto-commit into an awaited durable result. See [Which responses prove completion](/docs/server/durability#which-responses-prove-completion).
 
-The storage mechanisms are implemented in the [partition persistence worker](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/partitions/src/persistence.rs) and [prepare journal](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/journal/src/partition_journal.rs). The [crash-recovery tests](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/integration/tests/cluster/crash_durability.rs) exercise acknowledged persisted messages and offsets below ordinary flush thresholds, on both a singleton and a three-replica cluster.
+The storage mechanisms are implemented in the [partition persistence worker](https://github.com/apache/iggy/blob/server-0.10.0/core/partitions/src/persistence.rs) and [prepare journal](https://github.com/apache/iggy/blob/server-0.10.0/core/journal/src/partition_journal.rs). The [crash-recovery tests](https://github.com/apache/iggy/blob/server-0.10.0/core/integration/tests/cluster/crash_durability.rs) exercise acknowledged persisted messages and offsets below ordinary flush thresholds, on both a singleton and a three-replica cluster.

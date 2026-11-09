@@ -3,7 +3,7 @@ title: Go SDK
 description: "The Go SDK, a blocking client speaking the VSR wire protocol over TCP, and which servers it pairs with."
 ---
 
-The Iggy Go SDK is a client library for interacting with the Iggy server from Go applications. It is a blocking client that speaks the VSR (Viewstamped Replication) wire protocol over TCP, with or without TLS. The package is available on [pkg.go.dev](https://pkg.go.dev/github.com/apache/iggy/foreign/go) and the source code lives in [foreign/go](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/go).
+The Iggy Go SDK is a client library for interacting with the Iggy server from Go applications. It is a blocking client that speaks the VSR (Viewstamped Replication) wire protocol over TCP, with or without TLS. The package is available on [pkg.go.dev](https://pkg.go.dev/github.com/apache/iggy/foreign/go) and the source code lives in [foreign/go](https://github.com/apache/iggy/tree/server-0.10.0/foreign/go).
 
 ## Server compatibility
 
@@ -27,7 +27,7 @@ For unreleased changes, use the local SDK replacement shown in the [repository e
 
 ## Quick start
 
-The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/go/getting-started). Stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
+The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/server-0.10.0/examples/go/getting-started). Stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
 
 Run the server from the repository root with disposable development data and no root credential overrides:
 
@@ -240,4 +240,4 @@ The reader joins, refreshes assignments and leaves on `Close`. Its default wait 
 
 ## Examples
 
-A runnable getting-started example with producer, consumer, and TLS flags lives in [examples/go](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/go). See the [examples page](/docs/sdk/go/examples) for how to run it.
+A runnable getting-started example with producer, consumer, and TLS flags lives in [examples/go](https://github.com/apache/iggy/tree/server-0.10.0/examples/go). See the [examples page](/docs/sdk/go/examples) for how to run it.

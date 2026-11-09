@@ -68,10 +68,10 @@ Historical startup screenshot from server 0.5.0. See [configuration](/docs/serve
 | Python | [apache-iggy](https://pypi.org/project/apache-iggy/) | PyPI |
 | Node.js | [apache-iggy](https://www.npmjs.com/package/apache-iggy) | npm |
 | Go | [iggy-go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) | pkg.go.dev |
-| PHP | [apache/iggy-php](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/php) | GitHub (source build) |
-| C++ | [iggy-cpp](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/cpp) | Source archive |
+| PHP | [apache/iggy-php](https://github.com/apache/iggy/tree/server-0.10.0/foreign/php) | GitHub (source build) |
+| C++ | [iggy-cpp](https://github.com/apache/iggy/tree/server-0.10.0/foreign/cpp) | Source archive |
 
-| Swift | [Iggy](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/swift) | Swift Package Manager |
+| Swift | [Iggy](https://github.com/apache/iggy/tree/server-0.10.0/foreign/swift) | Swift Package Manager |
 
 ## CLI
 
@@ -116,7 +116,7 @@ For the root Compose build, run the included CLI with `docker exec -it iggy-serv
 
 Keep in mind that running the container on operating systems other than Linux, where the Docker is running in the VM, might result in the performance degradation.
 
-Also, when running the container, **make sure to include the additional capabilities**, as you can find in [docker-compose](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/docker-compose.yml) file:
+Also, when running the container, **make sure to include the additional capabilities**, as you can find in [docker-compose](https://github.com/apache/iggy/blob/server-0.10.0/docker-compose.yml) file:
 
 ```yml
 cap_add:
@@ -137,7 +137,7 @@ docker run --cap-add=SYS_NICE --security-opt seccomp=unconfined --ulimit memlock
 
 ### Helm Charts
 
-Helm charts for Kubernetes deployment are available in the [repository](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/helm/charts/iggy). The chart includes templates for Deployment, Service, ServiceAccount, Ingress, PersistentVolumeClaim, ServiceMonitor (for Prometheus), and root user credentials Secret.
+Helm charts for Kubernetes deployment are available in the [repository](https://github.com/apache/iggy/tree/server-0.10.0/helm/charts/iggy). The chart includes templates for Deployment, Service, ServiceAccount, Ingress, PersistentVolumeClaim, ServiceMonitor (for Prometheus), and root user credentials Secret.
 
 ### Versioning
 

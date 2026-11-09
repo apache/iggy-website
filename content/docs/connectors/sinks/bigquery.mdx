@@ -68,4 +68,4 @@ NUMERIC and BIGNUMERIC values must fit the declared precision and scale without 
 
 A row that cannot be encoded or accepted is logged and dropped while other rows can proceed. Transient request failures retry with jittered exponential backoff. The `_default` stream does not provide exactly-once append semantics. A lost response can lead to duplicate rows.
 
-The runtime commits offsets on read and does not replay a failed sink callback. A successful processed count does not prove that every row reached BigQuery. Preserve Iggy metadata when downstream deduplication or reconciliation is required. See the [source reference](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/connectors/sinks/bigquery_sink/README.md) for type mappings and row-error handling.
+The runtime commits offsets on read and does not replay a failed sink callback. A successful processed count does not prove that every row reached BigQuery. Preserve Iggy metadata when downstream deduplication or reconciliation is required. See the [source reference](https://github.com/apache/iggy/blob/server-0.10.0/core/connectors/sinks/bigquery_sink/README.md) for type mappings and row-error handling.

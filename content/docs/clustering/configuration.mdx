@@ -3,7 +3,7 @@ title: Cluster Configuration
 description: Reference for the [cluster] settings, consensus timing, and node roster
 ---
 
-All clustering settings live in the `[cluster]` section of the server configuration. The authoritative defaults with detailed comments are in [`core/server/config.toml`](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/server/config.toml). Every value can also be set through an `IGGY_`-prefixed environment variable, for example `IGGY_CLUSTER_ENABLED=true` or `IGGY_CLUSTER_NODES_0_IP=10.0.1.5`.
+All clustering settings live in the `[cluster]` section of the server configuration. The authoritative defaults with detailed comments are in [`core/server/config.toml`](https://github.com/apache/iggy/blob/server-0.10.0/core/server/config.toml). Every value can also be set through an `IGGY_`-prefixed environment variable, for example `IGGY_CLUSTER_ENABLED=true` or `IGGY_CLUSTER_NODES_0_IP=10.0.1.5`.
 
 With clustering enabled, the server validates the section at boot and **refuses to start** on an invalid value, printing the rule that failed. The repair chunk limit and superblock failure timeout are validated even when clustering is disabled.
 

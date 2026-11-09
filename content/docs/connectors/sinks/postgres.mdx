@@ -5,7 +5,7 @@ description: "Store messages from Iggy topics in a PostgreSQL table, with option
 
 The PostgreSQL sink connector consumes messages from Iggy topics and stores them in a PostgreSQL table, with optional automatic table creation and configurable payload storage.
 
-This page is a curated subset of the documentation. The canonical reference, including SQL query recipes for each payload format, is the upstream [postgres_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/postgres_sink) in the `apache/iggy` repository.
+This page is a curated subset of the documentation. The canonical reference, including SQL query recipes for each payload format, is the upstream [postgres_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/postgres_sink) in the `apache/iggy` repository.
 
 ## Features
 
@@ -134,7 +134,7 @@ FROM iggy_messages
 WHERE iggy_stream = 'user_events';
 ```
 
-For a JSONB query example, a TEXT search example, and recommended indexes, see the upstream [postgres_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/postgres_sink).
+For a JSONB query example, a TEXT search example, and recommended indexes, see the upstream [postgres_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/postgres_sink).
 
 ## Delivery Semantics
 

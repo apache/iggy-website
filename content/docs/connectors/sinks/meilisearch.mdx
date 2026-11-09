@@ -5,7 +5,7 @@ description: "Index messages from Iggy streams as documents in a Meilisearch ind
 
 The Meilisearch sink connector consumes messages from Iggy streams and indexes them as documents in a Meilisearch index through the official Rust SDK. It can create the index on startup and waits for Meilisearch indexing tasks to complete by default, so task failures surface as connector errors.
 
-This page is a curated subset of the documentation. The canonical reference is the upstream [meilisearch_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/meilisearch_sink) in the `apache/iggy` repository.
+This page is a curated subset of the documentation. The canonical reference is the upstream [meilisearch_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/meilisearch_sink) in the `apache/iggy` repository.
 
 ## Configuration
 
@@ -67,7 +67,7 @@ Create the Iggy resources and send a document:
 | `wait_for_tasks` | bool | `true` | Wait for indexing success or failure, bounded by `task_timeout` |
 | `timeout` | string | `30s` | Total deadline per retried SDK operation. Per attempt for health checks |
 
-Further options cover task polling (`task_timeout` `30s`, `task_poll_interval` `100ms`) and transient retries (`max_retries` `3`, `retry_delay` `500ms`, `max_retry_delay` `5s`, `max_open_retries` `5`). Both retry limits count retries after the first request, so `max_retries = 3` permits up to four attempts within the operation deadline. Backoff doubles from `retry_delay`, adds ±20% jitter and is capped at `max_retry_delay`. Reversed delay bounds are swapped. Invalid duration strings warn and fall back to `1s`. There is no single deadline for the whole startup sequence. See the upstream [meilisearch_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/meilisearch_sink) for details.
+Further options cover task polling (`task_timeout` `30s`, `task_poll_interval` `100ms`) and transient retries (`max_retries` `3`, `retry_delay` `500ms`, `max_retry_delay` `5s`, `max_open_retries` `5`). Both retry limits count retries after the first request, so `max_retries = 3` permits up to four attempts within the operation deadline. Backoff doubles from `retry_delay`, adds ±20% jitter and is capped at `max_retry_delay`. Reversed delay bounds are swapped. Invalid duration strings warn and fall back to `1s`. There is no single deadline for the whole startup sequence. See the upstream [meilisearch_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/meilisearch_sink) for details.
 
 ## Document Mapping
 

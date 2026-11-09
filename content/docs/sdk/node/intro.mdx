@@ -3,7 +3,7 @@ title: Node.js SDK
 description: "The Node.js and TypeScript SDK, from installation to keeping client and server versions in step."
 ---
 
-The Iggy Node.js SDK is a client library that allows you to interact with the Iggy API from your Node.js and TypeScript applications. It communicates with the Iggy server over TCP or TLS using the binary protocol. The package is available on [npm](https://www.npmjs.com/package/apache-iggy) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/node).
+The Iggy Node.js SDK is a client library that allows you to interact with the Iggy API from your Node.js and TypeScript applications. It communicates with the Iggy server over TCP or TLS using the binary protocol. The package is available on [npm](https://www.npmjs.com/package/apache-iggy) and the source code can be found on [GitHub](https://github.com/apache/iggy/tree/server-0.10.0/foreign/node).
 
 These docs target server **0.10.0** and Node SDK **0.11.0**. The Node package 0.8.0 uses the older protocol. The current SDK speaks only the VSR wire protocol and doesn't fall back to older formats.
 
@@ -164,7 +164,7 @@ The client constructor accepts a few options:
 - **heartbeatInterval**: the client pings the server every 5 seconds by default. `0` disables heartbeats. When server heartbeat eviction is enabled, silent consumer-group members can be evicted, so keep it well below the server's heartbeat timeout.
 - **maxResponseFrameSize**: response frames larger than this limit (default 64 MiB) are rejected and close the connection. Raise it when polling very large batches.
 - **poolSize**: the client currently supports exactly one pooled connection. `min`/`max` above 1 throw.
-- **TLS**: set `transport: 'TLS'` and pass Node `tls.ConnectionOptions` in `options`. See the [tcp-tls example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/node/src/tcp-tls).
+- **TLS**: set `transport: 'TLS'` and pass Node `tls.ConnectionOptions` in `options`. See the [tcp-tls example](https://github.com/apache/iggy/tree/server-0.10.0/examples/node/src/tcp-tls).
 
 ## Beyond the basics
 
@@ -173,8 +173,8 @@ The client constructor accepts a few options:
 - **Administration**: users, personal access tokens, offsets, partitions, segments, and cluster metadata are all available on the client.
 - **Errors**: the package exports `ResponseError`, `DeserializeError`, `ProtocolFrameError`, and `VsrEvictionError` for precise error handling.
 
-See the [foreign/node README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/node) for the full API walkthrough.
+See the [foreign/node README](https://github.com/apache/iggy/tree/server-0.10.0/foreign/node) for the full API walkthrough.
 
 ## Examples
 
-Examples are available in the [examples/node](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/node) directory, written in TypeScript. See [Examples](/docs/sdk/node/examples) for the list and how to run them.
+Examples are available in the [examples/node](https://github.com/apache/iggy/tree/server-0.10.0/examples/node) directory, written in TypeScript. See [Examples](/docs/sdk/node/examples) for the list and how to run them.
