@@ -33,4 +33,4 @@ User headers are preserved. With metadata enabled, the sink also adds `iggy_stre
 
 The sink pipelines publishes and waits for confirmations. Transient failures retry from the first unconfirmed message. An in-flight tail can already be delivered, so retries can duplicate it. An unroutable mandatory publish fails the batch and forces a new connection before the next poll.
 
-The runtime commits Iggy offsets on read and does not replay a failed callback after its retry budget. Publisher confirmations do not provide an end-to-end exactly-once guarantee. See the [source reference](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/connectors/sinks/rabbitmq_sink/README.md).
+The runtime commits Iggy offsets on read and does not replay a failed callback after its retry budget. Publisher confirmations do not provide an end-to-end exactly-once guarantee. See the [source reference](https://github.com/apache/iggy/blob/server-0.10.0/core/connectors/sinks/rabbitmq_sink/README.md).

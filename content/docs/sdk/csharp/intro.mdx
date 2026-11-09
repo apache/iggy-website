@@ -3,7 +3,7 @@ title: C# SDK
 description: "The async-first C# SDK for .NET applications over TCP and HTTP, from installation to creating a client."
 ---
 
-The Iggy SDK for C# is a modern, async-first client library for interacting with an Iggy message streaming server from your .NET applications. It supports TCP and HTTP transports. The package is available on [NuGet](https://www.nuget.org/packages/Apache.Iggy/) and the source code lives on [GitHub](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/csharp).
+The Iggy SDK for C# is a modern, async-first client library for interacting with an Iggy message streaming server from your .NET applications. It supports TCP and HTTP transports. The package is available on [NuGet](https://www.nuget.org/packages/Apache.Iggy/) and the source code lives on [GitHub](https://github.com/apache/iggy/tree/server-0.10.0/foreign/csharp).
 
 The SDK is built around the `IIggyClient` interface, which aggregates every feature (publishing, consuming, stream/topic management, users, offsets, consumer groups, and system operations). For the low-level per-call API and the full configuration reference, see the [Guide](/docs/sdk/csharp/guide). For the ergonomic, batteries-included producer/consumer abstractions, see the [High-level SDK](/docs/sdk/csharp/high-level-sdk).
 
@@ -15,7 +15,7 @@ dotnet add package Apache.Iggy --version 0.10.0
 
 The SDK targets .NET 8 and .NET 10 (`net8.0` and `net10.0`). Version `0.10.0` matches the server 0.10.0 protocol and includes both topic durability options. Version `0.8.0` uses the older TCP framing. When building from source, use the server and SDK from the same checkout.
 
-To use the source SDK with these release-preparation examples, run from the Iggy checkout root:
+To use the source SDK with these examples, run from the Iggy checkout root:
 
 ```bash
 dotnet new console --name IggySample --framework net10.0

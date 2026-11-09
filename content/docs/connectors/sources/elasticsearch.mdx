@@ -84,7 +84,7 @@ A custom `query` must be a structured object. In TOML that means nested tables (
 value = "error"
 ```
 
-The connector file remains TOML. `plugin_config_format = "json"` only selects the default format of the HTTP API's plugin-config response. It does not change how the local file is parsed. The [upstream config example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sources/elasticsearch_source) also uses TOML with a structured `[plugin_config]` table.
+The connector file remains TOML. `plugin_config_format = "json"` only selects the default format of the HTTP API's plugin-config response. It does not change how the local file is parsed. The [upstream config example](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sources/elasticsearch_source) also uses TOML with a structured `[plugin_config]` table.
 
 ## How Polling Works
 

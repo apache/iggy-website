@@ -68,4 +68,4 @@ HTTP 200 confirms an in-memory enqueue. It does not confirm an Iggy write or dur
 
 The source retains a negatively acknowledged batch and retries it with bounded backoff. There is no fixed NACK stop limit by default. Set `max_consecutive_nacks` only when accepted webhooks can be replayed externally after a restart. A stopped source can leave a buffer that no task drains.
 
-Forward the provider's delivery ID and use it for application deduplication. An Iggy message ID stays stable for a batch replay, but a new HTTP request receives a new ID. The [source reference](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/connectors/sources/http_source/README.md) describes endpoint management, persistence and metrics.
+Forward the provider's delivery ID and use it for application deduplication. An Iggy message ID stays stable for a batch replay, but a new HTTP request receives a new ID. The [source reference](https://github.com/apache/iggy/blob/server-0.10.0/core/connectors/sources/http_source/README.md) describes endpoint management, persistence and metrics.

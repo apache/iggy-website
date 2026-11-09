@@ -3,7 +3,7 @@ title: PHP SDK
 description: "The experimental PHP SDK, a native extension wrapping the Rust SDK, and how to build it from source."
 ---
 
-The Iggy PHP SDK is a native PHP extension built in Rust with [ext-php-rs](https://github.com/davidcole1340/ext-php-rs). It wraps the Rust SDK and exposes a synchronous `Iggy\Client`: each call drives the extension's internal Tokio runtime and blocks the calling PHP thread until the operation completes. The source code is available on [GitHub](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/php).
+The Iggy PHP SDK is a native PHP extension built in Rust with [ext-php-rs](https://github.com/davidcole1340/ext-php-rs). It wraps the Rust SDK and exposes a synchronous `Iggy\Client`: each call drives the extension's internal Tokio runtime and blocks the calling PHP thread until the operation completes. The source code is available on [GitHub](https://github.com/apache/iggy/tree/server-0.10.0/foreign/php).
 
 The extension is experimental. It's defined as the `apache/iggy-php` composer package (`php-ext` type). To use it today, build it from the repository source.
 
@@ -138,7 +138,7 @@ Retained mutation errors expose an operation ID. Use `resolveOperation()` on the
 
 ## Examples
 
-Working examples are available in the [examples/php](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/php) directory. They read `IGGY_CONNECTION_STRING` for a binary transport with credentials. Otherwise they connect over TCP using `IGGY_HOST` and `IGGY_PORT`, then log in with the literal `IGGY_USERNAME` and `IGGY_PASSWORD` values:
+Working examples are available in the [examples/php](https://github.com/apache/iggy/tree/server-0.10.0/examples/php) directory. They read `IGGY_CONNECTION_STRING` for a binary transport with credentials. Otherwise they connect over TCP using `IGGY_HOST` and `IGGY_PORT`, then log in with the literal `IGGY_USERNAME` and `IGGY_PASSWORD` values:
 
 ```bash
 # From the repository root

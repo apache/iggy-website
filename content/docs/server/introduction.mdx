@@ -9,7 +9,7 @@ Iggy server is the most important part of the system as it's responsible for han
 
 The releases are published to GitHub and can be found [here](https://github.com/apache/iggy/tags). The official Docker images can be found [here](https://hub.docker.com/r/apache/iggy), use `docker pull apache/iggy:0.10.0`, or `apache/iggy:latest` for the newest stable release.
 
-If you compile the source code in release mode, linking takes longer because [LTO](https://doc.rust-lang.org/cargo/reference/profiles.html#lto) is enabled in the `[profile.release]` section of the workspace [Cargo.toml](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/Cargo.toml).
+If you compile the source code in release mode, linking takes longer because [LTO](https://doc.rust-lang.org/cargo/reference/profiles.html#lto) is enabled in the `[profile.release]` section of the workspace [Cargo.toml](https://github.com/apache/iggy/blob/server-0.10.0/Cargo.toml).
 
 ## System requirements
 
@@ -37,7 +37,7 @@ Configuration comes from the TOML file named by `IGGY_CONFIG_PATH`, or `core/ser
 
 A fresh standalone server requires `IGGY_ROOT_USERNAME` and `IGGY_ROOT_PASSWORD`, or the development flag. It never generates a password. A cluster replica without credentials waits for the root account to be replicated. Provision credentials on every replica for first cluster boot.
 
-The HTTP API endpoints can be found in [server.http](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/server/server.http) file, which can be used with [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension for VS Code.
+The HTTP API endpoints can be found in [server.http](https://github.com/apache/iggy/blob/server-0.10.0/core/server/server.http) file, which can be used with [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension for VS Code.
 
 In order to see the detailed logs from the server, run it with `RUST_LOG=trace` environment variable.
 

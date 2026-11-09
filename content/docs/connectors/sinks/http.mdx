@@ -5,7 +5,7 @@ description: "Deliver messages from Iggy streams to any HTTP endpoint, from webh
 
 The HTTP Sink connector consumes messages from Iggy streams and delivers them to any HTTP endpoint: webhooks, REST APIs, serverless functions, or SaaS integrations. This is the transport-level, generic HTTP connector. It's distinct from sinks such as Elasticsearch or Quickwit, which use HTTP internally to talk to one specific system. You bring the URL, headers, and batching strategy, and the sink handles transport, retries, and metadata wrapping.
 
-This page is a curated subset of the documentation. The canonical reference, including the full configuration table, deployment patterns, and performance analysis, is the upstream [http_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/http_sink) in the `apache/iggy` repository.
+This page is a curated subset of the documentation. The canonical reference, including the full configuration table, deployment patterns, and performance analysis, is the upstream [http_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/http_sink) in the `apache/iggy` repository.
 
 ## Configuration
 
@@ -75,7 +75,7 @@ Create the Iggy resources and send a JSON message, then start the connector runt
 | `headers` | table | `{}` | Custom HTTP headers (e.g. `Authorization`) |
 | `timeout` | string | `30s` | Request timeout (e.g. `10s`, `500ms`) |
 
-Further options cover retries (`max_retries`, `retry_delay`, `retry_backoff_multiplier`, `max_retry_delay`), success status codes, payload size limits, TLS, connection pooling, health checks, and verbose logging. See the upstream [http_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/http_sink) for the full list with defaults.
+Further options cover retries (`max_retries`, `retry_delay`, `retry_backoff_multiplier`, `max_retry_delay`), success status codes, payload size limits, TLS, connection pooling, health checks, and verbose logging. See the upstream [http_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/http_sink) for the full list with defaults.
 
 The body size limit defaults to 10 MiB and applies after serialization: per message in `individual`/`raw`, or to the whole batch in `ndjson`/`json_array`. Setting `max_payload_size_bytes = 0` disables it. Oversized bodies fail without being sent. Optional startup health checks use the same URL, retry policy and success codes, with `HEAD` as the default method.
 
@@ -210,7 +210,7 @@ One `iggy-connectors` runtime process can host many connectors: the local config
 
 Throughput is dominated by batch-mode choice: the runtime calls `consume()` sequentially within each topic task, so a full N-message batch uses N requests in `individual`/`raw`, or one in `ndjson`/`json_array`, before retries or skipped messages. Connection pooling and HTTP keep-alive are enabled by default. `max_connections` limits idle connections retained per host, not concurrent requests. Topic tasks can issue requests concurrently. Each topic awaits its own batch before continuing. Tune pooling and `batch_length` for the receiving service.
 
-For multi-instance deployment patterns (Docker, Kubernetes, fan-out topologies), connection pool tuning, and full performance analysis, see the upstream [http_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/http_sink).
+For multi-instance deployment patterns (Docker, Kubernetes, fan-out topologies), connection pool tuning, and full performance analysis, see the upstream [http_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/http_sink).
 
 ## Known Limitations
 
@@ -222,4 +222,4 @@ For multi-instance deployment patterns (Docker, Kubernetes, fan-out topologies),
 - **No mTLS client certificates**: terminate mTLS at a sidecar proxy for production use.
 - **Plaintext secrets in config**: header values are stored verbatim in `config.toml`. Mount or generate a protected connector TOML file containing the required header values before starting the runtime.
 
-For the complete list and implementation context, see the upstream [http_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/http_sink#known-limitations).
+For the complete list and implementation context, see the upstream [http_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/http_sink#known-limitations).

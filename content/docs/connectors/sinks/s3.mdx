@@ -5,7 +5,7 @@ description: "Write messages from Iggy streams to Amazon S3 and S3-compatible ob
 
 The S3 sink connector writes messages from Iggy streams to Amazon S3 and S3-compatible object stores (MinIO, Cloudflare R2, DigitalOcean Spaces, Backblaze B2). Messages are buffered in memory and uploaded as files, rotated by size or message count, under configurable path templates with offset ranges in the object names.
 
-This page is a curated subset of the documentation. The canonical reference is the upstream [s3_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/s3_sink) in the `apache/iggy` repository.
+This page is a curated subset of the documentation. The canonical reference is the upstream [s3_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/s3_sink) in the `apache/iggy` repository.
 
 ## Configuration
 
@@ -61,7 +61,7 @@ output_format = "json_lines"
 | `include_metadata` | bool | `true` | Include stream/topic/partition/offset/timestamp in JSON output |
 | `include_headers` | bool | `false` | Include available headers in JSON output, independently of metadata |
 
-Further options cover credentials (`access_key_id` / `secret_access_key`), retries (`max_attempts` defaults to `3`, `retry_delay` to `1s`), and `path_style` addressing (auto-enabled when `endpoint` is set, overridable with `false`). `max_retries` is an alias for `max_attempts`. `0` and `1` both make one outer upload attempt. Invalid retry durations prevent startup. `0s` is allowed. Output format names are case-insensitive, with `jsonl` and `jsonlines` aliases for `json_lines`. See the upstream [s3_sink README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sinks/s3_sink) for the full reference.
+Further options cover credentials (`access_key_id` / `secret_access_key`), retries (`max_attempts` defaults to `3`, `retry_delay` to `1s`), and `path_style` addressing (auto-enabled when `endpoint` is set, overridable with `false`). `max_retries` is an alias for `max_attempts`. `0` and `1` both make one outer upload attempt. Invalid retry durations prevent startup. `0s` is allowed. Output format names are case-insensitive, with `jsonl` and `jsonlines` aliases for `json_lines`. See the upstream [s3_sink README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sinks/s3_sink) for the full reference.
 
 Each stream/topic/partition has its own buffer, retained across polls. Rotation is checked after appending a complete formatted record. Size mode counts record bytes but excludes JSON newlines, commas and array brackets, so an object can exceed `max_file_size`. Message-count mode does not also enforce the size threshold. Uploads use one `PutObject`, with no multipart upload. Choose thresholds and message sizes that fit the [store's single-upload limit](https://docs.aws.amazon.com/AmazonS3/latest/userguide/upload-objects.html). There is no timer flush: a partial buffer waits until its threshold is reached or the connector closes.
 

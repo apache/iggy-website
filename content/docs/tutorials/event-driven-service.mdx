@@ -284,4 +284,4 @@ When a partition moves, the server stops the old owner polling it before handing
 
 The producer creates the stream and topic only if they are missing, so it can be run any number of times. A restarted service resumes from the group's stored offset. To start from nothing, stop the container, and `--rm` removes it along with its data.
 
-The service is the same consumer shape as the [high-level consumer example](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/examples/python/high-level/consumer.py) in the repository, with a JSON handler and signal handling added.
+The service is the same consumer shape as the [high-level consumer example](https://github.com/apache/iggy/blob/server-0.10.0/examples/python/high-level/consumer.py) in the repository, with a JSON handler and signal handling added.

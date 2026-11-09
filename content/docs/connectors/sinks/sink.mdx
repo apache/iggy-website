@@ -131,7 +131,7 @@ Also, when implementing the sink connector, make sure to use the `sink_connector
 
 And finally, each sink should have its own, custom configuration, which is passed along with the unique plugin ID via expected `new()` method.
 
-Use the [reference crate's Cargo.toml](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/connectors/sinks/stdout_sink/Cargo.toml) from the matching checkout, including `[lib] crate-type = ["cdylib", "lib"]` and its workspace dependency features. The Rust blocks through the `Sink` implementation below combine into `src/lib.rs`. The trait above is a separate API reference.
+Use the [reference crate's Cargo.toml](https://github.com/apache/iggy/blob/server-0.10.0/core/connectors/sinks/stdout_sink/Cargo.toml) from the matching checkout, including `[lib] crate-type = ["cdylib", "lib"]` and its workspace dependency features. The Rust blocks through the `Sink` implementation below combine into `src/lib.rs`. The trait above is a separate API reference.
 
 Start with the imports, then define the state, connector and configuration.
 
@@ -293,4 +293,4 @@ Produce JSON messages to this topic, for example with the [Random source](/docs/
 
 And that's all, enjoy using the sink connector!
 
-On a side note, if you'd like to produce the messages to the Iggy stream instead, you can implement your own **[Source connector](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sources)** too :)
+On a side note, if you'd like to produce the messages to the Iggy stream instead, you can implement your own **[Source connector](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sources)** too :)

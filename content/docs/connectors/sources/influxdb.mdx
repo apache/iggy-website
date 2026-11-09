@@ -5,7 +5,7 @@ description: "Poll InfluxDB on an interval and produce the resulting rows into a
 
 The InfluxDB source connector polls InfluxDB on an interval and produces the resulting rows as messages into an Iggy stream. It supports both InfluxDB V2 (OSS 2.x / Cloud, Flux queries) and InfluxDB V3 (Core / Enterprise, SQL queries), selected with the `version` option. An acknowledged timestamp cursor and row offset are stored in connector state. Restarts resume from that checkpoint, subject to the ordering and late-arrival limits below.
 
-This page is a curated subset of the documentation. The canonical reference, including the full cursor semantics and stuck-timestamp handling, is the upstream [influxdb_source README](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/connectors/sources/influxdb_source) in the `apache/iggy` repository.
+This page is a curated subset of the documentation. The canonical reference, including the full cursor semantics and stuck-timestamp handling, is the upstream [influxdb_source README](https://github.com/apache/iggy/tree/server-0.10.0/core/connectors/sources/influxdb_source) in the `apache/iggy` repository.
 
 ## Configuration
 

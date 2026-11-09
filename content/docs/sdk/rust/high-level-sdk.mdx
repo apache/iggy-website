@@ -162,7 +162,7 @@ Always await `consumer.shutdown()` before dropping it. Shutdown flushes automati
 
 `ReadError` identifies the failed partition and contains its underlying error. Recoverable read failures are retried. A history change, uncertain read or undecodable message can stop a partition. Inspect the error before calling `seek(partition_id, strategy)` to select a new start. A `skip` continuation lets an application deliberately move past a record it cannot decode.
 
-An uncertain committing read can require `abandon_operation` before seeking. Abandon does not undo a store. The [source consumer example](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/examples/rust/src/new-sdk/consumer/main.rs) shows explicit recovery choices.
+An uncertain committing read can require `abandon_operation` before seeking. Abandon does not undo a store. The [source consumer example](https://github.com/apache/iggy/blob/server-0.10.0/examples/rust/src/new-sdk/consumer/main.rs) shows explicit recovery choices.
 
 ## Idempotent producer
 

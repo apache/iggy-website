@@ -33,11 +33,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         tree={source.getPageTree()}
         {...docsOptions()}
         sidebar={{
-          banner: (
-            <div key="release-banner" className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
-              Apache Iggy 0.10.0 docs. Release preparation. Use matching source until packages are published.
-            </div>
-          ),
           footer: (
             <>
               <Link

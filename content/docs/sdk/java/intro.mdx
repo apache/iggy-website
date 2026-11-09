@@ -3,7 +3,7 @@ title: Java SDK
 description: "The Java SDK, with blocking and CompletableFuture clients over TCP, and which servers they pair with."
 ---
 
-The Iggy Java SDK is a client library for interacting with the Iggy server from Java applications. It provides a blocking client and an async client (based on `CompletableFuture`) over TCP, plus a blocking HTTP client. The artifact is published to [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy) and the source code lives in [foreign/java](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/java).
+The Iggy Java SDK is a client library for interacting with the Iggy server from Java applications. It provides a blocking client and an async client (based on `CompletableFuture`) over TCP, plus a blocking HTTP client. The artifact is published to [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy) and the source code lives in [foreign/java](https://github.com/apache/iggy/tree/server-0.10.0/foreign/java).
 
 ## Server compatibility
 
@@ -43,7 +43,7 @@ Check [Maven Central](https://central.sonatype.com/artifact/org.apache.iggy/iggy
 
 ## Quick start
 
-The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java/src/main/java/org/apache/iggy/examples/gettingstarted). Stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
+The snippets below follow the [getting-started example](https://github.com/apache/iggy/tree/server-0.10.0/examples/java/src/main/java/org/apache/iggy/examples/gettingstarted). Stream, topic, and partition IDs are **0-based**: the first partition of a topic is partition `0`.
 
 Start a development server using the [example setup](/docs/sdk/java/examples#starting-the-server), with `iggy`/`iggy` credentials, then run the producer before the consumer. Bootstrap credentials do not replace recovered credentials.
 
@@ -225,4 +225,4 @@ The TCP builders accept `fromConnectionString`. Only `iggy://` and `iggy+tcp://`
 
 ## Examples
 
-Runnable examples covering the async client, message headers and envelopes, multi-tenant setups, and TLS live in [examples/java](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/examples/java). See the [examples page](/docs/sdk/java/examples) for how to run them.
+Runnable examples covering the async client, message headers and envelopes, multi-tenant setups, and TLS live in [examples/java](https://github.com/apache/iggy/tree/server-0.10.0/examples/java). See the [examples page](/docs/sdk/java/examples) for how to run them.

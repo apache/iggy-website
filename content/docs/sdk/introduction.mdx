@@ -13,9 +13,9 @@ Iggy provides official client SDKs in multiple languages. The **Rust SDK** is th
 | Node.js | [apache-iggy](https://www.npmjs.com/package/apache-iggy) | npm | TCP | Yes |
 | Go | [iggy-go](https://pkg.go.dev/github.com/apache/iggy/foreign/go) | pkg.go.dev | TCP | Yes |
 | C# | [Apache.Iggy](https://www.nuget.org/packages/Apache.Iggy/) | NuGet | TCP, HTTP | Yes |
-| C++ | [iggy-cpp](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/cpp) | GitHub (WIP) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
-| PHP | [apache/iggy-php](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/php) | GitHub (source) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
-| Swift | [Iggy](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/foreign/swift) | Swift Package Manager | TCP with optional TLS | Yes |
+| C++ | [iggy-cpp](https://github.com/apache/iggy/tree/server-0.10.0/foreign/cpp) | GitHub (WIP) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
+| PHP | [apache/iggy-php](https://github.com/apache/iggy/tree/server-0.10.0/foreign/php) | GitHub (source) | TCP, QUIC, HTTP, WebSocket | Yes (Rust FFI) |
+| Swift | [Iggy](https://github.com/apache/iggy/tree/server-0.10.0/foreign/swift) | Swift Package Manager | TCP with optional TLS | Yes |
 
 Python, C++, and PHP wrap the Rust SDK, so they inherit all transport protocols when using connection strings. Java and C# implement TCP and HTTP natively. Go and Node.js currently support TCP *only*.
 
@@ -23,7 +23,7 @@ The Rust SDK is always the first to receive new features.
 
 ## Server compatibility
 
-Server 0.10.0 uses binary protocol 0.12.0. Upgrade clients and server together. There is no fallback to the 0.9 protocol. These are the component versions prepared for the upcoming release. Until publication, build the matching source release candidate.
+Server 0.10.0 uses binary protocol 0.12.0. Upgrade clients and server together. There is no fallback to the 0.9 protocol. The table lists the component versions released with each server version.
 
 | Component | Server 0.10.0 | Server 0.9.0 |
 | --- | --- | --- |

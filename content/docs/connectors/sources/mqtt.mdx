@@ -65,4 +65,4 @@ For QoS 1 and QoS 2, the source defers broker acknowledgements until Iggy accept
 
 The source returns no durable connector checkpoint. Recovery after restart depends on the broker retaining the MQTT session. MQTT packet IDs are temporary and cannot serve as durable deduplication keys. The source does not provide an end-to-end exactly-once guarantee, including when MQTT uses QoS 2.
 
-Select the destination topic's [durability](/docs/server/durability) before creation. An Iggy acknowledgement under `replicated` does not imply stable-storage persistence. The [MQTT source reference](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/core/connectors/sources/mqtt_source/README.md) includes broker setup and recovery examples.
+Select the destination topic's [durability](/docs/server/durability) before creation. An Iggy acknowledgement under `replicated` does not imply stable-storage persistence. The [MQTT source reference](https://github.com/apache/iggy/blob/server-0.10.0/core/connectors/sources/mqtt_source/README.md) includes broker setup and recovery examples.

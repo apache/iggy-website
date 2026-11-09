@@ -7,7 +7,7 @@ Apache Iggy replicates clusters with **Viewstamped Replication Revisited (VSR)**
 
 Clustering is built into the standard `iggy-server` binary. There's **no separate build, binary, or Cargo feature**: the same server runs single-node or clustered, and `cluster.enabled` in the configuration decides which one you get. Clustering is **disabled by default**.
 
-Read the [VSR paper used by the project](https://github.com/apache/iggy/blob/server-0.10.0-rc.1/assets/vsr.pdf) for the protocol specification.
+Read the [VSR paper used by the project](https://github.com/apache/iggy/blob/server-0.10.0/assets/vsr.pdf) for the protocol specification.
 
 > Iggy hasn't reached a 1.0 production release yet. The cluster protocol and configuration described here can still change between pre-release versions.
 
@@ -29,11 +29,11 @@ The main components are:
 
 | Component | Source | Responsibility |
 | --- | --- | --- |
-| Server | [`core/server`](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/server) | Sharded runtime, listeners, recovery, and request dispatch |
-| Consensus | [`core/consensus`](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/consensus) | VSR state machine, quorum, view changes, and timeouts |
-| Wire protocol | [`core/binary_protocol/src/consensus`](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/binary_protocol/src/consensus) | Fixed-size VSR headers and replica messages |
-| Simulator | [`core/simulator`](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/simulator) | Deterministic failures, delays, and network partitions |
-| Rust SDK | [`core/sdk`](https://github.com/apache/iggy/tree/server-0.10.0-rc.1/core/sdk) | VSR framing, sessions, retries, and leader redirection |
+| Server | [`core/server`](https://github.com/apache/iggy/tree/server-0.10.0/core/server) | Sharded runtime, listeners, recovery, and request dispatch |
+| Consensus | [`core/consensus`](https://github.com/apache/iggy/tree/server-0.10.0/core/consensus) | VSR state machine, quorum, view changes, and timeouts |
+| Wire protocol | [`core/binary_protocol/src/consensus`](https://github.com/apache/iggy/tree/server-0.10.0/core/binary_protocol/src/consensus) | Fixed-size VSR headers and replica messages |
+| Simulator | [`core/simulator`](https://github.com/apache/iggy/tree/server-0.10.0/core/simulator) | Deterministic failures, delays, and network partitions |
+| Rust SDK | [`core/sdk`](https://github.com/apache/iggy/tree/server-0.10.0/core/sdk) | VSR framing, sessions, retries, and leader redirection |
 
 ## Replication model
 
