@@ -49,7 +49,7 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 - Client components must be marked with `"use client"`.
 - Mermaid diagrams are supported in MDX via `src/components/mermaid.tsx` (client-rendered, theme-aware).
 - Blog frontmatter schema is defined in `source.config.ts` using Zod.
-- Node.js v24+ required (`.nvmrc`).
+- Node.js v26+ required (`.nvmrc`).
 - `.npmrc` sets `legacy-peer-deps=true`.
 - Commits follow conventional commits: `type(scope): subject`, e.g. `fix(docs): ...`.
 - `scripts/generate-docs-markdown.mjs` writes a Markdown copy of every docs page and blog post (its URL plus `.md`) before each dev and build run. `src/app/llms.txt/route.ts`, `src/app/llms-full.txt/route.ts` and `src/app/llms-full/[section]/route.ts` (one file per docs section) build on those copies, through `src/lib/llms.ts`. The copies keep code fences as written, so give every fence a language. Site-relative links become absolute.
