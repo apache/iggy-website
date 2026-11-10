@@ -1,0 +1,386 @@
+---
+title: "Use Kafka tools with Apache Iggy"
+description: Use your existing Kafka clients and tools with Apache Iggy through the Kafka gateway.
+author: justin
+tags: ["kafka", "gateway", "tutorial"]
+date: 2026-11-10
+---
+
+The Kafka gateway lets Kafka clients and tools work with Apache Iggy. It speaks the Kafka protocol and stores the data in Iggy, so the only change on the client side is the bootstrap address.
+
+This post shows how to start the gateway with an Iggy server, then connect `kcat`, the Kafka console tools, and Java and Python programs to it. You need Docker, git and `kcat` (`brew install kcat` on macOS, `apt install kcat` on Debian or Ubuntu), plus JDK 17 or later and Maven for the Java version, or Python 3.8 or later for the Python version.
+
+## What the gateway is
+
+The gateway is a separate server that listens for Kafka clients on port 9093 by default. It translates each Kafka request into calls to the Iggy server and replies in Kafka's format, so to a client it looks like a Kafka broker.
+
+```text
+                    Kafka wire (TCP 9093)              Iggy wire (TCP 8090)
+  Kafka client       ─────────────────────▶  gateway  ─────────────────────▶  iggy-server
+  (tools, Java, Python)                  iggy-gateway-kafka                  (real broker)
+```
+
+It supports producing, fetching, listing offsets, topic and partition management, topic configs, and consumer groups with committed offsets stored in Iggy. A Kafka topic maps to an Iggy topic of the same name, inside one Iggy stream called `kafka` by default. A record's value becomes the Iggy message payload, and its key and headers become Iggy user headers. That means a Kafka consumer can read a topic that an Iggy SDK producer wrote, and the other way round.
+
+The gateway ships as its own binary and Docker image, `apache/iggy-kafka-gateway`. The Iggy server needs no changes, but consumer group offsets need server 0.10.0 or later, or the `edge` image.
+
+## Start the gateway next to an Iggy server
+
+The Iggy repository has a Compose file that starts two containers: `iggy-server`, an Iggy server from the `apache/iggy:edge` image, and `iggy-gateway-kafka`, the gateway built from source with its bridge to Iggy switched on. Clone the repository:
+
+```bash
+git clone https://github.com/apache/iggy.git
+cd iggy/gateways/kafka
+```
+
+Then start both containers. The first start takes a few minutes while the gateway compiles:
+
+```bash
+docker compose up -d --build
+```
+
+Wait until `docker compose ps` shows both `iggy-server` and `iggy-gateway-kafka` as healthy. If Compose reports that a port is already in use, remove that port from the `iggy-server` service in `docker-compose.yml`, because this post only uses the gateway's port 9093.
+
+The Kafka tool commands below run in the `apache/kafka` container, so you don't need to install Kafka, and use `--network host` so they reach the gateway at `127.0.0.1:9093`, the same address `kcat` and the Java and Python programs use. On Docker Desktop, turn on host networking first, under Settings, Resources, Network (Docker Desktop 4.34 or later). If you have the Kafka tools installed on your machine, you can run them directly and drop the `docker run` prefix.
+
+## Create a topic and use the console tools
+
+Auto topic creation is off by default, so create the topic first. `kafka-topics.sh` sends a standard `CreateTopics` request, and the gateway creates the Iggy topic with three partitions.
+
+```bash
+docker run --rm --network host apache/kafka:3.9.0 \
+  /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9093 \
+  --create --topic orders --partitions 3
+```
+
+```text
+Created topic orders.
+```
+
+Produce three lines with the console producer:
+
+```bash
+printf 'order-1\norder-2\norder-3\n' | docker run --rm -i --network host apache/kafka:3.9.0 \
+  /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server 127.0.0.1:9093 --topic orders
+```
+
+Read them back with the console consumer:
+
+```bash
+docker run --rm --network host apache/kafka:3.9.0 \
+  /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server 127.0.0.1:9093 \
+  --topic orders --from-beginning --max-messages 3 \
+  --property print.partition=true --property print.offset=true
+```
+
+```text
+Partition:1	Offset:0	order-1
+Partition:1	Offset:1	order-2
+Partition:1	Offset:2	order-3
+Processed a total of 3 messages
+```
+
+The console producer sent all three lines to one partition, and the offsets are the ones Iggy assigned. Records without a key can go to any partition, so your run may show a different partition here, and different partitions and offsets in the next two sections.
+
+## Send keyed messages with kcat
+
+`kcat` splits each input line into a key and a value when you give it a delimiter. Records with the same key always go to the same partition, as they do on Kafka.
+
+```bash
+printf 'alice:paid\nbob:shipped\nalice:refunded\n' | kcat -b 127.0.0.1:9093 -P -t orders -K:
+```
+
+Read the topic from the start, printing each record's partition and offset:
+
+```bash
+kcat -b 127.0.0.1:9093 -C -t orders -o beginning -e -q -f 'p=%p o=%o key=%k value=%s\n'
+```
+
+```text
+p=1 o=0 key= value=order-1
+p=1 o=1 key= value=order-2
+p=1 o=2 key= value=order-3
+p=2 o=0 key=alice value=paid
+p=2 o=1 key=bob value=shipped
+p=2 o=2 key=alice value=refunded
+```
+
+The `-e` option makes `kcat` exit once it reaches the end of the topic. Because `kcat` hashes each key to pick its partition, the keyed records land on partition 2 on every run.
+
+## Read with a consumer group and check its lag
+
+Next, read the topic as a consumer group. The gateway runs the group protocol itself, so members join, get partitions assigned, and commit offsets, which are stored in Iggy. Start a `kcat` group consumer, and stop it with Ctrl-C once the records have printed:
+
+```bash
+kcat -u -b 127.0.0.1:9093 -G reporting -X auto.offset.reset=earliest \
+  -f '%t[%p]@%o %k=%s\n' orders
+```
+
+```text
+% Waiting for group rebalance
+% Group reporting rebalanced (memberid rdkafka-...): assigned: orders [0], orders [1], orders [2]
+% Reached end of topic orders [0] at offset 0
+orders[1]@0 =order-1
+orders[1]@1 =order-2
+orders[1]@2 =order-3
+orders[2]@0 alice=paid
+orders[2]@1 bob=shipped
+orders[2]@2 alice=refunded
+% Reached end of topic orders [1] at offset 3
+% Reached end of topic orders [2] at offset 3
+```
+
+Send one more record, so the group falls behind:
+
+```bash
+printf 'carol:paid\n' | kcat -b 127.0.0.1:9093 -P -t orders -K:
+```
+
+Then check how far behind the group is with Kafka's admin tool:
+
+```bash
+docker run --rm --network host apache/kafka:3.9.0 \
+  /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server 127.0.0.1:9093 \
+  --describe --group reporting
+```
+
+```text
+Consumer group 'reporting' has no active members.
+
+GROUP           TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+reporting       orders          1          3               3               0               -               -               -
+reporting       orders          2          3               4               1               -               -               -
+```
+
+The tool lists each partition the group has committed, with its current offset, the log end offset and the lag. `carol` went to partition 2 after the group stopped, so that partition is one behind. Partition 0 is not listed because the group never read anything there. The tool's `--list` option works too, as does `--delete` for a group with no members.
+
+The committed offsets live in Iggy, not in the gateway. Restart the gateway:
+
+```bash
+docker compose restart iggy-gateway-kafka
+```
+
+Once `docker compose ps` shows it healthy again, run the group consumer command from above. It prints only the record it has not seen yet:
+
+```text
+% Group reporting rebalanced (memberid rdkafka-...): assigned: orders [0], orders [1], orders [2]
+% Reached end of topic orders [1] at offset 3
+orders[2]@3 carol=paid
+% Reached end of topic orders [2] at offset 4
+% Reached end of topic orders [0] at offset 0
+```
+
+## Write a producer and consumer in Java and Python
+
+Here is one small program written twice, in Java with kafka-clients and in Python with kafka-python. Each version sends six keyed records, then reads them back in a consumer group. Each uses its own topic, so you can run either one or both.
+
+### Java
+
+Create a topic for the Java version:
+
+```bash
+docker run --rm --network host apache/kafka:3.9.0 \
+  /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9093 \
+  --create --topic readings-java --partitions 2
+```
+
+Save this as `Readings.java`. It is a plain producer and consumer with default settings.
+
+```java
+import java.time.Duration;
+import java.util.List;
+import java.util.Properties;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
+
+public class Readings {
+    static final String BOOTSTRAP = "127.0.0.1:9093";
+
+    public static void main(String[] args) throws Exception {
+        Properties p = new Properties();
+        p.put("bootstrap.servers", BOOTSTRAP);
+        p.put("key.serializer", StringSerializer.class.getName());
+        p.put("value.serializer", StringSerializer.class.getName());
+        try (KafkaProducer<String, String> producer = new KafkaProducer<>(p)) {
+            for (int i = 0; i < 6; i++) {
+                var meta = producer.send(new ProducerRecord<>("readings-java", "sensor-" + (i % 3), "reading " + i)).get();
+                System.out.printf("sent partition=%d offset=%d%n", meta.partition(), meta.offset());
+            }
+        }
+
+        Properties c = new Properties();
+        c.put("bootstrap.servers", BOOTSTRAP);
+        c.put("group.id", "java-demo");
+        c.put("auto.offset.reset", "earliest");
+        c.put("key.deserializer", StringDeserializer.class.getName());
+        c.put("value.deserializer", StringDeserializer.class.getName());
+        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(c)) {
+            consumer.subscribe(List.of("readings-java"));
+            int received = 0;
+            long deadline = System.currentTimeMillis() + 30_000;
+            while (received < 6 && System.currentTimeMillis() < deadline) {
+                for (ConsumerRecord<String, String> r : consumer.poll(Duration.ofSeconds(1))) {
+                    System.out.printf("partition=%d offset=%d key=%s value=%s%n", r.partition(), r.offset(), r.key(), r.value());
+                    received++;
+                }
+            }
+            consumer.commitSync();
+        }
+    }
+}
+```
+
+Save this as `pom.xml` in the same directory. It only lists the two libraries the program needs:
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>example</groupId>
+  <artifactId>readings</artifactId>
+  <version>1</version>
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka-clients</artifactId>
+      <version>4.4.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-nop</artifactId>
+      <version>1.7.36</version>
+    </dependency>
+  </dependencies>
+</project>
+```
+
+From that directory, have Maven copy the libraries into `lib`, then run the source file directly with Java, so there is no build step:
+
+```bash
+mvn -q dependency:copy-dependencies -DoutputDirectory=lib
+java -cp "lib/*" Readings.java
+```
+
+```text
+sent partition=0 offset=0
+sent partition=1 offset=0
+sent partition=1 offset=1
+sent partition=0 offset=1
+sent partition=1 offset=2
+sent partition=1 offset=3
+partition=1 offset=0 key=sensor-1 value=reading 1
+partition=1 offset=1 key=sensor-2 value=reading 2
+partition=1 offset=2 key=sensor-1 value=reading 4
+partition=1 offset=3 key=sensor-2 value=reading 5
+partition=0 offset=0 key=sensor-0 value=reading 0
+partition=0 offset=1 key=sensor-0 value=reading 3
+```
+
+The first run takes a little longer while Maven downloads the libraries. The Java client hashes keys with murmur2, so `sensor-0` goes to partition 0 and the other two keys to partition 1. The client picks the partition, so it does the same against a Kafka broker.
+
+The Java producer is idempotent by default, and the gateway accepts it. With `IGGY_KAFKA_IDEMPOTENT_PRODUCERS` left off, which is the default, the gateway does not check the producer's sequence numbers, so a resend after a network error can be written twice. The code is the same code you would write for any Kafka cluster, and only the bootstrap address points at the gateway.
+
+### Python
+
+Create a topic for the Python version:
+
+```bash
+docker run --rm --network host apache/kafka:3.9.0 \
+  /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9093 \
+  --create --topic readings-python --partitions 2
+```
+
+Save this as `readings.py`:
+
+```python
+from kafka import KafkaConsumer, KafkaProducer
+
+BOOTSTRAP = "127.0.0.1:9093"
+
+producer = KafkaProducer(bootstrap_servers=BOOTSTRAP)
+for i in range(6):
+    meta = producer.send("readings-python", key=f"sensor-{i % 3}".encode(), value=f"reading {i}".encode()).get(timeout=10)
+    print(f"sent partition={meta.partition} offset={meta.offset}")
+producer.close()
+
+consumer = KafkaConsumer(
+    "readings-python",
+    bootstrap_servers=BOOTSTRAP,
+    group_id="python-demo",
+    auto_offset_reset="earliest",
+    consumer_timeout_ms=10000,
+)
+received = 0
+for msg in consumer:
+    print(f"partition={msg.partition} offset={msg.offset} key={msg.key.decode()} value={msg.value.decode()}")
+    received += 1
+    if received == 6:
+        break
+consumer.close()
+```
+
+From the directory where you saved the file, install kafka-python in a virtual environment and run it:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -q --disable-pip-version-check kafka-python==3.0.13
+.venv/bin/python readings.py
+```
+
+```text
+sent partition=0 offset=0
+sent partition=1 offset=0
+sent partition=1 offset=1
+sent partition=0 offset=1
+sent partition=1 offset=2
+sent partition=1 offset=3
+partition=0 offset=0 key=sensor-0 value=reading 0
+partition=0 offset=1 key=sensor-0 value=reading 3
+partition=1 offset=0 key=sensor-1 value=reading 1
+partition=1 offset=1 key=sensor-2 value=reading 2
+partition=1 offset=2 key=sensor-1 value=reading 4
+partition=1 offset=3 key=sensor-2 value=reading 5
+```
+
+kafka-python hashes keys the same way as the Java client, so each key lands on the same partition as it did in the Java version. Either consumer can print the two partitions in the other order, because Kafka only keeps order within a partition.
+
+## See the records from the Iggy side
+
+The records are ordinary Iggy messages. Use the Iggy CLI in the server container to read the first record the Java program wrote, with `--show-headers` to show where the Kafka key is stored. Run it from `gateways/kafka`:
+
+```bash
+docker compose exec iggy-server /usr/local/bin/iggy --username iggy \
+  --password iggy-gateway-quickstart message poll --show-headers kafka readings-java 0 --offset 0 --message-count 1
+```
+
+```text
++--------+----------------------------+-----------------------------------------+--------+-----------+-----------------+-------------------+
+| Offset | Timestamp                  | ID                                      | Length | Payload   | Header: kafka.v | Header: kafka.key |
+|        |                            |                                         |        |           |       raw       |        raw        |
++==========================================================================================================================================+
+| 0      | 2026-11-10 05:12:17.173799 | 263500391710400015488992789367205678616 | 9      | reading 0 | b"\x01"         | b"sensor-0"       |
++--------+----------------------------+-----------------------------------------+--------+-----------+-----------------+-------------------+
+```
+
+Kafka and Iggy both number partitions from 0, so stream `kafka`, topic `readings-java`, partition 0, offset 0 is the record the Java consumer printed as `partition=0 offset=0 key=sensor-0 value=reading 0`. The value is the payload and the key is in the `kafka.key` user header, and the timestamp and ID will differ on your machine. If you ran only the Python version, poll `readings-python 1` instead.
+
+When you are done, `docker compose down -v` stops both containers and removes the data.
+
+## Current limits
+
+The gateway is at version 0.2.0. The steps above cover producing, consuming and consumer groups, and a few Kafka features are not there yet:
+
+- Transactions are not supported. A transactional producer gets a clear error, and `read_committed` consumers work as normal.
+- Delivery is at-least-once by default. For duplicate-free writes from idempotent producers, turn on `IGGY_KAFKA_IDEMPOTENT_PRODUCERS` with `persisted` topics, as the Delivery guarantees section of the README describes.
+- Deleting records from a topic, for example with `kafka-delete-records.sh`, is not supported yet.
+- The gateway's end-to-end tests run kcat and the Kafka Java clients and tools, and the programs in this post also ran with kafka-clients 4.4.0 and 3.9.1 and kafka-python 3.0.13. A compatibility matrix for more clients and frameworks, such as Sarama, KafkaJS, Kafka Connect and Kafka Streams, is planned in [apache/iggy#4531](https://github.com/apache/iggy/issues/4531).
+
+## Where to go next
+
+- The [gateway README](https://github.com/apache/iggy/blob/HEAD/gateways/kafka/README.md) has every setting, and the [docs folder](https://github.com/apache/iggy/tree/HEAD/gateways/kafka/docs) covers the record mapping, consumer groups, authentication and the supported API versions.
+- If you would rather change the constructors in your Java code than run a gateway, [kafka-clients in apache/iggy-demos](https://github.com/apache/iggy-demos/tree/main/kafka-clients) implements Kafka's `Producer`, `Consumer` and `Admin` interfaces on top of the Iggy SDK. You build the jar yourself and point `bootstrap.servers` at Iggy. Records use the gateway's format, but committed offsets do not yet, so a consumer group cannot move between the two.
+- Tell us which client or tool you tried and what happened, on [GitHub](https://github.com/apache/iggy/issues) or in the Iggy Discord.
+
