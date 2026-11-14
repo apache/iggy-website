@@ -1,0 +1,62 @@
+5:"$Sreact.fragment"
+6:"/_next/static/chunks/0pmcxwdedui33.js"
+7:"/_next/static/chunks/1lhvhas5cum1g.js"
+8:I[39756,["$6","$7"],"default"]
+9:I[37457,["$6","$7"],"default"]
+e:"/_next/static/chunks/3sgstr_n7pe7b.js"
+f:"/_next/static/chunks/14cmwlsva1uso.js"
+10:"/_next/static/chunks/3pe5kqjwb9q4b.js"
+11:"/_next/static/chunks/2wstql0v6t20f.js"
+12:"/_next/static/chunks/3-zs05qpx3hf_.js"
+13:"/_next/static/chunks/1bwdz_8zfcww8.js"
+14:"/_next/static/chunks/3pgmqji_9im6z.js"
+15:"/_next/static/chunks/1h38jxjbp558t.js"
+16:"/_next/static/chunks/3r3wdh21oibms.js"
+17:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsPage"]
+18:I[22016,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],""]
+19:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsTitle"]
+1a:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsDescription"]
+1b:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsBody"]
+1c:I[47873,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"default"]
+30:"ViewportBoundary"
+31:I[97367,["$6","$7"],"$30"]
+32:"MetadataBoundary"
+33:I[97367,["$6","$7"],"$32"]
+34:"$Sreact.suspense"
+35:I[27201,["$6","$7"],"IconMark"]
+b:X
+b:C
+c:X
+d:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$5","c",{"children":[["$","$L17",null,{"toc":[],"footer":{"items":{"previous":{"$id":"introduction/coming-from-kafka.mdx","type":"page","name":[["$","span",null,{"className":"me-1 font-normal text-fd-muted-foreground","children":["Introduction",":"]}],"Coming from Apache Kafka"],"description":"How Apache Kafka's topics, partitions, consumer groups and offsets map to Apache Iggy, and what works differently.","url":"/docs/0.9/introduction/coming-from-kafka","$ref":"introduction/coming-from-kafka.mdx"},"next":{"$id":"introduction/serialising-messages.mdx","type":"page","name":[["$","span",null,{"className":"me-1 font-normal text-fd-muted-foreground","children":["Introduction",":"]}],"Serialising messages"],"description":"Choose a format for your message payloads, and send more than one kind of message to the same topic.","url":"/docs/0.9/introduction/serialising-messages","$ref":"introduction/serialising-messages.mdx"}}},"children":[["$","div",null,{"className":"mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-fd-foreground","children":["These are the docs for Apache Iggy 0.9, kept for reference and no longer updated. Server 0.10.0 changed the wire protocol, so 0.9 clients and servers do not work with 0.10.0."," ",["$","$L18",null,{"href":"/docs","className":"font-medium text-fd-primary underline","children":"Read the current docs"}],"."]}],["$","$L19",null,{"children":"Glossary"}],["$","$L1a",null,{"children":"Short definitions of the terms used across the Apache Iggy docs, with links to where each one is explained."}],["$","$L1b",null,{"children":[["$","p",null,{"children":"A one-line definition of each term, with a link to the page that explains it."}],"\n",["$","p",null,{"children":[["$","strong",null,{"children":"Append-only log."}]," An ordered list of messages that only grows at the end. Messages can't be changed once written, and you can read from any earlier point to replay them. See ",["$","$L1c",null,{"href":"/docs/0.9/introduction/concepts#append-only-log","children":"Concepts"}],"."]}],"\n",["$","p",null,{"children":[["$","strong",null,{"children":"Auto-commit."}]," An option on a poll. The server saves the consumer's position as it returns the messages, before the consumer has processed them. See ",["$","$L1c",null,{"href":"/docs/0.9/introduction/concepts#polling-messages","children":"Polling messages"}],"."]}],"\n",["$","p",null,{"children":[["$","strong",null,{"children":"Connection string."}]," A single value such as ",["$","code",null,{"children":"iggy://user:password@localhost:8090"}]," that tells a client how to connect. The Rust SDK and the SDKs that wrap it (Python, C++ and PHP) accept one. See ",["$","$L1c",null,{"href":"/docs/0.9/sdk/connection-strings","children":"Connection strings"}],"."]}],"\n",["$","p",null,{"children":[["$","strong",null,{"children":"Consumer."}]," A client that reads messages on its own rather than as part of a consumer group. Its position is kept separately from every other consumer's."]}],"\n",["$","p",null,{"children":[["$","strong",null,{"children":"Consumer group."}]," A set of consumers that share a topic's partitions, with each partition read by one member at a time. See ",["$","$L1c",null,{"href":"/docs/0.9/introduction/concepts#consumer-groups","children":"Consumer groups"}],"."]}],"\n",["$","p",null,{"children":[["$","strong",null,{"children":"Durability."}]," A topic setting, ",["$","code",null,{"children":"replicated"}]," or ",["$","code",null,{"children":"persisted"}],", that decides what must be done before a write is reported as successful. See ",["$","$L1c",null,{"href":"/docs/0.9/server/durability","children":"Durability"}],"."]}],"\n",["$","p",null,{"children":[["$","strong",null,{"children":"Offset."}]," The position of a message within a partition, starting at 0. See ","$L1d","."]}],"\n","$L1e","\n","$L1f","\n","$L20","\n","$L21","\n","$L22","\n","$L23","\n","$L24","\n","$L25","\n","$L26","\n","$L27","\n","$L28","\n","$L29"]}]]}],["$L2a","$L2b","$L2c","$L2d"],"$L2e"]}],"p":"$@2f","v":null,"s":"$c"}}]]
+4:[["children",{"s":{"n":"slug","t":"oc","k":"introduction/glossary","s":[]},"h":64,"d":{"r":["$","$5","c",{"children":[null,["$","$L8",null,{"parallelRouterKey":"children","template":["$","$L9",null,{}]}]]}],"p":"$@a","v":"$b","s":"$c"},"c":"$Qd"}]]
+3:[["children",{"s":"0.9","h":32,"c":"$Q4"}]]
+2:[["children",{"s":"docs","h":96,"c":"$Q3"}]]
+1:[["children",{"s":"(archive)","h":64,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":16,"c":"$Q1"},"h":{"r":["$","$5","h",{"children":[null,["$","$L31",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L33",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$34",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"0.9 Introduction: Glossary | Apache Iggy"}],["$","meta","1",{"name":"description","content":"Short definitions of the terms used across the Apache Iggy docs, with links to where each one is explained."}],["$","meta","2",{"name":"robots","content":"noindex, follow"}],["$","link","3",{"rel":"canonical","href":"https://iggy.apache.org/docs/0.9/introduction/glossary/"}],["$","meta","4",{"property":"og:title","content":"0.9 Introduction: Glossary | Apache Iggy"}],["$","meta","5",{"property":"og:description","content":"Short definitions of the terms used across the Apache Iggy docs, with links to where each one is explained."}],["$","meta","6",{"property":"og:url","content":"https://iggy.apache.org/docs/0.9/introduction/glossary"}],["$","meta","7",{"property":"og:site_name","content":"Apache Iggy"}],["$","meta","8",{"property":"og:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","meta","9",{"property":"og:image:width","content":"1200"}],["$","meta","10",{"property":"og:image:height","content":"630"}],["$","meta","11",{"property":"og:image:alt","content":"Apache Iggy"}],["$","meta","12",{"property":"og:type","content":"website"}],["$","meta","13",{"name":"twitter:card","content":"summary_large_image"}],["$","meta","14",{"name":"twitter:title","content":"0.9 Introduction: Glossary | Apache Iggy"}],["$","meta","15",{"name":"twitter:description","content":"Short definitions of the terms used across the Apache Iggy docs, with links to where each one is explained."}],["$","meta","16",{"name":"twitter:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","link","17",{"rel":"icon","href":"/img/favicon.png"}],["$","$L35","18",{}]]}]}],null]}],null]}],"p":"$@36","v":null,"s":"$c"}},"a":"$@37","u":"$@38","b":"vOUraSNRbyCQmm_b_sj9B"}
+39:I[97367,["$6","$7"],"OutletBoundary"]
+1d:["$","$L1c",null,{"href":"/docs/0.9/introduction/concepts#append-only-log","children":"Concepts"}]
+1e:["$","p",null,{"children":[["$","strong",null,{"children":"Partition."}]," Where a topic's messages are actually stored. A topic's messages are spread across its partitions. See ",["$","$L1c",null,{"href":"/docs/0.9/introduction/concepts#partition","children":"Partition"}],"."]}]
+1f:["$","p",null,{"children":[["$","strong",null,{"children":"Partitioning."}]," How a producer picks the partition for a message: a fixed partition, round robin, or a hash of a message key. See ",["$","$L1c",null,{"href":"/docs/0.9/introduction/getting-started","children":"Getting started"}],"."]}]
+20:["$","p",null,{"children":[["$","strong",null,{"children":"Payload."}]," The body of a message. The server stores it as bytes without interpreting it, so the format is up to you. See ",["$","$L1c",null,{"href":"/docs/0.9/introduction/serialising-messages","children":"Serialising messages"}],"."]}]
+21:["$","p",null,{"children":[["$","strong",null,{"children":"Personal access token."}]," A token you create on the server and use in place of a username and password, for example in a scraper or a script. See ",["$","$L1c",null,{"href":"/docs/0.9/sdk/connection-strings","children":"Connection strings"}],"."]}]
+22:["$","p",null,{"children":[["$","strong",null,{"children":"Primary and replica."}]," In a cluster, the primary orders writes and the replicas copy them. If the primary fails, the replicas elect a new one. See ",["$","$L1c",null,{"href":"/docs/0.9/clustering/vsr","children":"Viewstamped Replication"}],"."]}]
+23:["$","p",null,{"children":[["$","strong",null,{"children":"Retention policy."}]," Topic settings that delete old messages by age or by size. See ",["$","$L1c",null,{"href":"/docs/0.9/server/topic-options","children":"Topic options"}],"."]}]
+24:["$","p",null,{"children":[["$","strong",null,{"children":"Segment."}]," Part of a partition, stored on disk as a data file and an index file. Retention deletes old segments whole. See ",["$","$L1c",null,{"href":"/docs/0.9/introduction/concepts#segment","children":"Segment"}],"."]}]
+25:["$","p",null,{"children":[["$","strong",null,{"children":"Shard."}]," One thread in the server that owns a set of partitions. See ",["$","$L1c",null,{"href":"/docs/0.9/introduction/architecture","children":"Architecture"}],"."]}]
+26:["$","p",null,{"children":[["$","strong",null,{"children":"Stream."}]," A container for related topics. For example, a ",["$","code",null,{"children":"dev"}]," stream and a ",["$","code",null,{"children":"production"}]," stream can each have their own ",["$","code",null,{"children":"orders"}]," topic. See ",["$","$L1c",null,{"href":"/docs/0.9/introduction/concepts#stream","children":"Stream"}],"."]}]
+27:["$","p",null,{"children":[["$","strong",null,{"children":"Topic."}]," A named set of partitions for one kind of message, such as orders or user events. See ",["$","$L1c",null,{"href":"/docs/0.9/introduction/concepts#topic","children":"Topic"}],"."]}]
+28:["$","p",null,{"children":[["$","strong",null,{"children":"User headers."}]," Optional key and value pairs sent with a message, kept separate from the payload. See ",["$","$L1c",null,{"href":"/docs/0.9/introduction/serialising-messages","children":"Serialising messages"}],"."]}]
+29:["$","p",null,{"children":[["$","strong",null,{"children":"VSR."}]," Viewstamped Replication, the protocol Apache Iggy uses to keep replicas in step. See ",["$","$L1c",null,{"href":"/docs/0.9/clustering/vsr","children":"Viewstamped Replication"}],"."]}]
+2a:["$","script","script-0",{"src":"/_next/static/chunks/1bwdz_8zfcww8.js","async":true}]
+2b:["$","script","script-1",{"src":"/_next/static/chunks/3pgmqji_9im6z.js","async":true}]
+2c:["$","script","script-2",{"src":"/_next/static/chunks/1h38jxjbp558t.js","async":true}]
+2d:["$","script","script-3",{"src":"/_next/static/chunks/3r3wdh21oibms.js","async":true}]
+2e:["$","$L39",null,{"children":["$","$34",null,{"name":"Next.MetadataOutlet","children":"$@3a"}]}]
+38:true
+c:300
+3a:null
+c:C
+37:0
+a:"$undefined"
+36:"$undefined"
+2f:"$undefined"
