@@ -17,7 +17,7 @@
  * under the License.
  */
 
-import { docs, docs08, docs09, blogPosts, organizations } from "fumadocs-mdx:collections/server";
+import { docs, docs08, docs09, docs0_10, blogPosts, organizations } from "fumadocs-mdx:collections/server";
 import { loader } from "fumadocs-core/source";
 
 export const source = loader({
@@ -25,8 +25,8 @@ export const source = loader({
   source: docs.toFumadocsSource(),
 });
 
-// The frozen 0.8 docs. Kept out of search, the sitemap and llms.txt, which all
-// use `source` above.
+// The frozen docs of each release. Kept out of search, the sitemap and
+// llms.txt, which all use `source` above.
 export const source08 = loader({
   baseUrl: "/docs/0.8",
   source: docs08.toFumadocsSource(),
@@ -35,6 +35,11 @@ export const source08 = loader({
 export const source09 = loader({
   baseUrl: "/docs/0.9",
   source: docs09.toFumadocsSource(),
+});
+
+export const source0_10 = loader({
+  baseUrl: "/docs/0.10",
+  source: docs0_10.toFumadocsSource(),
 });
 
 // Blog posts as raw collection for direct access to custom schema fields

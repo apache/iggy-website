@@ -29,12 +29,14 @@
 import { readdirSync, readFileSync, statSync, existsSync } from "fs";
 import { join, relative } from "path";
 
-// Each docs tree and the URL it is served under. The archived 0.8 docs are a
-// frozen copy, so their links must stay inside /docs/0.8.
+// Each docs tree and the URL it is served under. The archived docs are frozen
+// copies, so an archive links only to itself and to other archives, never to
+// the current /docs pages, which change.
 const TREES = [
   { root: "content/docs", base: "/docs" },
   { root: "content/docs-0.8", base: "/docs/0.8" },
   { root: "content/docs-0.9", base: "/docs/0.9" },
+  { root: "content/docs-0.10", base: "/docs/0.10" },
 ];
 
 function walk(dir) {
@@ -43,6 +45,9 @@ function walk(dir) {
     return statSync(p).isDirectory() ? walk(p) : [p];
   });
 }
+
+const archiveBases = TREES.map((tree) => tree.base).filter((base) => base !== "/docs");
+const inArchive = (target) => archiveBases.some((base) => target === base || target.startsWith(base + "/"));
 
 const routes = new Set();
 const trees = TREES.map(({ root, base }) => {
@@ -65,8 +70,8 @@ for (const { base, files: treeFiles } of trees) {
     const text = readFileSync(f, "utf8");
     for (const m of text.matchAll(linkPattern)) {
       const target = m[1].replace(/\/$/, "");
-      if (base !== "/docs" && target !== base && !target.startsWith(base + "/")) {
-        problems.push(`${f} links to ${target}, outside ${base}`);
+      if (base !== "/docs" && !inArchive(target)) {
+        problems.push(`${f} links to ${target}, outside the archives`);
       }
       if (!links.has(target)) links.set(target, new Set());
       links.get(target).add(f);
