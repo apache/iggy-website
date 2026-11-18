@@ -19,6 +19,7 @@
 
 import Link from "next/link";
 import { source08 } from "@/lib/source";
+import { docsVersions } from "@/lib/docs-versions";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { docsOptions } from "@/lib/layout.shared";
 import { SiteFooter } from "@/components/site-footer";
@@ -27,10 +28,11 @@ import { AnnouncementBar } from "@/components/announcement-bar";
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <AnnouncementBar />
+      <AnnouncementBar sticky />
       <DocsLayout
         tree={source08.getPageTree()}
         {...docsOptions()}
+        tabs={docsVersions}
         sidebar={{
           banner: (
             <div key="archive-banner" className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">

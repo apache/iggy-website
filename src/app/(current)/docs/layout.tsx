@@ -17,9 +17,8 @@
  * under the License.
  */
 
-import Link from "next/link";
-import { History } from "lucide-react";
 import { source } from "@/lib/source";
+import { docsVersions } from "@/lib/docs-versions";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { docsOptions } from "@/lib/layout.shared";
 import { SiteFooter } from "@/components/site-footer";
@@ -28,32 +27,11 @@ import { AnnouncementBar } from "@/components/announcement-bar";
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <AnnouncementBar />
+      <AnnouncementBar sticky />
       <DocsLayout
         tree={source.getPageTree()}
         {...docsOptions()}
-        sidebar={{
-          footer: (
-            <>
-              <Link
-                key="archive-09-link"
-                href="/docs/0.9"
-                className="mt-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/50 hover:text-fd-accent-foreground"
-              >
-                <History className="size-4" />
-                0.9 docs (archived)
-              </Link>
-              <Link
-                key="archive-link"
-                href="/docs/0.8"
-                className="mt-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent/50 hover:text-fd-accent-foreground"
-              >
-                <History className="size-4" />
-                0.8 docs (archived)
-              </Link>
-            </>
-          ),
-        }}
+        tabs={docsVersions}
       >
         {children}
       </DocsLayout>

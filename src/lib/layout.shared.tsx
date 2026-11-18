@@ -117,6 +117,7 @@ export function docsOptions(): BaseLayoutProps {
     nav: {
       title: <Logo className="h-9 w-auto shrink-0 md:h-11" />,
     },
+    githubUrl: "https://github.com/apache/iggy",
     links: [
       { text: "Home", url: "/" },
       { text: "Blogs", url: "/blogs" },
