@@ -26,11 +26,16 @@ The required Node version is in `.nvmrc`, and as an `engines` floor in
 npm install
 npm run dev     # local server with hot reload
 npm run build   # static output in ./out
+npm run check:links
 ```
 
 Run `npm run build` before opening a pull request: MDX that renders in `dev`
 can still fail the static build, most often through a malformed frontmatter
 block or a component that is used but not imported.
+
+CI also runs `npm run check:links`, and a pull request cannot merge until it
+passes. It fails on a broken `/docs` link, a page that its `meta.json` does
+not list, or a missing image.
 
 Add a new page to the `pages` array of its directory's `meta.json`. Left out, it
 builds and deploys but never appears in the sidebar.
