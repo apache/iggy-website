@@ -3,7 +3,7 @@ title: "Benchmarks you can rerun: the new Apache Iggy benchmark dashboard"
 description: The rebuilt benchmark dashboard records how every run was made, compares only runs of the same workload, and now shows OpenMessaging Benchmark runs of Iggy made with an open driver.
 author: maciej
 tags: ["benchmarks", "performance", "openmessaging-benchmark", "reproducibility", "dashboard"]
-date: 2026-11-18
+date: 2026-11-19
 ---
 **Contents**
 
@@ -39,7 +39,7 @@ And it colored every difference as better or worse, even the differences that tw
 
 ### A run records its recipe
 
-`iggy-bench`, our benchmark tool, now **writes every flag that changes a result into its report**: the durability of the topics, the consumer and warm-up options, the TCP options and the data volume. It also records its own command line, with any password removed, and two labels that you pass to its `output` subcommand. `--suite` names a set of runs that belong together, for example `i4i-single`. `--workload` names one workload inside it, for example `producer-20p@800MB`. These reporting changes came after the 0.10.0 release and ship with the next one.
+[`iggy-bench`](https://github.com/apache/iggy/tree/master/core/bench), our benchmark tool, now **writes every flag that changes a result into its report**: the durability of the topics, the consumer and warm-up options, the TCP options and the data volume. It also records its own command line, with any password removed, and two labels that you pass to its `output` subcommand. `--suite` names a set of runs that belong together, for example `i4i-single`. `--workload` names one workload inside it, for example `producer-20p@800MB`. These reporting changes came after the 0.10.0 release and ship with the next one.
 
 Each run page shows the command that reproduces the run, the hardware (CPU model, cores, memory, kernel), the git reference of the build and a zip of the run's files. Here is the command behind the [single-node run with 20 producers](https://benchmarks.iggy.apache.org/runs/fb6369bd-24a4-41b2-a148-76e90d854304) of the 0.10.0 suite, with the server address replaced:
 
@@ -96,7 +96,7 @@ The [OpenMessaging Benchmark](https://github.com/openmessaging/benchmark) is a c
 
 ### The Iggy driver
 
-The driver is the `driver-iggy` module of [laserdata/openmessaging-benchmark](https://github.com/laserdata/openmessaging-benchmark). LaserData maintains it, and it may move under Apache later. It talks TCP through the Java SDK `org.apache.iggy:iggy` 0.10.0 from Maven Central and needs `iggy-server` 0.10.0.
+The driver is the `driver-iggy` module of [laserdata/openmessaging-benchmark](https://github.com/laserdata/openmessaging-benchmark). LaserData currently maintains it. It talks TCP through the Java SDK `org.apache.iggy:iggy` 0.10.0 from Maven Central and needs `iggy-server` 0.10.0.
 
 The driver comes with two files that differ only in durability. `iggy-cluster.yaml` keeps the server default, `replicated`: the server acknowledges a publish **after the replication quorum commits the batch**. Its results are named `Iggy`. `iggy-cluster-persisted.yaml` sets `persisted`: the acknowledgement **also waits until the batch is on stable storage** on that quorum. Its results are named `Iggy-persisted`.
 
@@ -254,7 +254,7 @@ The OMB suite ran on the same kind of three-node cluster, with two worker machin
 
 #### Publish latency with a fixed rate
 
-| Cell | Shape | Rate | replicated | persisted |
+| Cell | Shape | Rate | replicated, p50 / p99 / p99.9 (ms) | persisted, p50 / p99 / p99.9 (ms) |
 | --- | --- | ---: | ---: | ---: |
 | S-50 | 12 topics × 1 partition | 50 MB/s | [0.896 / 1.457 / 8.076](https://benchmarks.iggy.apache.org/omb/runs/cfd3fd5da6e2c734) | [1.368 / 2.281 / 15.972](https://benchmarks.iggy.apache.org/omb/runs/ab69ccfacac469ca) |
 | S-150 | 12 topics × 1 partition | 150 MB/s | [0.938 / 1.518 / 5.833](https://benchmarks.iggy.apache.org/omb/runs/8c16f849c0432d08) | [1.523 / 4.087 / 15.098](https://benchmarks.iggy.apache.org/omb/runs/816d584f16301746) |
