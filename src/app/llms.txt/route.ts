@@ -43,11 +43,11 @@ pages in one file are at ${absoluteFileUrl("/llms-full.txt")}, which is large.
 
 ## When to use this site
 
-- Running or configuring the server, including storage, networking and clustering: ${absoluteUrl("/docs/server")} and ${absoluteUrl("/docs/clustering")}
-- Writing a producer or consumer in a given language: ${absoluteUrl("/docs/sdk")}
+- Running or configuring the server, including storage, networking and clustering: ${absoluteUrl("/docs/server/introduction")} and ${absoluteUrl("/docs/clustering/vsr")}
+- Writing a producer or consumer in a given language: ${absoluteUrl("/docs/sdk/introduction")}
 - Talking to the server directly over QUIC, TCP or HTTP: ${absoluteUrl("/docs/binary-protocol")}
-- Moving data in or out of Iggy without writing code: ${absoluteUrl("/docs/connectors")}
-- Command line and web administration: ${absoluteUrl("/docs/cli")} and ${absoluteUrl("/docs/web_ui")}
+- Moving data in or out of Iggy without writing code: ${absoluteUrl("/docs/connectors/introduction")}
+- Command line and web administration: ${absoluteUrl("/docs/cli/start")} and ${absoluteUrl("/docs/web_ui/start")}
 - Downloading a release: ${absoluteUrl("/downloads")}
 - Contributing, or reaching the project's mailing lists and Discord: ${absoluteUrl("/community")}
 
