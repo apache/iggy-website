@@ -12,10 +12,22 @@ Apache Iggy website -- a static documentation and marketing site built with **Ne
 npm install        # Install deps (triggers fumadocs-mdx postinstall)
 npm run dev        # Dev server with hot reload (http://localhost:3000)
 npm run build      # Static export to out/ directory
+npm run check:links  # Broken /docs links, pages missing from meta.json, missing assets
 npx serve out      # Preview the static build
 ```
 
 `npm start` (`next start`) does not work here: it is incompatible with `output: "export"`. `predev`/`prebuild` run `scripts/fetch-github-stars.mjs` (network call with a graceful offline fallback).
+
+`check:links` reads the `/docs` links in the docs pages and blog posts, and the complete `/docs` string literals in `src/`. It accepts `https://iggy.apache.org/docs/...` and the `.md` URLs of the Markdown copies. CI runs it in the required `checks` job.
+
+`predev`, `prebuild`, `pretypecheck` and `precheck:links` first run `scripts/fetch-docs.mjs`. It previews docs from local checkouts of the docs repositories:
+
+- `IGGY_DOCS_DIR` replaces `content/docs`, except `connectors/`, with a copy of that directory, for example `../iggy/docs`.
+- `IGGY_CONNECTORS_DOCS_DIR` replaces `content/docs/connectors`, for example `../iggy-connectors/docs`.
+- Without a variable, its part stays as it is in Git.
+- `npm run docs:watch` with the same variables copies each saved file, so `npm run dev` in a second terminal reloads the page.
+
+The copies show up as changes to `content/docs` in Git, and they overwrite uncommitted edits there. Do not commit them. To remove them, run `git restore content/docs` and then `git clean -fd content/docs`. The second command also deletes new pages that you did not add to Git.
 
 No test framework is configured. No linter is configured beyond TypeScript strict mode.
 
@@ -26,7 +38,8 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 **Route groups:**
 - `src/app/(home)/` -- Landing page with hero, features, footer
 - `src/app/(site)/` -- Blog listing (`/blogs/`), downloads (`/downloads/`), community (`/community/`)
-- `src/app/docs/` -- Documentation pages via Fumadocs DocsLayout
+- `src/app/(current)/docs/` -- Documentation pages via Fumadocs DocsLayout
+- `src/app/(archive)/docs/<minor>/` -- Archived docs of each release (see "Archived docs")
 - `src/app/api/search/` -- Static search index (search UI enabled in the docs layout)
 
 **Content (MDX):**

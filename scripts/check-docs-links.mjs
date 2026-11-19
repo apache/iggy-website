@@ -18,12 +18,12 @@
  */
 
 /**
- * Fails if an internal /docs link points at a page that does not exist, if an
- * .mdx page is missing from its directory's meta.json, or if a local asset
- * referenced from content/ is not present under public/.
+ * Fails if a /docs link points at a page that does not exist, if an .mdx page
+ * is missing from its directory's meta.json, or if a local asset referenced
+ * from content/ is not present under public/.
  *
- * All three are clean as of this commit, so this locks in a good state rather
- * than fixing a broken one. No dependencies: plain Node.
+ * The links come from the docs pages, the blog posts and the complete string
+ * literals in src/. No dependencies: plain Node.
  */
 
 import { readdirSync, readFileSync, statSync, existsSync } from "fs";
@@ -38,6 +38,9 @@ const TREES = [
   { root: "content/docs-0.9", base: "/docs/0.9" },
   { root: "content/docs-0.10", base: "/docs/0.10" },
 ];
+const BLOG = "content/blog";
+const SRC = "src";
+const SITE_URL = "https://iggy.apache.org";
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {
@@ -63,20 +66,38 @@ const files = trees.flatMap((tree) => tree.files);
 
 const problems = [];
 
-const linkPattern = /\]\((\/docs(?:\/[^)#\s]*)?)/g;
+// A docs URL as written, reduced to the route it opens: no origin, no .md
+// suffix of the Markdown copies, no trailing slash.
+const DOCS_URL = String.raw`(?:https://iggy\.apache\.org)?/docs(?:[/.][^)#"'\x60\s$]*)?`;
+const linkPattern = new RegExp(String.raw`(?:\]\(|href=")(${DOCS_URL})(?=[)#"\s])`, "g");
+// Only complete literals: the URL excludes "$", so a template literal with
+// ${...} does not match.
+const literalPattern = new RegExp(String.raw`(["'\x60])(${DOCS_URL})(?:#[^"'\x60\s]*)?\1`, "g");
+const toRoute = (url) => url.replace(SITE_URL, "").replace(/\.md$/, "").replace(/\/$/, "");
+
 const links = new Map();
+function addLink(target, file) {
+  if (!links.has(target)) links.set(target, new Set());
+  links.get(target).add(file);
+}
 for (const { base, files: treeFiles } of trees) {
   for (const f of treeFiles) {
-    const text = readFileSync(f, "utf8");
-    for (const m of text.matchAll(linkPattern)) {
-      const target = m[1].replace(/\/$/, "");
+    for (const m of readFileSync(f, "utf8").matchAll(linkPattern)) {
+      const target = toRoute(m[1]);
       if (base !== "/docs" && !inArchive(target)) {
         problems.push(`${f} links to ${target}, outside the archives`);
       }
-      if (!links.has(target)) links.set(target, new Set());
-      links.get(target).add(f);
+      addLink(target, f);
     }
   }
+}
+const blogFiles = walk(BLOG).filter((f) => f.endsWith(".mdx"));
+for (const f of blogFiles) {
+  for (const m of readFileSync(f, "utf8").matchAll(linkPattern)) addLink(toRoute(m[1]), f);
+}
+const srcFiles = walk(SRC).filter((f) => /\.(ts|tsx|mjs|js)$/.test(f));
+for (const f of srcFiles) {
+  for (const m of readFileSync(f, "utf8").matchAll(literalPattern)) addLink(toRoute(m[2]), f);
 }
 for (const [target, sources] of links) {
   if (!routes.has(target)) {
@@ -123,7 +144,8 @@ for (const [asset, sources] of assets) {
 }
 
 console.log(
-  `docs: ${files.length} pages, ${links.size} distinct internal links, ` +
+  `docs: ${files.length} pages, ${links.size} distinct /docs links from the docs, ` +
+    `${blogFiles.length} blog posts and ${srcFiles.length} src files, ` +
     `${assets.size} local assets, ${problems.length} problem(s)`,
 );
 for (const p of problems) console.error("  " + p);
