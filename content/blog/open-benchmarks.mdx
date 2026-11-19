@@ -17,9 +17,11 @@ date: 2026-11-19
 
 ## A number and its recipe
 
-In February 2025 we launched [benchmarks.iggy.apache.org](https://benchmarks.iggy.apache.org/) and wrote that benchmarks should be [a first-class citizen](/blogs/2025/02/17/transparent-benchmarks/) of the project. Since then, every release post has quoted numbers from it, and the [0.9.0 post](/blogs/2026/09/21/release-0.9.0/) promised a driver for the OpenMessaging Benchmark and its results.
+In February 2025 we launched [benchmarks.iggy.apache.org](https://benchmarks.iggy.apache.org/) and wrote that benchmarks should be [a first-class citizen](/blogs/2025/02/17/transparent-benchmarks/) of the project. Since then, our posts on [thread-per-core](/blogs/2026/02/27/thread-per-core-io_uring/), [clustering](/blogs/2026/09/28/vsr-clustering-part-1/) and the [0.9.0 release](/blogs/2026/09/21/release-0.9.0/) have linked their numbers to it.
 
-A benchmark number is useful only when three facts come with it: **what produced it, how much it moves between two identical runs, and how to produce it again**. Our dashboard had the numbers but not all three facts, so we rebuilt it. It now also shows OpenMessaging Benchmark (OMB) runs of Iggy, made with an open driver. Every 0.10.0 run in this post is on the dashboard, and you can open the run behind every number in the results section.
+A benchmark number is useful only when three facts come with it: **what produced it, how much it moves between two identical runs, and how to produce it again**. Our dashboard had the numbers but not all three facts, so we rebuilt it.
+
+The 0.9.0 post also promised a driver for the OpenMessaging Benchmark (OMB) and its results. The dashboard now shows OMB runs of Iggy, made with an open driver. Every 0.10.0 run in this post is on the dashboard, and you can open the run behind every number in the results section.
 
 ---
 
@@ -27,7 +29,7 @@ A benchmark number is useful only when three facts come with it: **what produced
 
 The old dashboard inflated throughput. It added up the rate of each actor (each producer or consumer), and an actor's rate is its own data divided by its own run time. When the actors finish at different times, that sum is higher than what the group moved. For one 0.9.0 run, the dashboard showed 2731 MB/s. The run moved 2062 MB/s, so **the page overstated it by 32%**.
 
-It also couldn't tell which runs measured the same workload, because the reports didn't record the durability of the topics, the poll options of the consumers or the warm-up. A run that waited for every write to reach the disk and a run that didn't could sit side by side as if they were the same test.
+It also couldn't tell which runs measured the same workload. A report kept the durability of the topics and the warm-up only in its command text, which the dashboard didn't compare. A run that waited for every write to reach the disk and a run that didn't could sit side by side as if they were the same test.
 
 And it colored every difference as better or worse, even the differences that two runs of the same build show anyway. A p99 of 1.2 ms against 1.0 ms looked like a regression, though **rerunning one build moves p99 by more than that**.
 
@@ -47,19 +49,21 @@ Each run page shows the command that reproduces the run, the hardware (CPU model
 iggy-bench --durability replicated --consumer-offset-durability replicated \
   --messages-per-batch 250 --message-batches 12400 --rate-limit '800.00 MB' \
   pinned-producer --producers 20 --streams 20 \
-  tcp --server-address <server>:8090 \
+  tcp --server-address <server>:8090 --nodelay \
   output -o performance_results --remark '0.10.0-s1-P1'
 ```
 
 ### Only like with like
 
-From those fields the dashboard derives a workload key. It holds the kind of benchmark, the transport, the message and batch size, the number of producers, consumers, streams, partitions and consumer groups, the rate limit, the durability and the client options. **Two runs measure the same workload only if their keys match.** The history of a workload, the comparison against the previous version and the Compare page all stay inside one key.
+From those fields the dashboard derives a workload key: the kind of benchmark, the transport, the message and batch size, the number of producers, consumers, streams, partitions and consumer groups, the rate limit, the durability and the client options. **Two runs measure the same workload only if their keys match.** The history of a workload and the comparison against the previous version both stay inside one key.
 
-The Compare page (`/compare`) puts up to three runs side by side and judges differences only between runs of the same workload. `/compare/releases` compares two versions across an official suite. A suite is official when `dashboard.toml` in the repository lists it. Two suites have runs today: `i4i-single`, one AWS i4i.4xlarge node, and `i4i-cluster3`, three of them. Between them they hold the 48 runs of the 0.10.0 suite. The 0.9.0 runs came before the labels, so the release comparison starts to fill with the next release.
+The Compare page (`/compare`) puts up to three runs side by side and judges differences only between runs of the same workload. `/compare/releases` compares two versions across an official suite, and a suite is official when `dashboard.toml` in the repository lists it. Two suites have runs today: `i4i-single`, one AWS i4i.4xlarge node, and `i4i-cluster3`, three such nodes. Between them they hold the 48 runs of the 0.10.0 suite.
+
+Reports from before the rebuild have none of the new fields, so the dashboard keys them with the bench defaults of that time, durability `replicated` included. Some 0.9.0 runs with `persisted` topics therefore share a key with `replicated` runs, and only the command on their run pages shows the difference. The 0.9.0 runs also came before the suite and workload labels, so the release comparison starts to fill with the next release.
 
 ### A noise rule before "better" or "worse"
 
-Run one build twice on the same machine type and the numbers move. To learn how much, we reran one 0.9.0 build on the official setups from September 18 to November 4, 2026. Throughput moved by 1.4% at most, but tail latency moved a lot more, up to 5.4 times at p99.9. Each threshold sits above the largest spread we measured:
+Run one build twice on the same machine type and the numbers move. To learn how much, we reran one 0.9.0 build on the official setups from September 18 to November 4, 2026. Leaving out runs with a badge (more on those below), throughput moved by 1.4% at most. Latency, measured in runs with a rate limit, moved a lot more: up to 5.4 times at p99.9. The dashboard sets the threshold for each metric above the largest spread we measured:
 
 <div className="min-w-0 overflow-x-auto pb-4 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
 
@@ -72,13 +76,13 @@ Run one build twice on the same machine type and the numbers move. To learn how 
 
 </div>
 
-**A change gets a color only if it's larger than its threshold and the ranges of the two versions don't overlap.** Everything else shows as a plain number. So a 30% change in p99 between two single runs isn't news, and the dashboard no longer presents it as news.
+**A change gets a color only if it's larger than its threshold and the ranges of the two versions' runs don't overlap.** Everything else shows as a plain number. So a 30% change in p99 between two single runs isn't news, and the dashboard no longer presents it as news.
 
-Two badges mark runs that didn't get the load they asked for. *Below target rate* means the run fell short of its rate limit. For example, on three nodes the single persisted producer [reached 222.7 MB/s](https://benchmarks.iggy.apache.org/runs/8a9b51ba-5743-440d-be19-c8f8e9d7544c) of its 500 MB/s, because one producer waits for each reply before it sends the next batch. The badge says so instead of hiding the run. *Uneven load* means the run times of the actors spread by more than 10%, so some actors ran alone for part of the run.
+Two badges mark rate-limited runs that didn't get the load they asked for. *Below target rate* means the run fell short of its rate limit. For example, on three nodes the single persisted producer [reached 222.7 MB/s](https://benchmarks.iggy.apache.org/runs/8a9b51ba-5743-440d-be19-c8f8e9d7544c) of its 500 MB/s, because one producer waits for each reply before it sends the next batch. The badge says so instead of hiding the run. *Uneven load* means the run times of the actors spread by more than 10%, so some actors ran alone for part of the run.
 
 ### Overview, Explore and Methodology
 
-The Overview shows four headline workloads of the latest release, each with its trend across releases. They are the write throughput of 20 producers on one node, the p99 of durable writes at 800 MB/s, the p99 of end-to-end latency at 1600 MB/s on one node, and the p99 of writes at 800 MB/s on three nodes.
+The Overview shows four headline workloads of the latest release, each with its trend across releases: the write throughput of 20 producers on one node, the p99 of durable writes at 800 MB/s, the p99 of end-to-end latency at 1600 MB/s on one node, and the p99 of writes at 800 MB/s on three nodes.
 
 Explore lists every run, with filters for machine, version, kind, topology, durability and message size. Methodology explains every number, threshold, badge and option on the site.
 
@@ -98,9 +102,11 @@ The [OpenMessaging Benchmark](https://github.com/openmessaging/benchmark) is a c
 
 The driver is the `driver-iggy` module of [laserdata/openmessaging-benchmark](https://github.com/laserdata/openmessaging-benchmark). LaserData currently maintains it. It talks TCP through the Java SDK `org.apache.iggy:iggy` 0.10.0 from Maven Central and needs `iggy-server` 0.10.0.
 
-The driver comes with two files that differ only in durability. `iggy-cluster.yaml` keeps the server default, `replicated`: the server acknowledges a publish **after the replication quorum commits the batch**. Its results are named `Iggy`. `iggy-cluster-persisted.yaml` sets `persisted`: the acknowledgement **also waits until the batch is on stable storage** on that quorum. Its results are named `Iggy-persisted`.
+The driver comes with two files that differ only in durability. On the three-node cluster in this post, each partition has a copy on every node, and two nodes form the replication quorum.
 
-The producers use the usual settings of a throughput-oriented client: a batch closes at 1 MiB, each producer keeps up to 5 batches in flight, a send blocks after 6 MiB of pending data, and a batch waits at most 1 ms for more messages. The consumers read with deferred polls, new in 0.10.0, where the server holds a read until messages arrive. Each consumer stores its offset at most once per second. An unknown key in a driver file stops the run at start-up, so a typo can't run quietly with a default.
+`iggy-cluster.yaml` keeps the server default, `replicated`, and its results are named `Iggy`. The server acknowledges a publish **after the quorum commits the batch**, without waiting for stable storage. A failure that hits the nodes at once, such as a shared power loss, can lose acknowledged messages. `iggy-cluster-persisted.yaml` sets `persisted`, and its results are named `Iggy-persisted`. Here the acknowledgement **also waits until the batch is on stable storage** on that quorum. Both files keep the other topic defaults of the server, such as the flush threshold (`messages_required_to_save`) of 1024 messages. [Cluster durability](/docs/clustering/durability) explains both policies.
+
+The producers use the usual settings of a throughput-oriented client. A batch closes at 10,000 messages, at 1 MiB, or 1 ms after its first message, whichever comes first. Each producer keeps up to 5 batches in flight, and a send blocks after 6 MiB of pending data. The consumers use deferred polls, new in 0.10.0: the server holds a read until messages arrive. Each consumer stores its offset at most once per second. An unknown key in a driver file stops the run at start-up, so a typo can't run quietly with a default.
 
 To build OMB and run one Iggy workload with both driver files against an `iggy-server` 0.10.0 on the same host:
 
@@ -116,7 +122,7 @@ bin/benchmark --drivers driver-iggy/iggy-cluster.yaml,driver-iggy/iggy-cluster-p
 
 ### The Iggy suite
 
-The [`workloads/iggy`](https://github.com/laserdata/openmessaging-benchmark/blob/master/workloads/iggy/README.md) directory holds 25 workloads. Every workload sends random payloads without keys, and a rate is the total of all producers, in decimal MB/s. A cell is one workload run with one driver file. 15 workloads run with both files, so the suite has 40 cells.
+The [`workloads/iggy`](https://github.com/laserdata/openmessaging-benchmark/blob/master/workloads/iggy/README.md) directory holds 25 workloads. Every workload sends random payloads without keys, and a rate is the total of all producers, in decimal MB/s. A cell is one workload run with one driver file. Of the 25 workloads, 15 run with both files, so the suite has 40 cells.
 
 <div className="min-w-0 overflow-x-auto pb-4 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
 
@@ -125,7 +131,7 @@ The [`workloads/iggy`](https://github.com/laserdata/openmessaging-benchmark/blob
 | Rate ladder | S-50 to S-800, S-MAX | 12 topics with one partition each, one producer and one consumer per topic, 1000 B messages, from 50 MB/s up to the highest sustained rate |
 | One topic, 48 partitions | B-300, B-MAX | 12 producers and one consumer group of 12 consumers |
 | Partition count | P-48, P-144, P-288 | One topic with 48 to 288 partitions, 4 producers and 4 consumers, 300 MB/s |
-| Message size | M-100, M-4K, M-64K, M-100-FIX, M-4K-FIX | The 12-topic shape with 100 B, 4 KiB and 64 KiB messages at the highest rate, and with 100 B and 4 KiB messages at a fixed rate |
+| Message size | M-100-MAX, M-4K-MAX, M-64K-MAX, M-100-FIX, M-4K-FIX | The 12-topic shape with 100 B, 4 KiB and 64 KiB messages at the highest rate, and with 100 B and 4 KiB messages at a fixed rate |
 | Many topics | T-100 | 100 topics at 300 MB/s |
 | Fan-out | F-3 | Three consumer groups read every message, 200 MB/s in |
 | Backlog drain | C-DRAIN | The consumers wait until 200 GiB pile up, then read the backlog while the producers keep writing 300 MB/s |
@@ -177,22 +183,22 @@ Any tool that runs OMB can write this file, and each OMB run page offers both fi
 
 OMB runs have their own part of the site, under `/omb`, with their own accent color. No page puts an OMB number next to an `iggy-bench` number, because the two tools don't measure the same thing.
 
-OMB counts in MiB/s (1,048,576 bytes per MiB) and takes one sample every 10 seconds. The workload names use decimal MB, so **the 800 MB/s cell shows as about 763 MiB/s** on its page. OMB runs have no noise rule yet, so a change between two runs shows as a plain percent, with no color.
+OMB counts in MiB/s (1,048,576 bytes per MiB) and takes one sample every 10 seconds. The workload names use decimal MB, so **the 800 MB/s cell shows as about 764 MiB/s** on its page.
 
-A run page shows throughput, latency, publish delay (how late messages left against the producers' schedule) and backlog for each 10-second window, the percentile ladder of the whole run, the setup and the history of the workload.
+A run page shows throughput, latency, publish delay (how late messages left against the producers' schedule) and backlog for each 10-second window, the percentile ladder of the whole run, the setup and the history of the workload. OMB runs have no noise rule yet, so a change between two runs shows as a plain percent, with no color.
 
 ---
 
 ## How the runs are made
 
-This section is the recipe behind every official run. You can follow it with any tooling, on other clouds and machines too. The dashboard records what each run used, so results from other setups still compare like with like.
+Every official run followed the recipe below, and you can follow it with any tooling, on other clouds and machines too. The dashboard already records each run's options and hardware, and an OMB run also carries its `setup.toml`. An `iggy-bench` report doesn't hold the host preparation below, though, so keep a note of it with your results.
 
 ### Machines and builds
 
-All official runs used AWS i4i.4xlarge machines (16 vCPUs, 128 GiB of memory, a local NVMe disk) in eu-central-1, in a cluster placement group, on Ubuntu 26.04 with kernel 7.0.0-1016-aws.
+All official runs used AWS i4i.4xlarge machines (16 vCPUs, 128 GiB of memory, a local NVMe disk) in a cluster placement group in eu-central-1. They ran Ubuntu 26.04 with kernel 7.0.0-1016-aws.
 
 - `i4i-single` is one server node with its own producer machine and consumer machine.
-- `i4i-cluster3` is three server nodes and one client machine for `iggy-bench`. The OMB runs used the same three nodes with two i4i.4xlarge OMB workers.
+- `i4i-cluster3` is three server nodes and one client machine for `iggy-bench`. The OMB runs used the same three-node setup, with two i4i.4xlarge OMB workers.
 - The server and `iggy-bench` came from the tag `server-0.10.0`, built with `cargo zigbuild` for generic x86-64 and a glibc 2.43 target. **Two separate builds of that commit gave byte-identical binaries.**
 - The `iggy-bench` binary also carried the reporting changes from #4885, which merged after the release, so its reports have the new fields. The patch changes what `iggy-bench` writes, not the load it sends.
 - OMB was built from the public commit [`5588b76`](https://github.com/laserdata/openmessaging-benchmark/commit/5588b761223e3d5cb9a00b977cd320e04aa4bb93), with the released Java SDK from Maven Central.
@@ -208,12 +214,12 @@ All official runs used AWS i4i.4xlarge machines (16 vCPUs, 128 GiB of memory, a 
 | Memory | 2048 huge pages of 2 MiB, used by the allocator through `MIMALLOC_ALLOW_LARGE_OS_PAGES=1` |
 | Limits | `nofile` 1,048,576, and 8,388,608 on cluster nodes. `memlock` unlimited on cluster nodes. io_uring enabled |
 | Data disk | The local NVMe disk, ext4 with default options, mounted at `/opt/iggy/data`. `fstrim` after every wipe |
-| Server, `iggy-bench` suites | `IGGY_SHARDING_CPU_ALLOCATION=8`, `IGGY_PARTITION_VALIDATE_CHECKSUM=true` |
+| Server, `iggy-bench` suites | `IGGY_SHARDING_CPU_ALLOCATION=8` |
 | Server, OMB suite | `IGGY_SHARDING_CPU_ALLOCATION=all` |
 
 </div>
 
-The [Linux tuning guide](/docs/server/linux-tuning) explains these settings.
+The [Linux tuning guide](/docs/server/linux-tuning) explains most of these settings.
 
 ### The run protocol
 
@@ -238,17 +244,25 @@ Check the CPU idle states. On one instance type, deep idle states made the media
 
 ### iggy-bench, one node and three nodes
 
-The [0.10.0 release post](/blogs/2026/11/09/release-0.10.0/#benchmarks-090--0100) already compared 0.9.0 with 0.10.0 on most of these workloads. The runs of the official 0.10.0 suite are now on the dashboard: 12 workloads on [one node](https://benchmarks.iggy.apache.org/explore?version=0.10.0&nodes=1) and on [three nodes](https://benchmarks.iggy.apache.org/explore?version=0.10.0&nodes=3), two passes each, every run with its command, hardware and files. They were made later than the runs in the release post, and in another region, so their numbers differ a little.
+The runs of the official 0.10.0 suite are on the dashboard: 12 workloads on [one node](https://benchmarks.iggy.apache.org/explore?version=0.10.0&nodes=1) and on [three nodes](https://benchmarks.iggy.apache.org/explore?version=0.10.0&nodes=3), two passes each, every run with its command, hardware and files. The [0.10.0 release post](/blogs/2026/11/09/release-0.10.0/#benchmarks-090--0100) already compared 0.9.0 with 0.10.0 on most of these workloads. These runs were made later, and in another region, so their numbers differ a little from the ones in the release post.
 
-**A durable write costs about the same on three nodes as on one.** With 20 producers at 800 MB/s and `persisted` topics, a write on one node waits for the local disk, and its p99 was [1.99](https://benchmarks.iggy.apache.org/runs/2d47d398-04d9-4a4f-8e1b-a7cbbb43b6e3) and [1.69 ms](https://benchmarks.iggy.apache.org/runs/4126ed60-acba-4b61-b8b8-1f56941d87a6) in the two passes. On three nodes, the same write waits until the batch is on stable storage on a quorum of nodes, and its p99 was [1.90](https://benchmarks.iggy.apache.org/runs/38500985-dbea-45d3-a8bd-3b0c2da62a79) and [2.02 ms](https://benchmarks.iggy.apache.org/runs/390f4174-96c6-4ab9-9885-dc1c8e85803e). `iggy-bench` times each batch of 250 messages, and its p99 is each producer's 99th percentile, averaged over the producers. The chart shows how the batch latencies of the first cluster run spread: nearly all of them fall between 1.2 and 2.1 ms.
+**With 20 producers at 800 MB/s, a durable write costs about the same on three nodes as on one, up to p99.9.** With `persisted` topics and `--messages-required-to-save 1`, a write on one node waits for the local disk. On three nodes, the same write waits until the batch is on stable storage on two of the three nodes. `iggy-bench` times each batch of 250 messages, and its p99 is each producer's 99th percentile, averaged over the producers.
 
-<BenchChart run="38500985-dbea-45d3-a8bd-3b0c2da62a79" type="distribution" title="Latency distribution of 20 persisted producers at 800 MB/s on a 3-node Apache Iggy 0.10.0 cluster" />
+In the two passes, the p99 was [1.99](https://benchmarks.iggy.apache.org/runs/2d47d398-04d9-4a4f-8e1b-a7cbbb43b6e3) and [1.69 ms](https://benchmarks.iggy.apache.org/runs/4126ed60-acba-4b61-b8b8-1f56941d87a6) on one node, and [1.90](https://benchmarks.iggy.apache.org/runs/38500985-dbea-45d3-a8bd-3b0c2da62a79) and [2.02 ms](https://benchmarks.iggy.apache.org/runs/390f4174-96c6-4ab9-9885-dc1c8e85803e) on three. The p99.9 was 3.17 and 3.00 ms on one node, and 2.90 and 3.24 ms on three. Past p99.9, the two part ways: the slowest batch took 66 and 59 ms on one node, but 1.26 and 1.22 s on three.
+
+The chart shows how the batch latencies of the first cluster run spread: nearly all of them fall between 1.2 and 2.1 ms.
+
+<DashboardChart run="38500985-dbea-45d3-a8bd-3b0c2da62a79" type="distribution" title="Latency distribution of 20 persisted producers at 800 MB/s on a 3-node Apache Iggy 0.10.0 cluster" />
 
 [20 persisted producers at 800 MB/s on three nodes, pass 1](https://benchmarks.iggy.apache.org/runs/38500985-dbea-45d3-a8bd-3b0c2da62a79)
 
+A single persisted producer pays more for the cluster. Its p99 was [1.20](https://benchmarks.iggy.apache.org/runs/8a9b51ba-5743-440d-be19-c8f8e9d7544c) and [1.22 ms](https://benchmarks.iggy.apache.org/runs/9575aa8b-b1fb-4960-b044-a31fb4175913) on three nodes, against [0.90](https://benchmarks.iggy.apache.org/runs/81c503a3-73f3-4518-99c5-8e281637d693) and [0.89 ms](https://benchmarks.iggy.apache.org/runs/6133a4ea-5329-45e0-a9f8-9a3c3c73b233) on one. A lone producer waits for each reply before it sends the next batch, so it reached 222 MB/s instead of about 308 MB/s.
+
 ### OpenMessaging Benchmark, three nodes
 
-The OMB suite ran on the same kind of three-node cluster, with two worker machines for the producers and consumers. Latency here is the publish latency of each message, from the send call to the acknowledgement, in milliseconds. **It includes the 1 ms the producer waits for a batch to fill.** The table below covers the cells with a fixed rate. It gives p50 / p99 / p99.9 for each durability, and each set of numbers links to its run. A dash means the cell ran only with `replicated`. The max-rate cells are on the [OMB pages](https://benchmarks.iggy.apache.org/omb) of the dashboard, with all the other runs.
+The OMB suite ran on the same kind of three-node cluster, with two worker machines: one ran all the producers, the other all the consumers. Latency here is the publish latency of each message, from the send call to the acknowledgement, in milliseconds. **It includes up to 1 ms that the producer waits for a batch to fill.**
+
+The table below covers the cells with a fixed rate. It gives p50 / p99 / p99.9 for each durability, and each set of numbers links to its run. A dash means the cell ran only with `replicated`. The max-rate cells are on the [OMB pages](https://benchmarks.iggy.apache.org/omb) of the dashboard, with all the other runs.
 
 <div className="min-w-0 overflow-x-auto pb-4 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
 
@@ -262,10 +276,10 @@ The OMB suite ran on the same kind of three-node cluster, with two worker machin
 | S-450 | 12 topics × 1 partition | 450 MB/s | [1.121 / 1.822 / 3.208](https://benchmarks.iggy.apache.org/omb/runs/ad15fbf3bbe0a3a5) | [2.518 / 8.623 / 11.902](https://benchmarks.iggy.apache.org/omb/runs/98e58b56bfdc0014) |
 | S-600 | 12 topics × 1 partition | 600 MB/s | [1.219 / 1.997 / 4.672](https://benchmarks.iggy.apache.org/omb/runs/7d6824fb98d36ba0) | [6.263 / 9.055 / 12.208](https://benchmarks.iggy.apache.org/omb/runs/3552ae5e603baa01) |
 | S-800 | 12 topics × 1 partition | 800 MB/s | [1.319 / 2.500 / 6.179](https://benchmarks.iggy.apache.org/omb/runs/acec04aa2e7f47ec) | [7.637 / 11.896 / 15.653](https://benchmarks.iggy.apache.org/omb/runs/12492fdc34684cd5) |
-| B-300 | 1 topic × 48 partitions | 300 MB/s | [1.054 / 1.693 / 3.764](https://benchmarks.iggy.apache.org/omb/runs/2ac21bc4649acc37) | [1.758 / 3.239 / 7.221](https://benchmarks.iggy.apache.org/omb/runs/d270acc432beb1bf) |
-| P-48 | 1 topic × 48 partitions | 300 MB/s | [1.359 / 2.097 / 2.938](https://benchmarks.iggy.apache.org/omb/runs/f81ae153608a4995) | - |
-| P-144 | 1 topic × 144 partitions | 300 MB/s | [1.375 / 2.121 / 3.086](https://benchmarks.iggy.apache.org/omb/runs/8b9027bbffcfd3ac) | - |
-| P-288 | 1 topic × 288 partitions | 300 MB/s | [1.366 / 2.111 / 3.030](https://benchmarks.iggy.apache.org/omb/runs/f7c46d9c1338e84e) | [1.817 / 2.730 / 3.908](https://benchmarks.iggy.apache.org/omb/runs/6ec081402952dc26) |
+| B-300 | 1 topic × 48 partitions, 12 producers, 12 consumers | 300 MB/s | [1.054 / 1.693 / 3.764](https://benchmarks.iggy.apache.org/omb/runs/2ac21bc4649acc37) | [1.758 / 3.239 / 7.221](https://benchmarks.iggy.apache.org/omb/runs/d270acc432beb1bf) |
+| P-48 | 1 topic × 48 partitions, 4 producers, 4 consumers | 300 MB/s | [1.359 / 2.097 / 2.938](https://benchmarks.iggy.apache.org/omb/runs/f81ae153608a4995) | - |
+| P-144 | 1 topic × 144 partitions, 4 producers, 4 consumers | 300 MB/s | [1.375 / 2.121 / 3.086](https://benchmarks.iggy.apache.org/omb/runs/8b9027bbffcfd3ac) | - |
+| P-288 | 1 topic × 288 partitions, 4 producers, 4 consumers | 300 MB/s | [1.366 / 2.111 / 3.030](https://benchmarks.iggy.apache.org/omb/runs/f7c46d9c1338e84e) | [1.817 / 2.730 / 3.908](https://benchmarks.iggy.apache.org/omb/runs/6ec081402952dc26) |
 | F-3 | 12 topics, 3 consumer groups | 200 MB/s in | [0.987 / 1.612 / 4.432](https://benchmarks.iggy.apache.org/omb/runs/451c051038f05dff) | - |
 | T-100 | 100 topics × 1 partition | 300 MB/s | [1.355 / 12.247 / 31.153](https://benchmarks.iggy.apache.org/omb/runs/77eed3f876e4797d) | - |
 | M-100-FIX | 12 topics, 100 B messages | 1.95 M msg/s | [1.287 / 2.127 / 3.783](https://benchmarks.iggy.apache.org/omb/runs/a3c1f49ae004c3a2) | - |
@@ -280,21 +294,21 @@ The OMB suite ran on the same kind of three-node cluster, with two worker machin
 
 With 12 topics, **the replicated p99 stays between 1.46 and 2.50 ms all the way from 50 to 800 MB/s**. With one topic at 300 MB/s, p99 is 2.10, 2.12 and 2.11 ms for 48, 144 and 288 partitions, so the partition count barely moves it. Three consumer groups read 601 MB/s out of the 200 MB/s written, with a publish p99 of 1.61 ms.
 
-Message size doesn't change the picture much either. The two fixed-rate message-size cells run at about half of the highest rate the suite measured for their size. At 1.95 million 100-byte messages per second, the p99 is 2.13 ms. With 4 KiB messages at about 1 GB/s, it's 3.11 ms. With 1 KiB messages on 100 partitions at 1 million messages per second, it's 3.12 ms.
+Message size doesn't change the picture much either. The two fixed-rate message-size cells run at about half of the highest rate the suite measured for their size. At 1.95 million 100-byte messages per second, the p99 is 2.13 ms. With 4 KiB messages at about 1 GB/s, it's 3.11 ms. The 1 KiB cells on 100 partitions fit the same picture: at 1 million messages per second, the p99 is 3.12 ms.
 
 #### The backlog drain
 
-The drain cell shows what happens when consumers fall far behind. The producers write 300 MB/s to one topic with 48 partitions while the consumers wait. After 716 seconds, 214.8 million messages (about 200 GiB) are waiting. Then the consumers start and **read the whole backlog in 89 seconds**, at up to 2.95 million messages per second (about 2,815 MiB/s on the chart), while the producers keep writing 300 MB/s. That read rate is above the network baseline of the worker machines, so the drain runs on burst credits. The two worker machines limit how fast the consumers read, not the server, so 89 seconds is an upper bound.
+The drain cell shows what happens when consumers fall far behind. The producers write 300 MB/s to one topic with 48 partitions while the consumers wait. After 716 seconds, 214.8 million messages (about 200 GiB) are waiting. Then the consumers start and **read the whole backlog in 89 seconds**, at up to 2.95 million messages per second (about 2,815 MiB/s on the chart), while the producers keep writing 300 MB/s. Through the drain, the publish p99 of each 10-second window stayed between 2.2 and 4.2 ms, against about 2.05 ms in a typical window before it.
 
-Through the drain, the publish p99 of each 10-second window stayed between 2.2 and 4.2 ms, against about 2.05 ms in a typical window before it.
+All four consumers ran on one worker machine, and the network of that one machine set the read rate. At the peak it received about 24 Gbit/s. That's close to the 25 Gbit/s that an i4i.4xlarge reaches in a burst and far above its baseline, so the drain runs on burst credits. With more consumer machines the drain could finish sooner, so 89 seconds is an upper bound.
 
-<BenchChart run="33a671d9e00ad2cc" omb type="throughput" title="Publish and consume rate of a 200 GiB backlog drain on a 3-node Apache Iggy 0.10.0 cluster" />
+<DashboardChart run="33a671d9e00ad2cc" omb type="throughput" title="Publish and consume rate of a 200 GiB backlog drain on a 3-node Apache Iggy 0.10.0 cluster" />
 
 [The backlog drain run on the dashboard](https://benchmarks.iggy.apache.org/omb/runs/33a671d9e00ad2cc)
 
 #### What `persisted` costs
 
-With 12 topics of one partition each, **the cost of `persisted` grows with the rate**. The p99 goes from 2.28 ms at 50 MB/s to 11.90 ms at 800 MB/s, while `replicated` stays at 1.46 to 2.50 ms. With more partitions, the cost is smaller: 2.73 against 2.11 ms with 288 partitions at 300 MB/s, and 4.91 against 3.12 ms with 100 partitions at 1 million 1 KiB messages per second.
+With 12 topics of one partition each, **the cost of `persisted` grows with the rate**. The p99 goes from 2.28 ms at 50 MB/s to 11.90 ms at 800 MB/s, while `replicated` stays at 1.46 to 2.50 ms.
 
 <div className="min-w-0 overflow-x-auto pb-4 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
 
@@ -305,19 +319,22 @@ With 12 topics of one partition each, **the cost of `persisted` grows with the r
 
 </div>
 
+Spread over more partitions, the cost is smaller: 2.73 against 2.11 ms with 288 partitions at 300 MB/s, and 4.91 against 3.12 ms with 100 partitions at 1 million 1 KiB messages per second. The exception is R-288, the same rate on 288 partitions, where `persisted` saturates (see the caveats).
+
 ### Caveats
 
-- Most OMB cells ran once, and only the five anchor cells ran three times. Between those passes, the S-300 p99 moved from 1.63 to 1.66 ms with `replicated` and from 6.18 to 6.87 ms with `persisted`. The B-300 p99 moved from 1.67 to 1.69 ms.
+- Most OMB cells ran once, and only the five anchor cells ran three times. Between those passes, the S-300 p99 moved from 1.63 to 1.66 ms with `replicated` and from 6.18 to 6.87 ms with `persisted`. The B-300 p99 moved from 1.67 to 1.69 ms. The S-MAX throughput moved more: from 1,463 to 1,693 MiB/s with `replicated`, a 16% spread, and from 1,712 to 1,758 MiB/s with `persisted`.
 - With `persisted`, R-288 (1 million 1 KiB messages per second on 288 partitions) is saturated. The producers fell behind their schedule: one message in a hundred left at least [166 ms late](https://benchmarks.iggy.apache.org/omb/runs/15272e725caa5d51), and the publish p99 reached 27 ms. With `replicated`, the producers [kept their schedule](https://benchmarks.iggy.apache.org/omb/runs/5b2f22ff036f8bf9), and the p99 was 5.63 ms.
 - 100 topics at 300 MB/s have a p99 of 12.25 ms, against 1.63 ms for 12 topics at the same rate.
-- `iggy-bench` p99 values moved by up to 1.8 times between the two passes of one workload, for example the cold reads on one node ([1.81](https://benchmarks.iggy.apache.org/runs/a29e5207-32e9-4f5c-8c51-9980f92b15e7) against [1.03 ms](https://benchmarks.iggy.apache.org/runs/0fa49dd2-58d2-494c-a739-beb656084918)). That's more than the 70% threshold for p99, so the second condition of the noise rule matters: one noisy pass widens the range of its version, and the dashboard doesn't color a change whose ranges overlap.
+- In the rate-limited `iggy-bench` workloads, p99 moved by up to 1.8 times between the two passes, for example the cold reads on one node ([1.81](https://benchmarks.iggy.apache.org/runs/a29e5207-32e9-4f5c-8c51-9980f92b15e7) against [1.03 ms](https://benchmarks.iggy.apache.org/runs/0fa49dd2-58d2-494c-a739-beb656084918)). That's more than the 70% threshold for p99, so the overlap condition of the noise rule matters: one noisy pass widens the range of its version, and the dashboard doesn't color a change whose ranges overlap.
+- The dashboard doesn't judge the latency of a run without a rate limit, only its throughput. That throughput moved more than in the 0.9.0 reruns: 20 producers on one node wrote [2,029](https://benchmarks.iggy.apache.org/runs/6a60c996-7c5b-43b5-909e-404fc0d70e15) and [2,097 MB/s](https://benchmarks.iggy.apache.org/runs/b6983e86-9330-4fd0-b409-00c85b00ec43), 3.4% apart, which is above the 3% threshold.
 - **Never compare an `iggy-bench` number with an OMB number.** `iggy-bench` latency is per batch of 250 messages, OMB latency is per message, and the clients differ.
 
 ---
 
 ## What's next for performance
 
-The 0.10.0 numbers show where Iggy stands today, and they'll get better. **The weakest results above have something in common: many topics or many partitions.** That's where much of the server work under review goes right now.
+**Two of the weakest results above come from many topics or many partitions**: 100 topics at 300 MB/s (T-100), and 1 million messages per second on 288 partitions (R-288). Much of the server work merged since 0.10.0 goes there, and it ships with the next release.
 
 The goal is a node that spends its work on the partitions with something to do, not on every partition it holds. The server will tick only the partitions with due work, keep running totals of its statistics instead of walking every stream, and cap the memory of partition journals. In a cluster, nodes will batch their heartbeats to each peer, move partition primaries in bulk and settle elections faster after a restart.
 
@@ -333,15 +350,17 @@ Everything in this post comes from three places:
 - The [Methodology page](https://benchmarks.iggy.apache.org/methodology), which explains every number, threshold and badge.
 - The [OMB driver and the Iggy suite](https://github.com/laserdata/openmessaging-benchmark/tree/master/driver-iggy).
 
-To measure durable writes the way the Overview does, start `iggy-server` 0.10.0 and run `iggy-bench` from the same release:
+To measure durable writes the way the Overview does, start `iggy-server` 0.10.0 with `--with-default-root-credentials` and run `iggy-bench` from the same release:
 
 ```bash
 iggy-bench --durability persisted --messages-required-to-save 1 \
   --messages-per-batch 250 --message-batches 12400 --rate-limit '800.00 MB' \
   pinned-producer --producers 20 --streams 20 \
-  tcp --server-address 127.0.0.1:8090 \
+  tcp --server-address 127.0.0.1:8090 --nodelay \
   output -o performance_results
 ```
+
+The 0.10.0 `iggy-bench` sends the same load as the binary behind the official runs, but its report lacks the new recipe fields. A dashboard therefore keys the run with the old defaults, as `replicated`, even though its topics are `persisted`. The `iggy-bench` of the next release records them.
 
 For OMB, the build and run commands are in [The Iggy driver](#the-iggy-driver) above.
 
@@ -349,6 +368,6 @@ The dashboard itself is part of the repository, under [`core/bench/dashboard`](h
 
 We'd like to see the same OMB suite run against other systems, on the same machines and with the same host configuration. If you do it, publish what you find, with your `setup.toml`.
 
-We'll keep improving the benchmarking experience. Next on our list are a noise rule for OMB runs and more official suites beyond the i4i machines: ARM CPUs, other machine sizes, and other disk and network specs. Further out, we have a benchmark orchestrator in mind. You'd give it the addresses of your machines and an SSH key, and it would prepare the hosts, set up telemetry, run the suites and collect the results. Anyone could then start, in any cloud or on their own hardware, without building that setup first.
+Next on our list are a noise rule for OMB runs and more official suites beyond the i4i machines: ARM CPUs, other machine sizes, and other disk and network specs. Further out, we have a benchmark orchestrator in mind. You'd give it the addresses of your machines and an SSH key, and it would prepare the hosts, set up telemetry, run the suites and collect the results. Anyone could then start, in any cloud or on their own hardware, without building that setup first.
 
 Until then, the [benchmarking guide](/docs/server/benchmarking) walks through running `iggy-bench` by hand, and the [Linux tuning guide](/docs/server/linux-tuning) covers preparing the hosts.

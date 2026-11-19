@@ -24,7 +24,7 @@ import { useTheme } from "next-themes";
 
 const DASHBOARD_URL = "https://benchmarks.iggy.apache.org";
 
-interface BenchChartProps {
+interface DashboardChartProps {
   /** The run to show: an iggy-bench run UUID, or an OMB run id when `omb` is set. */
   run: string;
   /** True for an OpenMessaging Benchmark run, false for an iggy-bench run. */
@@ -42,8 +42,11 @@ interface BenchChartProps {
  * A live chart of one run on the benchmark dashboard, in an iframe that follows the site theme.
  * Put an ordinary Markdown link to the run under it: the Markdown copy of a page keeps this
  * component as raw MDX, and the link still works when the dashboard is down.
+ *
+ * The embed scales its text with the frame width, so a phone-width frame would draw it at 3 to
+ * 6 px. Below 640 px the frame keeps that width and scrolls sideways, like the tables of a post.
  */
-export function BenchChart({ run, omb = false, type = "latency", title }: BenchChartProps) {
+export function DashboardChart({ run, omb = false, type = "latency", title }: DashboardChartProps) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -57,16 +60,18 @@ export function BenchChart({ run, omb = false, type = "latency", title }: BenchC
   const src = `${DASHBOARD_URL}/${path}?${params}`;
 
   return (
-    <div className="not-prose mt-6 mb-2 aspect-[3/2] min-h-80 w-full overflow-hidden rounded-xl border border-fd-border bg-fd-card">
-      {mounted && (
-        <iframe
-          key={src}
-          src={src}
-          title={title}
-          loading="lazy"
-          className="h-full w-full border-0"
-        />
-      )}
+    <div className="not-prose mt-6 mb-2 w-full overflow-x-auto rounded-xl border border-fd-border bg-fd-card">
+      <div className="aspect-[3/2] min-h-80 w-full min-w-[640px]">
+        {mounted && (
+          <iframe
+            key={src}
+            src={src}
+            title={title}
+            loading="lazy"
+            className="h-full w-full border-0"
+          />
+        )}
+      </div>
     </div>
   );
 }

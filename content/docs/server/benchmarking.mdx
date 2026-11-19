@@ -1,6 +1,6 @@
 ---
 title: Benchmarking
-description: "How Iggy is benchmarked, the tooling that ships with it, and the public platform for comparing results."
+description: "How Iggy is benchmarked, the tooling that ships with it, and the public dashboard for comparing results."
 ---
 
 **Benchmarks should be the first-class citizens**. We believe that performance is crucial for any system, and we strive to provide the best possible performance for our users. Please check, why we believe that the **[transparent benchmarking](https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks)** is so important.
@@ -117,11 +117,11 @@ cargo r --bin iggy-bench -r -- pinned-producer tcp output -o performance_results
 
 When the server address uses `localhost` or `127.0.0.1`, the saved command includes non-secret environment settings from the server configuration catalog. Credentials and unknown `IGGY_` variables are omitted.
 
-`-o/--output-dir` defaults to `performance_results`. Optional flags (`--remark`, `--gitref`, extra info) annotate the run. Generated charts use the in-repo report library (`core/bench/report`). The runner (`core/bench/runner`) executes benchmarks across Git revisions. You can browse or compare results in the dashboard (`core/bench/dashboard`), which also powers the public [benchmarking platform](https://benchmarks.iggy.apache.org). A prebuilt dashboard image is available: `docker pull apache/iggy-bench-dashboard:edge`.
+`-o/--output-dir` defaults to `performance_results`. Optional flags (`--remark`, `--gitref`, extra info) annotate the run. Generated charts use the in-repo report library (`core/bench/report`). The runner (`core/bench/runner`) executes benchmarks across Git revisions. You can browse or compare results in the dashboard (`core/bench/dashboard`), the same code that runs the public [benchmark dashboard](https://benchmarks.iggy.apache.org). A prebuilt dashboard image is available: `docker pull apache/iggy-bench-dashboard:edge`.
 
 ## Performance
 
-The server is thread-per-core and shared-nothing, built on `io_uring` on Linux (via `compio`), with shard and CPU pinning configurable under `[sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmarking platform](https://benchmarks.iggy.apache.org).
+The server is thread-per-core and shared-nothing, built on `io_uring` on Linux (via `compio`), with shard and CPU pinning configurable under `[sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmark dashboard](https://benchmarks.iggy.apache.org).
 
 ## Prepare the host and topic policies
 
@@ -145,4 +145,4 @@ Keep both policies, replication-group size, batch and message sizes, CPU allocat
 cargo run --release --bin iggy-bench -- --max-wait 5s --min-count 100 pinned-consumer tcp
 ```
 
-Keep `min_count` within the smallest `messages-per-batch` value. After warmup, consumer-only runs restart their reads from offset zero, including group consumers. Record wait and byte limits with results because they change batching and latency.
+Keep `min_count` within the smallest `messages-per-batch` value. After warmup, consumer-only runs restart their reads from offset zero. This does not help a `bcg` run on data that its group already read: run the producer workload again first. Record wait and byte limits with results because they change batching and latency.
