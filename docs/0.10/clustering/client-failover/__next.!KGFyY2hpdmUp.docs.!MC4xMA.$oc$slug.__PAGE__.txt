@@ -1,0 +1,63 @@
+5:"$Sreact.fragment"
+6:"/_next/static/chunks/17h2u87b587ue.js"
+7:"/_next/static/chunks/2lawe380k5gxe.js"
+8:I[39756,["$6","$7"],"default"]
+9:I[37457,["$6","$7"],"default"]
+e:"/_next/static/chunks/44_4f42331mto.js"
+f:"/_next/static/chunks/14cmwlsva1uso.js"
+10:"/_next/static/chunks/3pe5kqjwb9q4b.js"
+11:"/_next/static/chunks/3e6aab2gpc17v.js"
+12:"/_next/static/chunks/20hf3kl_kpt7x.js"
+13:"/_next/static/chunks/1bwdz_8zfcww8.js"
+14:"/_next/static/chunks/3pgmqji_9im6z.js"
+15:"/_next/static/chunks/3vzh_1a3r6hy2.js"
+16:"/_next/static/chunks/29-phuz7hmie6.js"
+17:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsPage"]
+18:I[22016,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],""]
+19:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsTitle"]
+1a:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsDescription"]
+1b:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsBody"]
+1c:I[94157,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"Heading"]
+30:"ViewportBoundary"
+31:I[97367,["$6","$7"],"$30"]
+32:"MetadataBoundary"
+33:I[97367,["$6","$7"],"$32"]
+34:"$Sreact.suspense"
+35:I[27201,["$6","$7"],"IconMark"]
+b:X
+b:C
+c:X
+d:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$5","c",{"children":[["$","$L17",null,{"toc":[{"depth":2,"url":"#where-requests-are-served","title":"Where requests are served"},{"depth":2,"url":"#reconnect-and-bind","title":"Reconnect and bind"},{"depth":2,"url":"#retain-uncertain-mutations","title":"Retain uncertain mutations"},{"depth":2,"url":"#consumer-progress","title":"Consumer progress"},{"depth":2,"url":"#http-forwarding","title":"HTTP forwarding"}],"footer":{"items":{"previous":{"$id":"clustering/security.mdx","type":"page","name":[["$","span",null,{"className":"me-1 font-normal text-fd-muted-foreground","children":["Clustering",":"]}],"Cluster Security"],"description":"Replica authentication, shared-secret rotation, and TLS for replica traffic","url":"/docs/0.10/clustering/security","$ref":"clustering/security.mdx"},"next":{"$id":"binary-protocol/index.mdx","type":"page","name":[["$","span",null,{"className":"me-1 font-normal text-fd-muted-foreground","children":["Binary Protocol",":"]}],"Binary Protocol"],"description":"Binary protocol 0.12.0: one wire format across TCP, QUIC and WebSocket, covering both the client and replica planes.","url":"/docs/0.10/binary-protocol","$ref":"binary-protocol/index.mdx"}}},"children":[["$","div",null,{"className":"mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-fd-foreground","children":["These are the docs for Apache Iggy 0.10, kept for reference and no longer updated."," ",["$","$L18",null,{"href":"/docs","className":"font-medium text-fd-primary underline","children":"Read the current docs"}],"."]}],["$","$L19",null,{"children":"Client Failover"}],["$","$L1a",null,{"children":"Route requests to partition primaries and handle reconnects without losing an uncertain operation's identity."}],["$","$L1b",null,{"children":[["$","p",null,{"children":"A cluster has a metadata primary and separate partition primaries. SDKs discover both. Reaching the metadata primary does not mean that the same node owns every partition request."}],"\n",["$","$L1c",null,{"as":"h2","id":"where-requests-are-served","children":"Where requests are served"}],"\n",["$","p",null,{"children":"Metadata reads can use a replica's local state. A caller that needs a known metadata change can carry a minimum metadata operation and wait for that node to catch up. Counters on other nodes can lag a successful write until a later prepare or commit broadcast."}],"\n",["$","p",null,{"children":"Partition requests use the partition route. It identifies the primary, view, partition incarnation and metadata progress. An incarnation identifies one history of a partition. Recreating a partition changes that identity. Consumer group operations also carry an ownership generation, so a former member cannot store progress for a new owner."}],"\n",["$","p",null,{"children":["The SDK retains this context with a request. A route refresh does not replace the history of an already uncertain operation. ",["$","code",null,{"children":"HistoryUnavailable"}]," requires an application decision about the new history. Readers expose a seek operation to choose a new start."]}],"\n",["$","$L1c",null,{"as":"h2","id":"reconnect-and-bind","children":"Reconnect and bind"}],"\n",["$","p",null,{"children":"Binary login registers a logical session and a binding secret. Additional connections and reconnects bind that session. The client can therefore keep connections to several partition primaries without creating an unrelated identity for every link."}],"\n",["$","p",null,{"children":"A stale link does not always mean the logical session ended. The SDK closes that link and tries to bind again. A terminal session refusal requires new registration. Logout, session expiry and account deactivation end the session. A password or PAT change does not revoke a session already established with those credentials."}],"\n","$L1d","\n","$L1e","\n","$L1f","\n","$L20","\n","$L21","\n","$L22","\n","$L23","\n","$L24","\n","$L25","\n","$L26","\n","$L27","\n","$L28","\n","$L29"]}]]}],["$L2a","$L2b","$L2c","$L2d"],"$L2e"]}],"p":"$@2f","v":null,"s":"$c"}}]]
+4:[["children",{"s":{"n":"slug","t":"oc","k":"clustering/client-failover","s":[]},"h":64,"d":{"r":["$","$5","c",{"children":[null,["$","$L8",null,{"parallelRouterKey":"children","template":["$","$L9",null,{}]}]]}],"p":"$@a","v":"$b","s":"$c"},"c":"$Qd"}]]
+3:[["children",{"s":"0.10","h":32,"c":"$Q4"}]]
+2:[["children",{"s":"docs","h":96,"c":"$Q3"}]]
+1:[["children",{"s":"(archive)","h":64,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":16,"c":"$Q1"},"h":{"r":["$","$5","h",{"children":[null,["$","$L31",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L33",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$34",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"0.10 Clustering: Client Failover | Apache Iggy"}],["$","meta","1",{"name":"description","content":"Route requests to partition primaries and handle reconnects without losing an uncertain operation's identity."}],["$","meta","2",{"name":"robots","content":"noindex, follow"}],["$","link","3",{"rel":"canonical","href":"https://iggy.apache.org/docs/0.10/clustering/client-failover/"}],["$","meta","4",{"property":"og:title","content":"0.10 Clustering: Client Failover | Apache Iggy"}],["$","meta","5",{"property":"og:description","content":"Route requests to partition primaries and handle reconnects without losing an uncertain operation's identity."}],["$","meta","6",{"property":"og:url","content":"https://iggy.apache.org/docs/0.10/clustering/client-failover"}],["$","meta","7",{"property":"og:site_name","content":"Apache Iggy"}],["$","meta","8",{"property":"og:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","meta","9",{"property":"og:image:width","content":"1200"}],["$","meta","10",{"property":"og:image:height","content":"630"}],["$","meta","11",{"property":"og:image:alt","content":"Apache Iggy"}],["$","meta","12",{"property":"og:type","content":"website"}],["$","meta","13",{"name":"twitter:card","content":"summary_large_image"}],["$","meta","14",{"name":"twitter:title","content":"0.10 Clustering: Client Failover | Apache Iggy"}],["$","meta","15",{"name":"twitter:description","content":"Route requests to partition primaries and handle reconnects without losing an uncertain operation's identity."}],["$","meta","16",{"name":"twitter:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","link","17",{"rel":"icon","href":"/img/favicon.png"}],["$","$L35","18",{}]]}]}],null]}],null]}],"p":"$@36","v":null,"s":"$c"}},"a":"$@37","u":"$@38","b":"ny6rtIPrnLqY3TvXHhW_e"}
+39:I[32465,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"default"]
+3a:I[97367,["$6","$7"],"OutletBoundary"]
+1d:["$","p",null,{"children":["Advertised endpoints must be reachable from the client network. The SDK uses the endpoints returned by cluster metadata. See ",["$","$L39",null,{"href":"/docs/0.10/clustering/configuration","children":"Configuration"}]," for network selectors and TLS names."]}]
+1e:["$","$L1c",null,{"as":"h2","id":"retain-uncertain-mutations","children":"Retain uncertain mutations"}]
+1f:["$","p",null,{"children":"A request rejected before admission can be retried within its deadline. A lost reply after sending is different: the operation can already be committed. Retained-operation SDKs preserve its original identity and payload instead of submitting a fresh mutation."}]
+20:["$","p",null,{"children":"Resolution requires a matching final committed-result proof. A successful status or a nonzero log position alone is insufficient. A committed business rejection is also a definitive result. An uncertain operation remains retained when resolution times out."}]
+21:["$","p",null,{"children":[["$","code",null,{"children":"resolve_operation"}]," and its language equivalents retry a retained mutation. ",["$","code",null,{"children":"abandon_operation"}]," frees local state without undoing or determining the server result. ",["$","code",null,{"children":"OperationNotRetained"}]," does not prove that nothing committed. Keep the same client for recovery and handle the error before retrying application work."]}]
+22:["$","p",null,{"children":["Once the original session ends, the client cannot recover its receipt through a new login. Bounded client retention can also prevent recovery. The ",["$","$L39",null,{"href":"/docs/0.10/sdk/introduction","children":"SDK guides"}]," describe each language's error types and limits. Swift does not expose retained mutation resolution."]}]
+23:["$","$L1c",null,{"as":"h2","id":"consumer-progress","children":"Consumer progress"}]
+24:["$","p",null,{"children":["Use ",["$","$L39",null,{"href":"/docs/0.10/sdk/deferred-polling","children":"checkpoint commits"}]," after processing. A checkpoint retains the partition history and owner that delivered the data. Committing only a numeric offset loses that context."]}]
+25:["$","p",null,{"children":"A committing deferred read can lose its reply after storing an offset. The client reports uncertain fetch progress and blocks affected progress calls until recovery or explicit abandonment. Stateless reads and offset inspection remain available. Abandonment does not roll back a stored offset."}]
+26:["$","p",null,{"children":"Readers group targets by primary and refresh routes after changes. They can stop a partition on a history change or an undecodable message. Inspect the reported error before seeking past it."}]
+27:["$","$L1c",null,{"as":"h2","id":"http-forwarding","children":"HTTP forwarding"}]
+28:["$","p",null,{"children":"A contacted HTTP node can forward to the correct primary in one hop. The route and request carry a signed relay proof, and the destination authenticates the bearer independently. Configure shared JWT key material and synchronize clocks. Proofs expire after ten seconds."}]
+29:["$","p",null,{"children":["Forwarding does not make every ambiguous operation safe to replay. HTTP ",["$","code",null,{"children":"ack=none"}]," confirms dispatch only. A deferred read that commits uses POST, and a lost reply can leave its progress uncertain. See ",["$","$L39",null,{"href":"/docs/0.10/clustering/security","children":"Cluster security"}],"."]}]
+2a:["$","script","script-0",{"src":"/_next/static/chunks/1bwdz_8zfcww8.js","async":true}]
+2b:["$","script","script-1",{"src":"/_next/static/chunks/3pgmqji_9im6z.js","async":true}]
+2c:["$","script","script-2",{"src":"/_next/static/chunks/3vzh_1a3r6hy2.js","async":true}]
+2d:["$","script","script-3",{"src":"/_next/static/chunks/29-phuz7hmie6.js","async":true}]
+2e:["$","$L3a",null,{"children":["$","$34",null,{"name":"Next.MetadataOutlet","children":"$@3b"}]}]
+38:true
+c:300
+3b:null
+c:C
+37:0
+a:"$undefined"
+36:"$undefined"
+2f:"$undefined"
