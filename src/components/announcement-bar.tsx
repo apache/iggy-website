@@ -30,18 +30,34 @@ const ANNOUNCEMENT = {
   href: "https://github.com/apache/iggy",
 };
 
-export function AnnouncementBar() {
+// The docs layouts pass `sticky`. Fumadocs sizes the docs sidebar and table of
+// contents from --fd-banner-height, so on desktop the bar stays at the top with
+// a fixed one-line height and sets that variable. Without it, the sidebar is
+// as tall as the window but starts below the bar, so its bottom is off screen.
+// On mobile the sidebar is a drawer, and the bar scrolls away as on other pages.
+const STICKY_HEIGHT = "2.5rem";
+
+export function AnnouncementBar({ sticky = false }: { sticky?: boolean }) {
   if (!ANNOUNCEMENT.enabled) return null;
 
   return (
-    <div className="relative border-b border-white/[0.08] bg-gradient-to-r from-[#f9923f]/15 via-[#5f87fd]/15 to-[#fa5e8a]/15">
+    <div
+      className={`relative border-b border-white/[0.08] bg-gradient-to-r from-[#f9923f]/15 via-[#5f87fd]/15 to-[#fa5e8a]/15 ${
+        sticky ? "bg-fd-background md:sticky md:top-0 md:z-40 md:h-10" : ""
+      }`}
+    >
+      {sticky && (
+        <style>{`@media (width >= 48rem) { :root { --fd-banner-height: ${STICKY_HEIGHT}; } }`}</style>
+      )}
       <div
         aria-hidden
         className="absolute inset-x-0 bottom-0 h-0.5 bg-gradient-to-r from-[#f9923f] via-[#5f87fd] to-[#fa5e8a]"
       />
       <Link
         href={ANNOUNCEMENT.href}
-        className="group flex items-center justify-center gap-2 px-4 py-2.5 text-center text-[13px] text-fd-muted-foreground transition-colors hover:text-fd-foreground"
+        className={`group flex items-center justify-center gap-2 px-4 py-2.5 text-center text-[13px] text-fd-muted-foreground transition-colors hover:text-fd-foreground ${
+          sticky ? "md:h-full md:py-0" : ""
+        }`}
       >
         <Star
           className="hidden size-3.5 shrink-0 text-[#f9923f] sm:block"

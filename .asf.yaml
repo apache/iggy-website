@@ -46,6 +46,8 @@ github:
       required_status_checks:
         - name: "build"
           app_slug: "github-actions"
+        - name: "checks"
+          app_slug: "github-actions"
       required_status_checks_strict: true
 publish:
   whoami: asf-site

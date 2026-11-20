@@ -1,15 +1,15 @@
 ---
 title: Benchmarking
-description: "How Iggy is benchmarked, the tooling that ships with it, and the public platform for comparing results."
+description: "How Iggy is benchmarked, the tooling that ships with it, and the public dashboard for comparing results."
 ---
 
 **Benchmarks should be the first-class citizens**. We believe that performance is crucial for any system, and we strive to provide the best possible performance for our users. Please check, why we believe that the **[transparent benchmarking](https://iggy.apache.org/blogs/2025/02/17/transparent-benchmarks)** is so important.
 
-We've also built the **[benchmarking platform](https://benchmarks.iggy.apache.org)** where you can browse published benchmarks and compare results. This is the another open-source project available [here](https://github.com/apache/iggy/tree/server-0.10.0/core/bench/dashboard).
+We also run a public **[benchmark dashboard](https://benchmarks.iggy.apache.org)**. Each run page shows the command that made the run, the hardware, the charts and the files of the run. The dashboard compares a run only with runs of the same workload, and its [Methodology page](https://benchmarks.iggy.apache.org/methodology) explains every number on it. The [post that introduced it](/blogs/2026/11/19/open-benchmarks/) describes how the official runs are made. The dashboard is part of the Iggy repository, in [`core/bench/dashboard`](https://github.com/apache/iggy/tree/master/core/bench/dashboard).
 
-![Benchmarking Platform](/img/bench_platform.png)
+![Benchmark dashboard](/img/bench_dashboard.png)
 
-*Historical dashboard screenshot showing a 0.5.0 run, not 0.10.0 measurements.*
+*A 0.10.0 [run page](https://benchmarks.iggy.apache.org/runs/fb6369bd-24a4-41b2-a148-76e90d854304) on the benchmark dashboard: 20 producers on one AWS i4i.4xlarge node.*
 
 Iggy comes with a built-in benchmarking tool, `iggy-bench`. It's written in Rust and uses the `tokio` runtime for asynchronous I/O, mimicking the example client applications, so you can use it to estimate the performance of the server in your environment. It is part of the [core repository](https://github.com/apache/iggy/tree/server-0.10.0/core/bench) and lives in the `core/bench` directory.
 
@@ -41,11 +41,13 @@ The repo's driver script builds, starts the server, runs a send and a poll bench
 
 With a server running, invoke the benchmark kind and transport of your choice. Workloads that produce create their benchmark streams and topics, deleting pre-existing `bench-stream-{n}` streams unless `--reuse-streams` is set. Consumer-only workloads (`pc` and `bcg`) require those streams and enough messages to exist already. Run the corresponding producer workload first, with matching stream, partition, and message counts.
 
+A consumer group keeps its stored offsets between runs. Run the producer workload again before each `bcg` run. On data that the group already read, `bcg` waits for messages that never arrive and does not finish, even with `--warmup-time`.
+
 ## Benchmark kinds
 
-Eight kinds are available, each with a short alias:
-
 Producer and consumer counts default to six. Pinned workloads also default to six streams. Set explicit counts to match the workload and available CPUs.
+
+Eight kinds are available, each with a short alias:
 
 1. Pinned producer (`pp`): N producers, each sending to its own stream-topic with a single partition:
 
@@ -115,11 +117,11 @@ cargo r --bin iggy-bench -r -- pinned-producer tcp output -o performance_results
 
 When the server address uses `localhost` or `127.0.0.1`, the saved command includes non-secret environment settings from the server configuration catalog. Credentials and unknown `IGGY_` variables are omitted.
 
-`-o/--output-dir` defaults to `performance_results`. Optional flags (`--remark`, `--gitref`, extra info) annotate the run. Generated charts use the in-repo report library (`core/bench/report`). The runner (`core/bench/runner`) executes benchmarks across Git revisions. You can browse or compare results in the dashboard (`core/bench/dashboard`), which also powers the public [benchmarking platform](https://benchmarks.iggy.apache.org). A prebuilt dashboard image is available: `docker pull apache/iggy-bench-dashboard:edge`.
+`-o/--output-dir` defaults to `performance_results`. Optional flags (`--remark`, `--gitref`, extra info) annotate the run. Generated charts use the in-repo report library (`core/bench/report`). The runner (`core/bench/runner`) executes benchmarks across Git revisions. You can browse or compare results in the dashboard (`core/bench/dashboard`), the same code that runs the public [benchmark dashboard](https://benchmarks.iggy.apache.org). A prebuilt dashboard image is available: `docker pull apache/iggy-bench-dashboard:edge`.
 
 ## Performance
 
-The server is thread-per-core and shared-nothing, built on `io_uring` on Linux (via `compio`), with shard and CPU pinning configurable under `[sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmarking platform](https://benchmarks.iggy.apache.org).
+The server is thread-per-core and shared-nothing, built on `io_uring` on Linux (via `compio`), with shard and CPU pinning configurable under `[sharding]`. Throughput and latency depend heavily on hardware, transport, and payload shape (`messages-per-batch * message-size`). Run the benchmarks on your own hardware, or browse current, dated results on the [benchmark dashboard](https://benchmarks.iggy.apache.org).
 
 ## Prepare the host and topic policies
 
@@ -143,4 +145,4 @@ Keep both policies, replication-group size, batch and message sizes, CPU allocat
 cargo run --release --bin iggy-bench -- --max-wait 5s --min-count 100 pinned-consumer tcp
 ```
 
-Keep `min_count` within the smallest `messages-per-batch` value. After warmup, consumer-only runs restart their reads from offset zero, including group consumers. Record wait and byte limits with results because they change batching and latency.
+Keep `min_count` within the smallest `messages-per-batch` value. After warmup, consumer-only runs restart their reads from offset zero. This does not help a `bcg` run on data that its group already read: run the producer workload again first. Record wait and byte limits with results because they change batching and latency.

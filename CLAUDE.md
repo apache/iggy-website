@@ -12,10 +12,22 @@ Apache Iggy website -- a static documentation and marketing site built with **Ne
 npm install        # Install deps (triggers fumadocs-mdx postinstall)
 npm run dev        # Dev server with hot reload (http://localhost:3000)
 npm run build      # Static export to out/ directory
+npm run check:links  # Broken /docs links, pages missing from meta.json, missing assets
 npx serve out      # Preview the static build
 ```
 
 `npm start` (`next start`) does not work here: it is incompatible with `output: "export"`. `predev`/`prebuild` run `scripts/fetch-github-stars.mjs` (network call with a graceful offline fallback).
+
+`check:links` reads the `/docs` links in the docs pages and blog posts, and the complete `/docs` string literals in `src/`. It accepts `https://iggy.apache.org/docs/...` and the `.md` URLs of the Markdown copies. CI runs it in the required `checks` job.
+
+`predev`, `prebuild`, `pretypecheck` and `precheck:links` first run `scripts/fetch-docs.mjs`. It previews docs from local checkouts of the docs repositories:
+
+- `IGGY_DOCS_DIR` replaces `content/docs`, except `connectors/`, with a copy of that directory, for example `../iggy/docs`.
+- `IGGY_CONNECTORS_DOCS_DIR` replaces `content/docs/connectors`, for example `../iggy-connectors/docs`.
+- Without a variable, its part stays as it is in Git.
+- `npm run docs:watch` with the same variables copies each saved file, so `npm run dev` in a second terminal reloads the page.
+
+The copies show up as changes to `content/docs` in Git, and they overwrite uncommitted edits there. Do not commit them. To remove them, run `git restore content/docs` and then `git clean -fd content/docs`. The second command also deletes new pages that you did not add to Git.
 
 No test framework is configured. No linter is configured beyond TypeScript strict mode.
 
@@ -26,7 +38,8 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 **Route groups:**
 - `src/app/(home)/` -- Landing page with hero, features, footer
 - `src/app/(site)/` -- Blog listing (`/blogs/`), downloads (`/downloads/`), community (`/community/`)
-- `src/app/docs/` -- Documentation pages via Fumadocs DocsLayout
+- `src/app/(current)/docs/` -- Documentation pages via Fumadocs DocsLayout
+- `src/app/(archive)/docs/<minor>/` -- Archived docs of each release (see "Archived docs")
 - `src/app/api/search/` -- Static search index (search UI enabled in the docs layout)
 
 **Content (MDX):**
@@ -56,11 +69,13 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 - A diagram component used on its own line in MDX is replaced in the Markdown copy by its text in `scripts/diagram-text.mjs`. When you add or change a diagram, add or update its text there. The generator fails if a component has no text.
 - The docs version shown in llms.txt, llms-full.txt and the Markdown copies is set in `src/lib/docs-version.json`. Update it when the docs move to a new release.
 
-## Archived 0.8 docs
+## Archived docs
 
-- `content/docs-0.8/` is a frozen copy of the docs as they stood for Apache Iggy 0.8 (commit `9eece0aa`, before the 0.9.0 update), served at `/docs/0.8` by `src/app/(archive)/docs/0.8/`. The current docs live in `src/app/(current)/docs/`; the route groups keep the two sidebars apart.
-- Do not edit the archive except to fix something broken. Its `/docs` links point at `/docs/0.8`, and `npm run check:links` fails if an archived page links outside it.
-- The archive uses its own copy of the diagrams in `src/components/archive-0.8/`, shows a notice on every page, is marked `noindex`, and is left out of search, the sitemap and llms.txt, which all use `source` rather than `source08`.
+- `content/docs-0.8/`, `content/docs-0.9/` and `content/docs-0.10/` are frozen copies of the docs of each release, served at `/docs/<minor>` by `src/app/(archive)/docs/<minor>/`. The 0.8 copy is from commit `9eece0aa`, before the 0.9.0 update. The current docs live in `src/app/(current)/docs/`. The route groups keep the sidebars apart.
+- Do not edit an archive except to fix something broken. Its `/docs` links point at `/docs/<minor>` or at an older archive, and `npm run check:links` fails if an archived page links to the current docs.
+- Each archive uses its own copy of the diagrams in `src/components/archive-<minor>/`, shows a notice on every page, is marked `noindex`, and is left out of search, the sitemap and llms.txt. These use `source`, not the archive loaders.
+- The version switcher at the top of every docs sidebar lists `/docs` and the archives from `src/lib/docs-versions.tsx`.
+- To add an archive, copy `content/docs` to `content/docs-<minor>/` and point its `/docs` links at `/docs/<minor>`. Then add a collection in `source.config.ts`, a loader in `src/lib/source.ts`, an entry in `TREES` in `scripts/check-docs-links.mjs`, the route group, the component copies with their links changed the same way, and an entry in `src/lib/docs-versions.tsx`.
 
 ## Deployment
 
