@@ -1,4 +1,0 @@
-{
-  "title": "Introduction",
-  "pages": ["about", "concepts", "coming-from-kafka", "glossary", "serialising-messages", "architecture", "quickstart", "getting-started", "getting-started-python"]
-}

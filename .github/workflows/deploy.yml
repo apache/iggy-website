@@ -1,21 +1,134 @@
 name: Deploy Apache Iggy Website
 
+# Publishes iggy.apache.org from this repository and from docs/ of apache/iggy
+# and apache/iggy-connectors. A merge in those repositories cannot start this
+# workflow, so it also runs every 15 minutes. The check job compares the wanted
+# state with docs-source.json, the record of the last deploy, and the site
+# builds only when they differ. A lost run loses nothing, because the next run
+# compares again. After two failed builds of the same state, the runs skip it
+# until the state or the date changes. The first run of each UTC day always
+# builds, which refreshes the GitHub star count and the copyright year.
+
 on:
   push:
     branches:
       - main
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
 
+permissions: {}
+
+# One run at a time on main, so that two runs cannot race on the force-push to
+# asf-site. A manual run on another branch does not publish, so it gets its own
+# group, and a run on main cannot cancel it while it waits.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  publish:
+  check:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    outputs:
+      iggy_commit: ${{ steps.state.outputs.iggy_commit }}
+      iggy_tree: ${{ steps.state.outputs.iggy_tree }}
+      connectors_commit: ${{ steps.state.outputs.connectors_commit }}
+      connectors_tree: ${{ steps.state.outputs.connectors_tree }}
+      date: ${{ steps.state.outputs.date }}
+      build: ${{ steps.state.outputs.build == 'true' && steps.failed.outputs.cache-hit != 'true' }}
+      # The key that the record-failure job saves: -1 after the first failed
+      # build of the state, -2 after the second.
+      failure_key: >-
+        ${{ steps.failed.outputs.cache-matched-key
+        && format('{0}-2', steps.state.outputs.failure_key)
+        || format('{0}-1', steps.state.outputs.failure_key) }}
+    steps:
+      - name: Compare with the last deploy
+        id: state
+        env:
+          EVENT: ${{ github.event_name }}
+          WEBSITE: ${{ github.sha }}
+        run: |
+          for repo in iggy iggy-connectors; do
+            git clone -q --depth=1 --filter=blob:none --no-checkout \
+              "https://github.com/apache/$repo.git" "$RUNNER_TEMP/$repo"
+          done
+          iggy_commit=$(git -C "$RUNNER_TEMP/iggy" rev-parse HEAD)
+          iggy_tree=$(git -C "$RUNNER_TEMP/iggy" rev-parse HEAD:docs)
+          connectors_commit=$(git -C "$RUNNER_TEMP/iggy-connectors" rev-parse HEAD)
+          connectors_tree=$(git -C "$RUNNER_TEMP/iggy-connectors" rev-parse HEAD:docs)
+          today=$(date -u +%F)
+
+          # raw.githubusercontent.com caches for up to 5 minutes. A stale
+          # record causes at most one more build.
+          record="$RUNNER_TEMP/docs-source.json"
+          status=$(curl -sS --retry 5 --retry-all-errors -o "$record" -w '%{http_code}' \
+            https://raw.githubusercontent.com/apache/iggy-website/asf-site/docs-source.json) \
+            || status=000
+          if [ "$status" != 200 ]; then
+            echo "::notice::No deploy record (HTTP $status), so this run publishes"
+            echo '{}' > "$record"
+          fi
+          field() { jq -r ".$1 // empty" "$record" 2>/dev/null || true; }
+
+          echo "website:         $(field website) -> $WEBSITE"
+          echo "iggy_tree:       $(field iggy_tree) -> $iggy_tree"
+          echo "connectors_tree: $(field connectors_tree) -> $connectors_tree"
+          echo "date:            $(field date) -> $today"
+          if [ "$EVENT" != workflow_dispatch ] \
+            && [ "$(field website)" = "$WEBSITE" ] \
+            && [ "$(field iggy_tree)" = "$iggy_tree" ] \
+            && [ "$(field connectors_tree)" = "$connectors_tree" ] \
+            && [ "$(field date)" = "$today" ]; then
+            build=false
+          else
+            build=true
+          fi
+          echo "build: $build"
+          {
+            echo "iggy_commit=$iggy_commit"
+            echo "iggy_tree=$iggy_tree"
+            echo "connectors_commit=$connectors_commit"
+            echo "connectors_tree=$connectors_tree"
+            echo "date=$today"
+            echo "build=$build"
+            echo "failure_key=deploy-failed-$WEBSITE-$iggy_tree-$connectors_tree-$today"
+          } >> "$GITHUB_OUTPUT"
+
+      # A build that fails for a broken page fails again on each run. The first
+      # failure gets one more try, because it can come from the network. A
+      # manual run always builds.
+      - name: Look for failed builds of this state
+        id: failed
+        if: steps.state.outputs.build == 'true' && github.event_name != 'workflow_dispatch'
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: deploy-failed
+          key: ${{ steps.state.outputs.failure_key }}-2
+          restore-keys: ${{ steps.state.outputs.failure_key }}-1
+          lookup-only: true
+
+      - name: Skip a state that failed twice
+        if: steps.failed.outputs.cache-hit == 'true'
+        run: >-
+          echo "::notice::Two builds of this state failed today, so this run
+          skips it. A change, the next day or a manual run builds it again."
+
+  # MDX is code that runs during the build, so this job gets no token that can
+  # push. A manual run on another branch builds without a publish.
+  build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -30,18 +143,60 @@ jobs:
       # is gitignored and so absent on a fresh checkout. Without a token the
       # anonymous API limit (per runner IP) is routinely exhausted and the
       # script silently ships its hardcoded fallback instead.
+      # prebuild also fetches the docs at the commits that the check job
+      # compared, so the record names the docs that the site holds.
       - name: Build Website
         run: npm run build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IGGY_DOCS_REF: ${{ needs.check.outputs.iggy_commit }}
+          IGGY_CONNECTORS_DOCS_REF: ${{ needs.check.outputs.connectors_commit }}
 
-      - name: Copy ASF config
+      # The docs jobs of apache/iggy and apache/iggy-connectors read the record
+      # to build against the deployed state.
+      - name: Copy ASF config and write the deploy record
+        env:
+          WEBSITE: ${{ github.sha }}
+          IGGY_COMMIT: ${{ needs.check.outputs.iggy_commit }}
+          IGGY_TREE: ${{ needs.check.outputs.iggy_tree }}
+          CONNECTORS_COMMIT: ${{ needs.check.outputs.connectors_commit }}
+          CONNECTORS_TREE: ${{ needs.check.outputs.connectors_tree }}
+          DATE: ${{ needs.check.outputs.date }}
         run: |
           cp .asf.yaml ./out/.asf.yaml
           cp .htaccess ./out/.htaccess
+          jq -n --arg website "$WEBSITE" \
+            --arg iggy_commit "$IGGY_COMMIT" --arg iggy_tree "$IGGY_TREE" \
+            --arg connectors_commit "$CONNECTORS_COMMIT" --arg connectors_tree "$CONNECTORS_TREE" \
+            --arg date "$DATE" '$ARGS.named' > ./out/docs-source.json
+          cat ./out/docs-source.json
+
+      - name: Upload the site
+        uses: actions/upload-artifact@v7
+        with:
+          name: site
+          path: out
+          include-hidden-files: true # keeps .asf.yaml and .htaccess
+          if-no-files-found: error
+          retention-days: 1
+
+  # Runs no code from any repository. peaceiris/actions-gh-pages runs git init
+  # in its own directory, so the job needs no checkout.
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download the site
+        uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: out
 
       - name: Publish Iggy Website to asf-site
-        if: github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -52,3 +207,20 @@ jobs:
           user_name: "github-actions[bot]"
           user_email: "github-actions[bot]@users.noreply.github.com"
           commit_message: "Deploy website from main branch"
+
+  # Saves the failure_key of the check job as a cache entry, which the next
+  # check job finds. Runs no code from any repository.
+  record-failure:
+    needs: [check, build, publish]
+    if: failure() && needs.check.result == 'success'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Write the marker
+        run: echo "$GITHUB_RUN_ID" > deploy-failed
+
+      - name: Save the marker
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: deploy-failed
+          key: ${{ needs.check.outputs.failure_key }}
