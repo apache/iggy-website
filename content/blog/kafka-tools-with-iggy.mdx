@@ -20,9 +20,9 @@ The gateway is a separate server that listens for Kafka clients on port 9093 by 
   (tools, Java, Python)                  iggy-gateway-kafka                  (real broker)
 ```
 
-It supports producing, fetching, listing offsets, topic and partition management, topic configs, and consumer groups with committed offsets stored in Iggy. A Kafka topic maps to an Iggy topic of the same name, inside one Iggy stream called `kafka` by default. A record's value becomes the Iggy message payload, and its key and headers become Iggy user headers. That means a Kafka consumer can read a topic that an Iggy SDK producer wrote, and the other way round.
+It supports producing, fetching, listing offsets, topic and partition management, topic configs, and consumer groups with committed offsets stored in Iggy. A Kafka topic maps to an Iggy topic of the same name, inside one Iggy stream called `kafka` by default. A record's value becomes the Iggy message payload, and its key and headers become Iggy user headers. That means a Kafka consumer can read a topic that an Iggy SDK producer wrote, and the other way round, with an Iggy SDK from the 0.10.0 release or later (Rust SDK 0.12.0 or later).
 
-The gateway ships as its own binary and Docker image, `apache/iggy-kafka-gateway`. The Iggy server needs no changes, but consumer group offsets need server 0.10.0 or later, or the `edge` image.
+The gateway ships as its own binary and Docker image, `apache/iggy-kafka-gateway`. It works with a stock Iggy server, 0.10.0 or later.
 
 ## Start the gateway next to an Iggy server
 
@@ -281,7 +281,7 @@ partition=0 offset=1 key=sensor-0 value=reading 3
 
 The first run takes a little longer while Maven downloads the libraries. The Java client hashes keys with murmur2, so `sensor-0` goes to partition 0 and the other two keys to partition 1. The client picks the partition, so it does the same against a Kafka broker.
 
-The Java producer is idempotent by default, and the gateway accepts it. With `IGGY_KAFKA_IDEMPOTENT_PRODUCERS` left off, which is the default, the gateway does not check the producer's sequence numbers, so a resend after a network error can be written twice. The code is the same code you would write for any Kafka cluster, and only the bootstrap address points at the gateway.
+The Java producer is idempotent by default, and the gateway checks its sequence numbers by default, so a batch resent after a network error is written once. The code is the same code you would write for any Kafka cluster, and only the bootstrap address points at the gateway.
 
 ### Python
 
@@ -365,16 +365,16 @@ docker compose exec iggy-server /usr/local/bin/iggy --username iggy \
 +--------+----------------------------+-----------------------------------------+--------+-----------+-----------------+-------------------+
 ```
 
-Kafka and Iggy both number partitions from 0, so stream `kafka`, topic `readings-java`, partition 0, offset 0 is the record the Java consumer printed as `partition=0 offset=0 key=sensor-0 value=reading 0`. The value is the payload and the key is in the `kafka.key` user header, and the timestamp and ID will differ on your machine. If you ran only the Python version, poll `readings-python 1` instead.
+Kafka and Iggy both number partitions from 0, so stream `kafka`, topic `readings-java`, partition 0, offset 0 is the record the Java consumer printed as `partition=0 offset=0 key=sensor-0 value=reading 0`. The value is the payload and the key is in the `kafka.key` user header, and the timestamp and ID will differ on your machine. If you ran only the Python version, poll `readings-python 0` instead.
 
 When you are done, `docker compose down -v` stops both containers and removes the data.
 
 ## Current limits
 
-The gateway is at version 0.2.0. The steps above cover producing, consuming and consumer groups, and a few Kafka features are not there yet:
+The Compose file builds the gateway from the default branch, which has newer defaults than the 0.2.0 release. Until the next release, use the `apache/iggy-kafka-gateway:edge` image rather than `latest`, which is 0.2.0 and starts with the bridge off, so it stores nothing. The steps above cover producing, consuming and consumer groups, and a few Kafka features are not there yet:
 
 - Transactions are not supported. A transactional producer gets a clear error, and `read_committed` consumers work as normal.
-- Delivery is at-least-once by default. For duplicate-free writes from idempotent producers, turn on `IGGY_KAFKA_IDEMPOTENT_PRODUCERS` with `persisted` topics, as the Delivery guarantees section of the README describes.
+- An idempotent producer, like the default Java one, writes each batch once. Other producers, such as kcat, and all consumers get at-least-once delivery. To keep that through several Iggy nodes crashing at once, a topic needs `persisted` durability, as [docs/IDEMPOTENCE.md](https://github.com/apache/iggy/blob/master/gateways/kafka/docs/IDEMPOTENCE.md) describes.
 - Deleting records from a topic, for example with `kafka-delete-records.sh`, is not supported yet.
 - The gateway's end-to-end tests run kcat and the Kafka Java clients and tools, and the programs in this post also ran with kafka-clients 4.4.0 and 3.9.1 and kafka-python 3.0.13. A compatibility matrix for more clients and frameworks, such as Sarama, KafkaJS, Kafka Connect and Kafka Streams, is planned in [apache/iggy#4531](https://github.com/apache/iggy/issues/4531).
 
