@@ -1,19 +1,64 @@
 name: Deploy Apache Iggy Staging Website
 
+# Publishes iggy.staged.apache.org. A push to the staging branch publishes it
+# with docs/ from master of apache/iggy and apache/iggy-connectors. A manual run
+# publishes the website branch that it runs on, with docs/ from the branches in
+# its inputs.
+
 on:
   push:
     branches:
       - staging
   workflow_dispatch:
+    inputs:
+      iggy_branch:
+        description: "Branch of apache/iggy to take docs/ from"
+        type: string
+        required: true
+        default: master
+      connectors_branch:
+        description: "Branch of apache/iggy-connectors to take docs/ from"
+        type: string
+        required: true
+        default: master
+
+permissions: {}
+
+# One run at a time, so that two runs cannot race on the force-push to asf-staging.
+concurrency:
+  group: publish-asf-staging
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  # MDX is code that runs during the build, so this job gets no token that can
+  # push.
+  build:
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          persist-credentials: false
+
+      # Only branches can reach the staging site. A ref such as refs/pull/1/head
+      # becomes refs/heads/refs/pull/1/head, which the fetch does not find.
+      - name: Select the docs branches
+        id: refs
+        env:
+          IGGY_BRANCH: ${{ inputs.iggy_branch || 'master' }}
+          CONNECTORS_BRANCH: ${{ inputs.connectors_branch || 'master' }}
+        run: |
+          for branch in "$IGGY_BRANCH" "$CONNECTORS_BRANCH"; do
+            if ! git check-ref-format "refs/heads/$branch"; then
+              echo "::error::'$branch' is not a valid branch name"
+              exit 1
+            fi
+          done
+          echo "iggy=refs/heads/$IGGY_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "connectors=refs/heads/$CONNECTORS_BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -32,14 +77,39 @@ jobs:
         run: npm run build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IGGY_DOCS_REF: ${{ steps.refs.outputs.iggy }}
+          IGGY_CONNECTORS_DOCS_REF: ${{ steps.refs.outputs.connectors }}
 
       - name: Copy ASF config
         run: |
           cp .asf.yaml ./out/.asf.yaml
           cp .htaccess ./out/.htaccess
 
+      - name: Upload the site
+        uses: actions/upload-artifact@v7
+        with:
+          name: site
+          path: out
+          include-hidden-files: true # keeps .asf.yaml and .htaccess
+          if-no-files-found: error
+          retention-days: 1
+
+  # Runs no code from any repository. peaceiris/actions-gh-pages runs git init
+  # in its own directory, so the job needs no checkout.
+  publish:
+    needs: build
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download the site
+        uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: out
+
       - name: Publish Iggy Website to asf-staging
-        if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -49,4 +119,4 @@ jobs:
           force_orphan: true
           user_name: "github-actions[bot]"
           user_email: "github-actions[bot]@users.noreply.github.com"
-          commit_message: "Deploy staging website from staging branch"
+          commit_message: "Deploy staging website"
