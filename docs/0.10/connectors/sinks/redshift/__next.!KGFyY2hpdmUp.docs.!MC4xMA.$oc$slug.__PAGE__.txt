@@ -1,0 +1,57 @@
+5:"$Sreact.fragment"
+6:"/_next/static/chunks/17h2u87b587ue.js"
+7:"/_next/static/chunks/2lawe380k5gxe.js"
+8:I[39756,["$6","$7"],"default"]
+9:I[37457,["$6","$7"],"default"]
+e:"/_next/static/chunks/44_4f42331mto.js"
+f:"/_next/static/chunks/14cmwlsva1uso.js"
+10:"/_next/static/chunks/3pe5kqjwb9q4b.js"
+11:"/_next/static/chunks/3e6aab2gpc17v.js"
+12:"/_next/static/chunks/20hf3kl_kpt7x.js"
+13:"/_next/static/chunks/1bwdz_8zfcww8.js"
+14:"/_next/static/chunks/3pgmqji_9im6z.js"
+15:"/_next/static/chunks/3vzh_1a3r6hy2.js"
+16:"/_next/static/chunks/29-phuz7hmie6.js"
+17:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsPage"]
+18:I[22016,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],""]
+19:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsTitle"]
+1a:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsDescription"]
+1b:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsBody"]
+1c:I[94157,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"Heading"]
+1d:I[32465,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"default"]
+2b:"ViewportBoundary"
+2c:I[97367,["$6","$7"],"$2b"]
+2d:"MetadataBoundary"
+2e:I[97367,["$6","$7"],"$2d"]
+2f:"$Sreact.suspense"
+30:I[27201,["$6","$7"],"IconMark"]
+b:X
+b:C
+c:X
+d:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$5","c",{"children":[["$","$L17",null,{"toc":[{"depth":2,"url":"#configuration","title":"Configuration"},{"depth":2,"url":"#payloads-and-delivery","title":"Payloads and delivery"}],"footer":{"items":{"previous":{"$id":"connectors/sinks/rabbitmq.mdx","type":"page","name":[["$","span",null,{"className":"me-1 font-normal text-fd-muted-foreground","children":["Sinks",":"]}],"RabbitMQ"],"description":"Send Iggy messages to RabbitMQ with the connector runtime.","url":"/docs/0.10/connectors/sinks/rabbitmq","$ref":"connectors/sinks/rabbitmq.mdx"},"next":{"$id":"sdk/introduction.mdx","type":"page","name":[["$","span",null,{"className":"me-1 font-normal text-fd-muted-foreground","children":["SDK",":"]}],"Introduction"],"description":"The official Iggy client SDKs, their packages and registries, and the transports each one supports.","url":"/docs/0.10/sdk/introduction","$ref":"sdk/introduction.mdx"}}},"children":[["$","div",null,{"className":"mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-fd-foreground","children":["These are the docs for Apache Iggy 0.10, kept for reference and no longer updated."," ",["$","$L18",null,{"href":"/docs","className":"font-medium text-fd-primary underline","children":"Read the current docs"}],"."]}],["$","$L19",null,{"children":"Redshift"}],["$","$L1a",null,{"children":"Send Iggy messages to Redshift with the connector runtime."}],["$","$L1b",null,{"children":[["$","p",null,{"children":"The Redshift sink serializes batches to Parquet, stages them in S3 and loads an existing Redshift table with COPY. Configure both the Redshift connection and S3 access before starting the runtime."}],"\n",["$","$L1c",null,{"as":"h2","id":"configuration","children":"Configuration"}],"\n",["$","p",null,{"children":["Use the ",["$","$L1d",null,{"href":"/docs/0.10/connectors/sinks/sink","children":"sink runtime setup"}]," and build ",["$","code",null,{"children":"iggy_connector_redshift_sink"}],". The plugin requires ",["$","code",null,{"children":"connection_string"}],", ",["$","code",null,{"children":"target_table"}],", ",["$","code",null,{"children":"aws_iam_role"}],", ",["$","code",null,{"children":"s3_bucket"}],", ",["$","code",null,{"children":"s3_prefix"}]," and ",["$","code",null,{"children":"aws_region"}],". Supply S3 credentials through the supported credential configuration for your deployment."]}],"\n",["$","div",null,{"className":"relative overflow-auto prose-no-margin my-6","tabIndex":0,"children":["$","table",null,{"children":[["$","thead",null,{"children":["$","tr",null,{"children":[["$","th",null,{"children":"Setting"}],["$","th",null,{"children":"Default"}],["$","th",null,{"children":"Purpose"}]]}]}],["$","tbody",null,{"children":[["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"batch_size"}]}],["$","td",null,{"children":"100"}],["$","td",null,{"children":"Messages buffered per Parquet file and COPY operation"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"max_connections"}]}],["$","td",null,{"children":"5"}],["$","td",null,{"children":"Redshift connection pool size"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"include_metadata"}]}],["$","td",null,{"children":["$","code",null,{"children":"true"}]}],["$","td",null,{"children":"Include stream, topic, partition, offset, timestamp and schema"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"include_checksum"}]}],["$","td",null,{"children":["$","code",null,{"children":"false"}]}],["$","td",null,{"children":"Include the Iggy checksum"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"include_origin_timestamp"}]}],["$","td",null,{"children":["$","code",null,{"children":"false"}]}],["$","td",null,{"children":"Include producer time"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"payload_format"}]}],["$","td",null,{"children":["$","code",null,{"children":"varbyte"}]}],["$","td",null,{"children":"Payload encoding in Parquet"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"max_retries"}]}],["$","td",null,{"children":"3"}],["$","td",null,{"children":"COPY retries after the first attempt"}]]}],"$L1e","$L1f"]}]]}]}],"\n","$L20","\n","$L21","\n","$L22","\n","$L23","\n","$L24"]}]]}],["$L25","$L26","$L27","$L28"],"$L29"]}],"p":"$@2a","v":null,"s":"$c"}}]]
+4:[["children",{"s":{"n":"slug","t":"oc","k":"connectors/sinks/redshift","s":[]},"h":64,"d":{"r":["$","$5","c",{"children":[null,["$","$L8",null,{"parallelRouterKey":"children","template":["$","$L9",null,{}]}]]}],"p":"$@a","v":"$b","s":"$c"},"c":"$Qd"}]]
+3:[["children",{"s":"0.10","h":32,"c":"$Q4"}]]
+2:[["children",{"s":"docs","h":96,"c":"$Q3"}]]
+1:[["children",{"s":"(archive)","h":64,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":16,"c":"$Q1"},"h":{"r":["$","$5","h",{"children":[null,["$","$L2c",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L2e",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$2f",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"0.10 Sinks: Redshift | Apache Iggy"}],["$","meta","1",{"name":"description","content":"Send Iggy messages to Redshift with the connector runtime."}],["$","meta","2",{"name":"robots","content":"noindex, follow"}],["$","link","3",{"rel":"canonical","href":"https://iggy.apache.org/docs/0.10/connectors/sinks/redshift/"}],["$","meta","4",{"property":"og:title","content":"0.10 Sinks: Redshift | Apache Iggy"}],["$","meta","5",{"property":"og:description","content":"Send Iggy messages to Redshift with the connector runtime."}],["$","meta","6",{"property":"og:url","content":"https://iggy.apache.org/docs/0.10/connectors/sinks/redshift"}],["$","meta","7",{"property":"og:site_name","content":"Apache Iggy"}],["$","meta","8",{"property":"og:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","meta","9",{"property":"og:image:width","content":"1200"}],["$","meta","10",{"property":"og:image:height","content":"630"}],["$","meta","11",{"property":"og:image:alt","content":"Apache Iggy"}],["$","meta","12",{"property":"og:type","content":"website"}],["$","meta","13",{"name":"twitter:card","content":"summary_large_image"}],["$","meta","14",{"name":"twitter:title","content":"0.10 Sinks: Redshift | Apache Iggy"}],["$","meta","15",{"name":"twitter:description","content":"Send Iggy messages to Redshift with the connector runtime."}],["$","meta","16",{"name":"twitter:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","link","17",{"rel":"icon","href":"/img/favicon.png"}],["$","$L30","18",{}]]}]}],null]}],null]}],"p":"$@31","v":null,"s":"$c"}},"a":"$@32","u":"$@33","b":"ty5bwU7gfIQIErNmiWYIn"}
+34:I[97367,["$6","$7"],"OutletBoundary"]
+1e:["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"retry_delay"}]}],["$","td",null,{"children":"One second"}],["$","td",null,{"children":"Pause between attempts"}]]}]
+1f:["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"archive"}]}],["$","td",null,{"children":["$","code",null,{"children":"false"}]}],["$","td",null,{"children":"Retain successfully loaded staging files under the archive prefix"}]]}]
+20:["$","p",null,{"children":[["$","code",null,{"children":"aws_access_key_id"}]," and ",["$","code",null,{"children":"aws_secret_access_key"}]," supply explicit staging credentials. ",["$","code",null,{"children":"s3_endpoint"}]," supports an alternate S3 endpoint. The ",["$","$L1d",null,{"href":"https://github.com/apache/iggy/blob/server-0.10.0/core/connectors/sinks/redshift_sink/config.toml","children":"complete example configuration"}]," includes a local staging service setup. Replace its credentials and role before use."]}]
+21:["$","$L1c",null,{"as":"h2","id":"payloads-and-delivery","children":"Payloads and delivery"}]
+22:["$","p",null,{"children":[["$","code",null,{"children":"payload_format=\"json\""}]," writes a string column, not a native Redshift SUPER value. Use Redshift JSON parsing when structured queries need that representation. ",["$","code",null,{"children":"varbyte"}]," preserves the serialized payload as bytes."]}]
+23:["$","p",null,{"children":["With ",["$","code",null,{"children":"archive=false"}],", a successfully loaded staging file is deleted. With it enabled, the file is moved under the archive prefix. A staged file alone does not prove that COPY completed."]}]
+24:["$","p",null,{"children":["The runtime commits offsets on read. A COPY failure that outlasts plugin retries is logged and is not replayed by the runtime. A retry after an uncertain load can duplicate rows. See the ",["$","$L1d",null,{"href":"https://github.com/apache/iggy/blob/server-0.10.0/core/connectors/sinks/redshift_sink/README.md","children":"source reference"}],"."]}]
+25:["$","script","script-0",{"src":"/_next/static/chunks/1bwdz_8zfcww8.js","async":true}]
+26:["$","script","script-1",{"src":"/_next/static/chunks/3pgmqji_9im6z.js","async":true}]
+27:["$","script","script-2",{"src":"/_next/static/chunks/3vzh_1a3r6hy2.js","async":true}]
+28:["$","script","script-3",{"src":"/_next/static/chunks/29-phuz7hmie6.js","async":true}]
+29:["$","$L34",null,{"children":["$","$2f",null,{"name":"Next.MetadataOutlet","children":"$@35"}]}]
+33:true
+c:300
+35:null
+c:C
+32:0
+a:"$undefined"
+31:"$undefined"
+2a:"$undefined"
