@@ -6,7 +6,7 @@ tags: ["kafka", "java", "tutorial"]
 date: 2026-11-20
 ---
 
-Apache Iggy's Kafka clients library implements Kafka's `Producer`, `Consumer` and `Admin` interfaces on top of Iggy. If your Java code is written against those interfaces, you change the constructor and the rest stays as it is.
+Apache Iggy's Kafka clients library implements Kafka's `Producer`, `Consumer` and `Admin` interfaces on top of Iggy. If your Java code is written against those interfaces, you change the constructor and the rest stays as it is. The library is not released yet. You build it from source in apache/iggy-demos, and we are looking for people to test it on their own code.
 
 That is the claim, so we tried it on seven real projects. This post walks through the simplest one, the Kafka examples that ship with Apache Kafka, so you can repeat it in about ten minutes. Then it covers the other six, and asks you to try it on your own code and tell us what breaks.
 
@@ -20,16 +20,16 @@ Consumer<String, String> consumer = new IggyKafkaConsumer<>(props);   // was new
 Admin admin = IggyAdminClient.create(props);                          // was AdminClient.create(props)
 ```
 
-It is built for Java 17 against `kafka-clients` 4.3.0 and the Iggy Java SDK 0.10.0, for an Iggy 0.10.x server. It also runs with `kafka-clients` 3.9 on the classpath. It stores records the way the Iggy Kafka gateway does, so each can read what the other wrote. It is not in any Maven repository yet, so you build it from source.
+It is built for Java 17 against `kafka-clients` 4.3.0 and the Iggy Java SDK 0.10.0, for an Iggy 0.10.x server. It also runs with `kafka-clients` 3.9 on the classpath. It stores records the way the Iggy Kafka gateway does, so each can read what the other wrote. Consumer group offsets are stored differently, so a consumer group cannot move between the library and the gateway.
 
 ## Try it: the Kafka examples on Iggy
 
-You need Docker, JDK 17 or later, Maven and git.
+You need Docker, JDK 17 or later, Maven 3.9 or later and git.
 
 ### 1. Start Iggy
 
 ```bash
-docker run -d --name iggy -p 18090:18090 \
+docker run -d --name iggy -p 127.0.0.1:18090:18090 \
   --cap-add SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
   -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
   -e IGGY_TCP_ADDRESS=0.0.0.0:18090 -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
@@ -196,6 +196,12 @@ producer - Sent 1000 records
 
 Drop `sync` to send asynchronously instead. Both modes pass in our test.
 
+### 6. Clean up
+
+```bash
+docker rm -f iggy
+```
+
 ## Producers and consumers in six other projects
 
 We made the same change to the Kafka producers and consumers in six open source projects:
@@ -207,7 +213,9 @@ We made the same change to the Kafka producers and consumers in six open source 
 - Apache Pinot's Kafka plugin: consumer
 - Zipkin's Kafka collector: consumer
 
-Each change was the same as in the Kafka examples above: `KafkaProducer`, `KafkaConsumer` and `AdminClient` swapped for the Iggy classes, and the variables that held them typed to the Kafka interfaces. Camel did not even need that, because it lets you supply your own clients. Their own tests then passed against Iggy, apart from the few that need something Iggy does not do, such as transactions.
+Each change was the same as in the Kafka examples above: `KafkaProducer`, `KafkaConsumer` and `AdminClient` swapped for the Iggy classes, and the variables that held them typed to the Kafka interfaces. Camel did not even need that, because it lets you supply your own clients. Most of their own tests passed against Iggy. The ones that failed need something Iggy does not do, such as transactions.
+
+These runs were on Iggy 0.10.0, and the changes to the projects are not published.
 
 ## What does not work
 
@@ -216,8 +224,10 @@ Each change was the same as in the Kafka examples above: `KafkaProducer`, `Kafka
 - Code that reads Kafka client internals by reflection.
 - Anything Iggy has no equivalent for, such as truncating a partition. The Admin client throws `UnsupportedOperationException` for ACLs, quotas, SCRAM credentials and similar calls.
 - Netty 4.1. The Iggy Java SDK 0.10.0 needs Netty 4.2, so if your project manages Netty at 4.1, import `netty-bom` 4.2.19.Final, the version the SDK uses.
+- More than one broker address. Only the first `bootstrap.servers` entry is used.
+- Kafka Streams and Kafka Connect, which we have not tried.
 
-The README has the full list of limits.
+The [library README](https://github.com/apache/iggy-demos/blob/main/kafka-clients/README.md) has the full list of limits.
 
 ## Try it on your code
 
