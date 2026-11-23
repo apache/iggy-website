@@ -19,6 +19,7 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 
 export type ConferenceDeck = {
   routeSegments: [string, ...string[]];
@@ -34,19 +35,37 @@ export type ConferenceDeck = {
   order?: number;
 };
 
-type ConferenceDeckSidecar = Partial<
-  Pick<
-    ConferenceDeck,
-    | "title"
-    | "shortDescription"
-    | "presenterName"
-    | "conferenceName"
-    | "city"
-    | "year"
-    | "videoUrl"
-    | "order"
-  >
->;
+// The keys that a `<slug>.meta.json` can set. The schema is strict, so a
+// misspelled key such as `videoURL` fails the build. A plain JSON.parse drops
+// the field and the page silently loses its "Watch" link.
+const sidecarSchema = z.strictObject({
+  title: z.string().optional(),
+  shortDescription: z.string().optional(),
+  presenterName: z.string().optional(),
+  conferenceName: z.string().optional(),
+  city: z.string().optional(),
+  year: z.string().optional(),
+  videoUrl: z.url({ protocol: /^https$/ }).optional(),
+  order: z.number().int().optional(),
+});
+
+type ConferenceDeckSidecar = z.infer<typeof sidecarSchema>;
+
+function readSidecar(sidecarPath: string): ConferenceDeckSidecar {
+  if (!existsSync(sidecarPath)) return {};
+  const file = path.relative(process.cwd(), sidecarPath);
+  let json: unknown;
+  try {
+    json = JSON.parse(readFileSync(sidecarPath, "utf8"));
+  } catch (e) {
+    throw new Error(`${file}: ${(e as Error).message}`);
+  }
+  const result = sidecarSchema.safeParse(json);
+  if (!result.success) {
+    throw new Error(`${file}:\n${z.prettifyError(result.error)}`);
+  }
+  return result.data;
+}
 
 const DECKS_ROOT = path.join(process.cwd(), "public", "decks", "conferences");
 
@@ -93,10 +112,7 @@ export function getConferenceDecks(): ConferenceDeck[] {
       const routeSegments = relativePath
         .split("/")
         .filter(Boolean) as [string, ...string[]];
-      const sidecarPath = `${basePath}.meta.json`;
-      const sidecar: ConferenceDeckSidecar = existsSync(sidecarPath)
-        ? JSON.parse(readFileSync(sidecarPath, "utf8"))
-        : {};
+      const sidecar = readSidecar(`${basePath}.meta.json`);
       const title =
         sidecar.title ?? labelFromSegment(routeSegments[routeSegments.length - 1]);
       const conferenceName =

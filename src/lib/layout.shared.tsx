@@ -17,47 +17,69 @@
  * under the License.
  */
 
-import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
+import type {
+  BaseLayoutProps,
+  LinkItemType,
+} from "fumadocs-ui/layouts/shared";
 import Image from "next/image";
 import { Logo } from "@/components/logo";
 import { GitHubStars } from "@/components/github-stars";
+import { DiscordMembers } from "@/components/discord-members";
 import { AskAIButton } from "@/components/ask-ai-button";
 import { ASFDropdown } from "@/components/asf-dropdown";
 import { ASFMobileLinks } from "@/components/asf-mobile-links";
-import {
-  CommunityDropdown,
-  communityLinks,
-} from "@/components/community-dropdown";
+import { NavDropdown, type NavDropdownLink } from "@/components/nav-dropdown";
 
-const communityMobileMenu = {
-  type: "menu" as const,
-  text: "Community",
-  url: "/community",
-  on: "menu" as const,
-  items: communityLinks,
-};
+const eventsLinks: NavDropdownLink[] = [
+  { text: "Meetups", url: "/meetups" },
+  { text: "Presentations", url: "/presentations" },
+];
+
+const communityLinks: NavDropdownLink[] = [
+  { text: "Team", url: "/community/team" },
+  { text: "How to Contribute", url: "/community/how-to-contribute" },
+  { text: "Become a Committer", url: "/community/become-a-committer" },
+  { text: "How to Release", url: "/community/how-to-release" },
+  { text: "Graduation Checklist", url: "/community/graduation-checklist" },
+  { text: "Brand Kit", url: "/community/brand-kit" },
+];
+
+// Each dropdown is a custom item in the navbar and a fumadocs menu in the
+// mobile menu, which stacks its items.
+const eventsLinkItems: LinkItemType[] = [
+  {
+    type: "custom",
+    on: "nav",
+    children: <NavDropdown label="Events" links={eventsLinks} />,
+  },
+  { type: "menu", text: "Events", on: "menu", items: eventsLinks },
+];
+
+const communityLinkItems: LinkItemType[] = [
+  {
+    type: "custom",
+    on: "nav",
+    children: <NavDropdown label="Community" links={communityLinks} />,
+  },
+  {
+    type: "menu",
+    text: "Community",
+    url: "/community",
+    on: "menu",
+    items: communityLinks,
+  },
+];
 
 const sharedLinks: BaseLayoutProps["links"] = [
   { text: "Docs", url: "/docs" },
   { text: "Blogs", url: "/blogs" },
   { text: "Downloads", url: "/downloads" },
-  { text: "Meetups", url: "/meetups" },
+  ...eventsLinkItems,
   { text: "Powered By", url: "/powered-by" },
-  { text: "Presentations", url: "/presentations" },
-  {
-    type: "custom",
-    on: "nav",
-    children: <CommunityDropdown />,
-  },
-  communityMobileMenu,
+  ...communityLinkItems,
   {
     text: "Benchmarks",
     url: "https://benchmarks.iggy.apache.org",
-    external: true,
-  },
-  {
-    text: "Discord",
-    url: "https://discord.gg/apache-iggy",
     external: true,
   },
   {
@@ -79,6 +101,11 @@ const sharedLinks: BaseLayoutProps["links"] = [
     type: "custom",
     secondary: true,
     children: <GitHubStars />,
+  },
+  {
+    type: "custom",
+    secondary: true,
+    children: <DiscordMembers />,
   },
 ];
 
@@ -123,15 +150,9 @@ export function docsOptions(): BaseLayoutProps {
       { text: "Home", url: "/" },
       { text: "Blogs", url: "/blogs" },
       { text: "Downloads", url: "/downloads" },
-      { text: "Meetups", url: "/meetups" },
+      ...eventsLinkItems,
       { text: "Powered By", url: "/powered-by" },
-      { text: "Presentations", url: "/presentations" },
-      {
-        type: "custom",
-        on: "nav",
-        children: <CommunityDropdown />,
-      },
-      communityMobileMenu,
+      ...communityLinkItems,
       {
         type: "custom",
         secondary: true,

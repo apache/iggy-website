@@ -45,7 +45,7 @@ export function GitHubStars() {
       href="https://github.com/apache/iggy"
       target="_blank"
       aria-label={`Apache Iggy on GitHub, ${data.stars} stars`}
-      className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-fd-border bg-fd-secondary/60 px-2.5 py-1.5 text-sm font-medium text-fd-foreground transition-colors hover:bg-fd-accent"
+      className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-fd-border bg-fd-secondary/60 px-2 py-1.5 text-sm font-medium text-fd-foreground transition-colors hover:bg-fd-accent"
     >
       <GitHubMark className="size-4 shrink-0" />
       <span className="inline-flex items-center gap-1 border-l border-fd-border pl-1.5 tabular-nums text-fd-primary">

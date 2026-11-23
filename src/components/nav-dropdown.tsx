@@ -22,16 +22,19 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-export const communityLinks = [
-  { text: "Team", url: "/community/team" },
-  { text: "How to Contribute", url: "/community/how-to-contribute" },
-  { text: "Become a Committer", url: "/community/become-a-committer" },
-  { text: "How to Release", url: "/community/how-to-release" },
-  { text: "Graduation Checklist", url: "/community/graduation-checklist" },
-  { text: "Brand Kit", url: "/community/brand-kit" },
-];
+export interface NavDropdownLink {
+  text: string;
+  url: string;
+}
 
-export function CommunityDropdown() {
+/** A navbar label that opens a list of links to pages of this site. */
+export function NavDropdown({
+  label,
+  links,
+}: {
+  label: string;
+  links: NavDropdownLink[];
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -53,7 +56,7 @@ export function CommunityDropdown() {
         className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-sm font-medium text-fd-muted-foreground transition-colors hover:text-fd-foreground"
         aria-expanded={open}
       >
-        Community
+        {label}
         <svg
           width="10"
           height="10"
@@ -73,7 +76,7 @@ export function CommunityDropdown() {
       </button>
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1 min-w-[190px] rounded-lg border border-fd-border bg-fd-popover py-1 shadow-lg">
-          {communityLinks.map((link) => (
+          {links.map((link) => (
             <Link
               key={link.url}
               href={link.url}

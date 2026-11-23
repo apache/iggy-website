@@ -99,13 +99,15 @@ header#nd-nav button {
    scaled --spacing above makes 31px and 10px. With eight links, the dropdowns
    and the buttons on the right, the row is wider than its 1400px maximum, and
    the flex items shrink until labels such as "Powered By" and "Ask the docs"
-   wrap onto two or three lines. Tighter padding lets the row fit. */
+   wrap onto two or three lines. Tighter padding lets the row fit. The
+   dropdowns (Events, Community, ASF) get the same padding as the links. */
 header#nd-nav nav > ul {
-    padding-inline: 1rem;
+    padding-inline: 0.75rem;
     gap: 0.125rem;
 }
 
-header#nd-nav nav > ul > li > a {
+header#nd-nav nav > ul > li > a,
+header#nd-nav nav > ul > div > button {
     padding-inline: 0.5rem;
 }
 

@@ -54,12 +54,10 @@ document.addEventListener('DOMContentLoaded', async function() {
       brandMark.setAttribute('tabindex', '0');
       brandMark.setAttribute('aria-label', 'Open LaserData home page');
 
+      // A new tab, like the links in the other decks. The presentations page
+      // sandboxes this deck, so it cannot navigate the page around it.
       const openHomePage = () => {
-        if (window.top) {
-          window.top.location.href = destination;
-          return;
-        }
-        window.location.href = destination;
+        window.open(destination, '_blank', 'noopener');
       };
 
       brandMark.addEventListener('click', openHomePage);

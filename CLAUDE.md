@@ -16,7 +16,7 @@ npm run check:links  # Broken /docs links, pages missing from meta.json, missing
 npx serve out      # Preview the static build
 ```
 
-`npm start` (`next start`) does not work here: it is incompatible with `output: "export"`. `predev`/`prebuild` run `scripts/fetch-github-stars.mjs` (network call with a graceful offline fallback).
+`npm start` (`next start`) does not work here: it is incompatible with `output: "export"`. `predev`/`prebuild` run `scripts/fetch-github-stars.mjs` and `scripts/fetch-discord-members.mjs` (network calls with a graceful offline fallback).
 
 `check:links` reads the `/docs` links in the docs pages and blog posts, and the complete `/docs` string literals in `src/`. It accepts `https://iggy.apache.org/docs/...` and the `.md` URLs of the Markdown copies. CI runs it in the required `checks` job.
 

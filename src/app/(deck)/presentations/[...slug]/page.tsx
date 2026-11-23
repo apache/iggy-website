@@ -59,12 +59,17 @@ export default async function ConferenceDeckPage({ params }: PageProps) {
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-[#05070D]">
+      {/* The decks are single-file exports with packed scripts. Without
+          allow-same-origin the deck runs in an opaque origin: it cannot read
+          this page or the site's storage, and it cannot navigate this tab.
+          Its links open in new tabs that are not sandboxed. */}
       <iframe
         title={deck.title}
         src={deck.deckPath}
         className="h-full w-full border-0"
         loading="eager"
         allow="fullscreen"
+        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
       />
       <a
         href="/presentations/"
