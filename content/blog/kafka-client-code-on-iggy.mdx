@@ -24,7 +24,7 @@ It is built for Java 17 against `kafka-clients` 4.3.0 and the Iggy Java SDK 0.10
 
 ## Try it: the Kafka examples on Iggy
 
-You need Docker, JDK 17 or later, Maven 3.9 or later and git.
+You need Docker, JDK 17 or later, Maven 3.8 or later and git.
 
 ### 1. Start Iggy
 
@@ -87,6 +87,15 @@ Put this `pom.xml` in `kafka-on-iggy`:
       <version>1.7.36</version>
     </dependency>
   </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+    </plugins>
+  </build>
 </project>
 ```
 
