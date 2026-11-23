@@ -40,6 +40,7 @@ const footerSections = [
       { text: "Blogs", url: "/blogs" },
       { text: "Downloads", url: "/downloads" },
       { text: "Meetups", url: "/meetups" },
+      { text: "Presentations", url: "/presentations" },
       { text: "GitHub", url: "https://github.com/apache/iggy" },
       { text: "Benchmarks", url: "https://benchmarks.iggy.apache.org" },
     ],

@@ -15,6 +15,7 @@ tsconfig.tsbuildinfo
 
 # Build-time generated
 src/github-stars.json
+src/discord-members.json
 public/docs.md
 public/docs/**/*.md
 public/blogs/**/*.md

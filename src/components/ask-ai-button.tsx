@@ -28,7 +28,7 @@ export function AskAIButton() {
   return (
     <button
       type="button"
-      className="kapa-ask-ai inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-fd-border bg-fd-secondary/60 px-2.5 py-1.5 text-sm font-medium text-fd-foreground transition-colors hover:bg-fd-accent"
+      className="kapa-ask-ai inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-fd-border bg-fd-secondary/60 px-2 py-1.5 text-sm font-medium text-fd-foreground transition-colors hover:bg-fd-accent"
     >
       <Sparkles className="size-4 shrink-0 text-fd-primary" aria-hidden />
       Ask the docs
