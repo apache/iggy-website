@@ -92,6 +92,77 @@ header#nd-nav > div {
 header#nd-nav a,
 header#nd-nav button {
     font-size: 0.9375rem;
+    white-space: nowrap;
+}
+
+/* fumadocs pads the main link list with px-6 and each link with p-2, which the
+   scaled --spacing above makes 31px and 10px. With eight links, the dropdowns
+   and the buttons on the right, the row is wider than its 1400px maximum, and
+   the flex items shrink until labels such as "Powered By" and "Ask the docs"
+   wrap onto two or three lines. Tighter padding lets the row fit. */
+header#nd-nav nav > ul {
+    padding-inline: 1rem;
+    gap: 0.125rem;
+}
+
+header#nd-nav nav > ul > li > a {
+    padding-inline: 0.5rem;
+}
+
+/* fumadocs puts the theme toggle before the custom buttons. Show it last. */
+header#nd-nav [data-theme-toggle] {
+    order: 1;
+}
+
+/* Even with the tighter padding the full row needs about 1380px, so below
+   1400px it moves into the dropdown menu in two steps instead of overflowing
+   the page. fumadocs only switches at lg (1024px) for the buttons and at sm
+   (640px) for the links. These rules use its class names, so check them after
+   a fumadocs upgrade.
+   1080-1399px: the links stay in the bar, the buttons move into the menu. */
+@media (max-width: 87.4375rem) {
+    header#nd-nav nav > div.max-lg\:hidden {
+        display: none;
+    }
+
+    header#nd-nav nav > div.lg\:hidden {
+        display: flex;
+    }
+
+    /* The menu lays its items out in a row from sm up. Stack them, as below sm. */
+    header#nd-nav .sm\:flex-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    /* fumadocs gives the open menu its shadow and rounded corners below lg only. */
+    header#nd-nav > div.max-lg\:shadow-lg {
+        box-shadow:
+            0 10px 15px -3px rgb(0 0 0 / 0.1),
+            0 4px 6px -4px rgb(0 0 0 / 0.1);
+        border-bottom-left-radius: 1rem;
+        border-bottom-right-radius: 1rem;
+    }
+}
+
+/* Below 1080px: the links move into the menu too. The links and the logo
+   need about 1030px. */
+@media (max-width: 67.4375rem) {
+    header#nd-nav nav > ul {
+        display: none;
+    }
+
+    header#nd-nav .sm\:hidden.grid {
+        display: grid;
+    }
+
+    header#nd-nav .sm\:hidden.flex {
+        display: flex;
+    }
+
+    header#nd-nav .sm\:hidden.inline-flex {
+        display: inline-flex;
+    }
 }
 
 /* The logo sits in an anchor fumadocs renders, and that anchor is a flex item

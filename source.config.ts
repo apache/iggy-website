@@ -30,10 +30,18 @@ export const docs = defineDocs({
   dir: "content/docs",
 });
 
-// Frozen copy of the docs as they stood for Apache Iggy 0.8, served at /docs/0.8.
-// Not updated; see "Archived 0.8 docs" in CLAUDE.md.
+// Frozen copies of the docs of each release, served at /docs/<minor>.
+// Not updated. See "Archived docs" in CLAUDE.md.
 export const docs08 = defineDocs({
   dir: "content/docs-0.8",
+});
+
+export const docs09 = defineDocs({
+  dir: "content/docs-0.9",
+});
+
+export const docs0_10 = defineDocs({
+  dir: "content/docs-0.10",
 });
 
 export const blogPosts = defineCollections({
@@ -113,24 +121,5 @@ export const organizations = defineCollections({
 export default defineConfig({
   mdxOptions: {
     remarkPlugins: [remarkMdxMermaid],
-    // Search snippets are rendered as plain text. The stock stringifier
-    // serialises back to markdown, so emphasis, inline code and character
-    // escapes leak into the index as literal syntax.
-    remarkStructureOptions: {
-      stringify: {
-        handlers: {
-          strong: (node, _parent, state, info) =>
-            state.containerPhrasing(node, info),
-          emphasis: (node, _parent, state, info) =>
-            state.containerPhrasing(node, info),
-          delete: (node, _parent, state, info) =>
-            state.containerPhrasing(node, info),
-          blockquote: (node, _parent, state, info) =>
-            state.containerFlow(node, info),
-          inlineCode: (node) => node.value,
-          text: (node) => node.value,
-        },
-      },
-    },
   },
 });

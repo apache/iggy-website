@@ -1,0 +1,12 @@
+{
+  "title": "Sources",
+  "pages": [
+    "source",
+    "elasticsearch",
+    "influxdb",
+    "postgres",
+    "random",
+    "mqtt",
+    "http"
+  ]
+}

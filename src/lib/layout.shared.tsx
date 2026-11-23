@@ -41,6 +41,7 @@ const sharedLinks: BaseLayoutProps["links"] = [
   { text: "Docs", url: "/docs" },
   { text: "Blogs", url: "/blogs" },
   { text: "Downloads", url: "/downloads" },
+  { text: "Meetups", url: "/meetups" },
   { text: "Powered By", url: "/powered-by" },
   { text: "Presentations", url: "/presentations" },
   {
@@ -62,7 +63,6 @@ const sharedLinks: BaseLayoutProps["links"] = [
   {
     type: "custom",
     on: "nav",
-    secondary: true,
     children: <ASFDropdown />,
   },
   {
@@ -118,10 +118,12 @@ export function docsOptions(): BaseLayoutProps {
     nav: {
       title: <Logo className="h-9 w-auto shrink-0 md:h-11" />,
     },
+    githubUrl: "https://github.com/apache/iggy",
     links: [
       { text: "Home", url: "/" },
       { text: "Blogs", url: "/blogs" },
       { text: "Downloads", url: "/downloads" },
+      { text: "Meetups", url: "/meetups" },
       { text: "Powered By", url: "/powered-by" },
       { text: "Presentations", url: "/presentations" },
       {

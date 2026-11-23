@@ -63,7 +63,7 @@ export function ASFDropdown() {
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-fd-border bg-fd-popover py-1 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-fd-border bg-fd-popover py-1 shadow-lg">
           {asfLinks.map((link) => (
             <Link
               key={link.url}

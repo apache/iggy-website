@@ -27,13 +27,23 @@ export const metadata: Metadata = {
 
 const releases = [
   {
-    version: "0.9.0",
+    version: "0.10.0",
     latest: true,
+    date: "2026-11-07",
+    archive:
+      "https://www.apache.org/dyn/closer.lua/iggy/0.10.0/iggy-0.10.0-src.tar.gz",
+    asc: "https://downloads.apache.org/iggy/0.10.0/iggy-0.10.0-src.tar.gz.asc",
+    sha: "https://downloads.apache.org/iggy/0.10.0/iggy-0.10.0-src.tar.gz.sha512",
+    changelog: "https://github.com/apache/iggy/releases/tag/server-0.10.0",
+  },
+  {
+    version: "0.9.0",
+    latest: false,
     date: "2026-09-18",
     archive:
-      "https://www.apache.org/dyn/closer.lua/iggy/0.9.0/iggy-0.9.0-src.tar.gz",
-    asc: "https://downloads.apache.org/iggy/0.9.0/iggy-0.9.0-src.tar.gz.asc",
-    sha: "https://downloads.apache.org/iggy/0.9.0/iggy-0.9.0-src.tar.gz.sha512",
+      "https://archive.apache.org/dist/iggy/0.9.0/iggy-0.9.0-src.tar.gz",
+    asc: "https://archive.apache.org/dist/iggy/0.9.0/iggy-0.9.0-src.tar.gz.asc",
+    sha: "https://archive.apache.org/dist/iggy/0.9.0/iggy-0.9.0-src.tar.gz.sha512",
     changelog: "https://github.com/apache/iggy/releases/tag/server-0.9.0",
   },
   {
@@ -236,22 +246,22 @@ export default function DownloadsPage() {
         <pre className="overflow-x-auto rounded-xl border border-fd-border bg-fd-card p-5 text-sm leading-relaxed text-fd-foreground/85">
           <code>{`# Download artifact, matching .asc file and KEYS
 curl -O https://downloads.apache.org/iggy/KEYS
-curl -O https://downloads.apache.org/iggy/0.9.0/iggy-0.9.0-src.tar.gz
-curl -O https://downloads.apache.org/iggy/0.9.0/iggy-0.9.0-src.tar.gz.asc
+curl -O https://downloads.apache.org/iggy/0.10.0/iggy-0.10.0-src.tar.gz
+curl -O https://downloads.apache.org/iggy/0.10.0/iggy-0.10.0-src.tar.gz.asc
 
 # Import Iggy release keys
 gpg --import KEYS
 
 # Verify signature
-gpg --verify iggy-0.9.0-src.tar.gz.asc iggy-0.9.0-src.tar.gz`}</code>
+gpg --verify iggy-0.10.0-src.tar.gz.asc iggy-0.10.0-src.tar.gz`}</code>
         </pre>
 
         <h2 className="mb-4 mt-14 text-2xl font-bold text-fd-foreground">
           Verify the checksum
         </h2>
         <pre className="overflow-x-auto rounded-xl border border-fd-border bg-fd-card p-5 text-sm leading-relaxed text-fd-foreground/85">
-          <code>{`curl -O https://downloads.apache.org/iggy/0.9.0/iggy-0.9.0-src.tar.gz.sha512
-shasum -a 512 -c iggy-0.9.0-src.tar.gz.sha512`}</code>
+          <code>{`curl -O https://downloads.apache.org/iggy/0.10.0/iggy-0.10.0-src.tar.gz.sha512
+shasum -a 512 -c iggy-0.10.0-src.tar.gz.sha512`}</code>
         </pre>
 
         <h2 className="mb-4 mt-14 text-2xl font-bold text-fd-foreground">
