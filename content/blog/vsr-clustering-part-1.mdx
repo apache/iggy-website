@@ -64,8 +64,8 @@ There are three rows per table because there are two migrations to price. The fi
 | Version | Throughput |
 |---|---:|
 | 0.8.2-edge.1, single node | 2,274 MB/s |
-| [0.9.0, single node](https://benchmarks.iggy.apache.org/benchmarks/d7ef0e8c-d152-4c83-8036-4531c17c63ab) | 2,062 MB/s |
-| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/benchmarks/014a1fb7-c218-424f-aa14-e0906de1e167) | 1,134 MB/s |
+| [0.9.0, single node](https://benchmarks.iggy.apache.org/runs/d7ef0e8c-d152-4c83-8036-4531c17c63ab) | 2,062 MB/s |
+| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/runs/014a1fb7-c218-424f-aa14-e0906de1e167) | 1,134 MB/s |
 
 Throughput here is the user data divided by the wall time of the slowest producer, not the sum of per-producer averages the bench prints. The single node stays within 10% of the legacy number, inside the run-to-run noise. The cluster tops out at half, and we have not pinned down why yet. Replication is a chain, the leader sends each `Prepare` to the next replica and that one forwards it, so the leader's network card moves twice the user data, not three times, and the single node pushed almost double the documented baseline through the same NIC, so the flat 1,134 MB/s points to a limit we have not identified rather than to the protocol's commit path: the capped runs below hold 800 MB/s on the cluster with latency to spare.
 
@@ -74,8 +74,8 @@ Throughput here is the user data divided by the wall time of the slowest produce
 | Version | Throughput | P50 | P95 | P99 | P999 | P9999 |
 |---|---:|---:|---:|---:|---:|---:|
 | 0.8.2-edge.1, single node | 800 MB/s (cap) | 0.34 ms | 0.89 ms | 0.96 ms | 1.12 ms | 3.15 ms |
-| [0.9.0, single node](https://benchmarks.iggy.apache.org/benchmarks/999f0e08-def6-425a-9d76-d38b9f357160) | 800 MB/s (cap) | 0.65 ms | 1.14 ms | 1.31 ms | 11.09 ms | 16.87 ms |
-| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/benchmarks/b11643e3-1c2f-409b-bab8-068b69c835d6) | 800 MB/s (cap) | 1.78 ms | 2.87 ms | 3.19 ms | 3.68 ms | 4.89 ms |
+| [0.9.0, single node](https://benchmarks.iggy.apache.org/runs/999f0e08-def6-425a-9d76-d38b9f357160) | 800 MB/s (cap) | 0.65 ms | 1.14 ms | 1.31 ms | 11.09 ms | 16.87 ms |
+| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/runs/b11643e3-1c2f-409b-bab8-068b69c835d6) | 800 MB/s (cap) | 1.78 ms | 2.87 ms | 3.19 ms | 3.68 ms | 4.89 ms |
 | 0.9.0 single node ÷ 0.8.2 | — | 1.88× | 1.29× | 1.36× | 9.91× | 5.36× |
 | 3-node cluster ÷ 0.9.0 single node | — | 2.74× | 2.51× | 2.43× | 0.33× | 0.29× |
 
@@ -88,8 +88,8 @@ Under `persisted` durability every batch is fsynced before the reply, on the sin
 | Version | Throughput | P50 | P95 | P99 | P999 | P9999 |
 |---|---:|---:|---:|---:|---:|---:|
 | 0.8.2-edge.1, single node | 800 MB/s (cap) | 1.20 ms | 1.39 ms | 1.51 ms | 1.82 ms | 2.76 ms |
-| [0.9.0, single node](https://benchmarks.iggy.apache.org/benchmarks/d74bc016-ecf5-417c-aaa3-931e1302a2df) | 800 MB/s (cap) | 1.23 ms | 1.47 ms | 1.60 ms | 2.25 ms | 5.47 ms |
-| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/benchmarks/3824b53c-2221-433e-af73-bfecaeae67ec) | 800 MB/s (cap) | 2.90 ms | 5.13 ms | 7.07 ms | 12.40 ms | 15.65 ms |
+| [0.9.0, single node](https://benchmarks.iggy.apache.org/runs/d74bc016-ecf5-417c-aaa3-931e1302a2df) | 800 MB/s (cap) | 1.23 ms | 1.47 ms | 1.60 ms | 2.25 ms | 5.47 ms |
+| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/runs/3824b53c-2221-433e-af73-bfecaeae67ec) | 800 MB/s (cap) | 2.90 ms | 5.13 ms | 7.07 ms | 12.40 ms | 15.65 ms |
 | 0.9.0 single node ÷ 0.8.2 | — | 1.03× | 1.06× | 1.06× | 1.24× | 1.98× |
 | 3-node cluster ÷ 0.9.0 single node | — | 2.36× | 3.49× | 4.42× | 5.51× | 2.86× |
 
@@ -100,8 +100,8 @@ The fsync is the difference between this table and the previous one: the single-
 | Version | Throughput | P50 | P95 | P99 | P999 | P9999 |
 |---|---:|---:|---:|---:|---:|---:|
 | 0.8.2-edge.1, single node | 833 MB/s (cap) | 0.33 ms | 0.72 ms | 0.98 ms | 1.05 ms | 1.65 ms |
-| [0.9.0, single node](https://benchmarks.iggy.apache.org/benchmarks/d92119f3-6aeb-4963-905a-2a5bd9089961) | 833 MB/s (cap) | 0.56 ms | 0.97 ms | 1.21 ms | 3.99 ms | 15.63 ms |
-| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/benchmarks/6cb0f49e-cde8-4b68-a3b9-f58e76d8e491) | 833 MB/s (cap) | 0.86 ms | 1.28 ms | 1.48 ms | 1.97 ms | 2.85 ms |
+| [0.9.0, single node](https://benchmarks.iggy.apache.org/runs/d92119f3-6aeb-4963-905a-2a5bd9089961) | 833 MB/s (cap) | 0.56 ms | 0.97 ms | 1.21 ms | 3.99 ms | 15.63 ms |
+| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/runs/6cb0f49e-cde8-4b68-a3b9-f58e76d8e491) | 833 MB/s (cap) | 0.86 ms | 1.28 ms | 1.48 ms | 1.97 ms | 2.85 ms |
 | 0.9.0 single node ÷ 0.8.2 | — | 1.71× | 1.36× | 1.23× | 3.80× | 9.48× |
 | 3-node cluster ÷ 0.9.0 single node | — | 1.55× | 1.31× | 1.23× | 0.49× | 0.18× |
 
@@ -116,8 +116,8 @@ A poll that stores no offset, as in these runs, never leaves the node it lands o
 | Version | Throughput | P50 | P95 | P99 | P999 | P9999 |
 |---|---:|---:|---:|---:|---:|---:|
 | 0.8.2-edge.1, single node | 800 MB/s (cap) | 0.37 ms | 0.47 ms | 0.52 ms | 0.58 ms | 1.15 ms |
-| [0.9.0, single node](https://benchmarks.iggy.apache.org/benchmarks/75743636-b0d0-499d-b855-3d57fc75749d) | 800 MB/s (cap) | 0.52 ms | 0.91 ms | 1.02 ms | 1.57 ms | 5.92 ms |
-| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/benchmarks/7c8faf89-ae5d-4d63-9346-03569749186e) | 800 MB/s (cap) | 0.48 ms | 0.87 ms | 0.93 ms | 1.23 ms | 1.88 ms |
+| [0.9.0, single node](https://benchmarks.iggy.apache.org/runs/75743636-b0d0-499d-b855-3d57fc75749d) | 800 MB/s (cap) | 0.52 ms | 0.91 ms | 1.02 ms | 1.57 ms | 5.92 ms |
+| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/runs/7c8faf89-ae5d-4d63-9346-03569749186e) | 800 MB/s (cap) | 0.48 ms | 0.87 ms | 0.93 ms | 1.23 ms | 1.88 ms |
 | 0.9.0 single node ÷ 0.8.2 | — | 1.40× | 1.95× | 1.97× | 2.69× | 5.17× |
 | 3-node cluster ÷ 0.9.0 single node | — | 0.93× | 0.95× | 0.91× | 0.78× | 0.32× |
 
@@ -126,20 +126,20 @@ A poll that stores no offset, as in these runs, never leaves the node it lands o
 | Version | Throughput | P50 | P95 | P99 | P999 | P9999 |
 |---|---:|---:|---:|---:|---:|---:|
 | 0.8.2-edge.1, single node | 800 MB/s (cap) | 0.47 ms | 0.59 ms | 0.85 ms | 1.10 ms | 2.29 ms |
-| [0.9.0, single node](https://benchmarks.iggy.apache.org/benchmarks/ff503e0b-b71b-4d2f-a234-31f37216959f) | 800 MB/s (cap) | 0.50 ms | 4.28 ms | 4.70 ms | 5.16 ms | 6.64 ms |
-| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/benchmarks/4121c421-d286-4031-aa67-10b6cc6cd9ba) | 800 MB/s (cap) | 0.48 ms | 3.46 ms | 3.83 ms | 4.24 ms | 4.60 ms |
+| [0.9.0, single node](https://benchmarks.iggy.apache.org/runs/ff503e0b-b71b-4d2f-a234-31f37216959f) | 800 MB/s (cap) | 0.50 ms | 4.28 ms | 4.70 ms | 5.16 ms | 6.64 ms |
+| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/runs/4121c421-d286-4031-aa67-10b6cc6cd9ba) | 800 MB/s (cap) | 0.48 ms | 3.46 ms | 3.83 ms | 4.24 ms | 4.60 ms |
 | 0.9.0 single node ÷ 0.8.2 | — | 1.06× | 7.19× | 5.52× | 4.70× | 2.90× |
 | 3-node cluster ÷ 0.9.0 single node | — | 0.96× | 0.81× | 0.82× | 0.82× | 0.69× |
 
-Warm reads on the cluster are the single node's numbers, 0.93 against 1.02 ms at P99, and so is the unthrottled cold read (derived the same way as the first table): 2,661 MB/s on the legacy server, [2,713 MB/s](https://benchmarks.iggy.apache.org/benchmarks/f42e7394-fd86-432d-ac34-63037857e268) on the new single node and [2,710 MB/s](https://benchmarks.iggy.apache.org/benchmarks/139c3451-f817-46ff-96cb-0539e0e2b99a) on the cluster. Replication costs reads nothing, which is the point of serving them from local state. The cold rows do show a regression that has nothing to do with clustering: the new server's cold-read P95 is 4.3 ms against 0.6 ms on the legacy one, and the cluster is no worse at 3.5 ms, so this is the new server's disk read path and it is on the list.
+Warm reads on the cluster are the single node's numbers, 0.93 against 1.02 ms at P99, and so is the unthrottled cold read (derived the same way as the first table): 2,661 MB/s on the legacy server, [2,713 MB/s](https://benchmarks.iggy.apache.org/runs/f42e7394-fd86-432d-ac34-63037857e268) on the new single node and [2,710 MB/s](https://benchmarks.iggy.apache.org/runs/139c3451-f817-46ff-96cb-0539e0e2b99a) on the cluster. Replication costs reads nothing, which is the point of serving them from local state. The cold rows do show a regression that has nothing to do with clustering: the new server's cold-read P95 is 4.3 ms against 0.6 ms on the legacy one, and the cluster is no worse at 3.5 ms, so this is the new server's disk read path and it is on the list.
 
 ### A single producer — 15 GB at 500 MB/s
 
 | Version | Throughput | P50 | P95 | P99 | P999 | P9999 |
 |---|---:|---:|---:|---:|---:|---:|
 | 0.8.2-edge.1, single node | 500 MB/s (cap) | 0.25 ms | 0.52 ms | 0.55 ms | 0.58 ms | 0.60 ms |
-| [0.9.0, single node](https://benchmarks.iggy.apache.org/benchmarks/4829cd99-ef96-4ec7-ae2d-c617ec9e3b39) | 500 MB/s (cap) | 0.35 ms | 0.65 ms | 0.68 ms | 1.36 ms | 11.16 ms |
-| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/benchmarks/01ae75b4-034e-494e-b50e-355d51554be8) | 337 MB/s (missed the cap) | 0.72 ms | 0.93 ms | 0.97 ms | 1.06 ms | 1.88 ms |
+| [0.9.0, single node](https://benchmarks.iggy.apache.org/runs/4829cd99-ef96-4ec7-ae2d-c617ec9e3b39) | 500 MB/s (cap) | 0.35 ms | 0.65 ms | 0.68 ms | 1.36 ms | 11.16 ms |
+| [0.9.0, 3-node cluster](https://benchmarks.iggy.apache.org/runs/01ae75b4-034e-494e-b50e-355d51554be8) | 337 MB/s (missed the cap) | 0.72 ms | 0.93 ms | 0.97 ms | 1.06 ms | 1.88 ms |
 | 0.9.0 single node ÷ 0.8.2 | — | 1.37× | 1.24× | 1.23× | 2.35× | 18.48× |
 | 3-node cluster ÷ 0.9.0 single node | — | 2.06× | 1.43× | 1.43× | 0.78× | 0.17× |
 

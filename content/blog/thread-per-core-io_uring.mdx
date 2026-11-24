@@ -194,13 +194,13 @@ Each benchmark is **interactive**, and clicking on the image will take you to it
 ### 8 Partitions
 
 **v0.5.0** with `tokio`
-[![version 0.5.0 8 producers](/thread-per-core-io_uring/pp_8_0.5_rl.png)](https://benchmarks.iggy.apache.org/benchmarks/b983ec73-43cf-44c4-ab4e-2287c3706fb2)
+[![version 0.5.0 8 producers](/thread-per-core-io_uring/pp_8_0.5_rl.png)](https://benchmarks.iggy.apache.org/runs/b983ec73-43cf-44c4-ab4e-2287c3706fb2)
 
 **v0.6.1** with `thread-per-core` + `io_uring`
-[![version 0.6.1 8 producers](/thread-per-core-io_uring/pp_8_0.6_rl.png)](https://benchmarks.iggy.apache.org/benchmarks/0ac461f6-59b3-4822-8de0-3bd1a662966e)
+[![version 0.6.1 8 producers](/thread-per-core-io_uring/pp_8_0.6_rl.png)](https://benchmarks.iggy.apache.org/runs/0ac461f6-59b3-4822-8de0-3bd1a662966e)
 
 **v0.7.0** with _shared *something*_
-[![version 0.7.0 8 producers](/thread-per-core-io_uring/pp_8_0.7_rl.png)](https://benchmarks.iggy.apache.org/benchmarks/fb570d39-d6bb-4eb1-a960-c8e0d16cd5d9)
+[![version 0.7.0 8 producers](/thread-per-core-io_uring/pp_8_0.7_rl.png)](https://benchmarks.iggy.apache.org/runs/fb570d39-d6bb-4eb1-a960-c8e0d16cd5d9)
 
 The difference wasn't that big, `tokio` managed to keep up decently well with 8 producers, but as we increase the load, the gap widens significantly.
 
@@ -215,13 +215,13 @@ The difference wasn't that big, `tokio` managed to keep up decently well with 8 
 ### 16 Partitions
 
 **v0.5.0** with `tokio`
-[![version 0.5.0 16 producers](/thread-per-core-io_uring/pp_16_0.5_rl.png)](https://benchmarks.iggy.apache.org/benchmarks/481c7504-177a-4df8-b771-cda1edbeeaa0)
+[![version 0.5.0 16 producers](/thread-per-core-io_uring/pp_16_0.5_rl.png)](https://benchmarks.iggy.apache.org/runs/481c7504-177a-4df8-b771-cda1edbeeaa0)
 
 **v0.6.1** with `thread-per-core` + `io_uring`
-[![version 0.6.1 16 producers](/thread-per-core-io_uring/pp_16_0.6.png)](https://benchmarks.iggy.apache.org/benchmarks/88eca6c0-6729-44b0-9843-28125d0ff44a)
+[![version 0.6.1 16 producers](/thread-per-core-io_uring/pp_16_0.6.png)](https://benchmarks.iggy.apache.org/runs/88eca6c0-6729-44b0-9843-28125d0ff44a)
 
 **v0.7.0** with _shared *something*_
-[![version 0.7.0 16 producers](/thread-per-core-io_uring/pp_16_0.7.png)](https://benchmarks.iggy.apache.org/benchmarks/2c6a0f6a-fb4d-4e84-8ac0-bfca60c75b21)
+[![version 0.7.0 16 producers](/thread-per-core-io_uring/pp_16_0.7.png)](https://benchmarks.iggy.apache.org/runs/2c6a0f6a-fb4d-4e84-8ac0-bfca60c75b21)
 
 #### 16 Producers × 16 Streams — 40 GB (40M msgs)
 
@@ -234,13 +234,13 @@ The difference wasn't that big, `tokio` managed to keep up decently well with 8 
 ### 32 Partitions
 
 **v0.5.0** with `tokio`
-[![version 0.5.0 32 producers](/thread-per-core-io_uring/pp_32_0.5_rl.png)](https://benchmarks.iggy.apache.org/benchmarks/5f056d32-4856-461d-92c8-439e406cc49e)
+[![version 0.5.0 32 producers](/thread-per-core-io_uring/pp_32_0.5_rl.png)](https://benchmarks.iggy.apache.org/runs/5f056d32-4856-461d-92c8-439e406cc49e)
 
 **v0.6.1** with `thread-per-core` + `io_uring`
-[![version 0.6.1 32 producers](/thread-per-core-io_uring/pp_32_0.6.png)](https://benchmarks.iggy.apache.org/benchmarks/402df805-94f3-4a78-9a2d-a4bda9d51655)
+[![version 0.6.1 32 producers](/thread-per-core-io_uring/pp_32_0.6.png)](https://benchmarks.iggy.apache.org/runs/402df805-94f3-4a78-9a2d-a4bda9d51655)
 
 **v0.7.0** with _shared *something*_
-[![version 0.7.0 32 producers](/thread-per-core-io_uring/pp_32_0.7.png)](https://benchmarks.iggy.apache.org/benchmarks/ddaca68e-8374-499c-bb08-53ad06b164ec)
+[![version 0.7.0 32 producers](/thread-per-core-io_uring/pp_32_0.7.png)](https://benchmarks.iggy.apache.org/runs/ddaca68e-8374-499c-bb08-53ad06b164ec)
 
 #### 32 Producers × 32 Streams — 80 GB (80M msgs)
 
@@ -257,10 +257,10 @@ Flush the data to disk on every batch write.
 #### 16 Partitions
 
 **v0.5.0** with `tokio`
-[![version 0.5.0 16 producers](/thread-per-core-io_uring/pp_16_0.5_fsync.png)](https://benchmarks.iggy.apache.org/benchmarks/54142b7a-8dfd-4803-8ff1-adb5bce8d5df)
+[![version 0.5.0 16 producers](/thread-per-core-io_uring/pp_16_0.5_fsync.png)](https://benchmarks.iggy.apache.org/runs/54142b7a-8dfd-4803-8ff1-adb5bce8d5df)
 
 **v0.7.0** with _shared *something*_
-[![version 0.7.0 16 producers](/thread-per-core-io_uring/pp_16_0.7_fsync.png)](https://benchmarks.iggy.apache.org/benchmarks/48343378-1052-44a4-b1a6-0b06b9436127)
+[![version 0.7.0 16 producers](/thread-per-core-io_uring/pp_16_0.7_fsync.png)](https://benchmarks.iggy.apache.org/runs/48343378-1052-44a4-b1a6-0b06b9436127)
 
 ##### 16 Producers × 16 Streams — 40 GB (40M msgs) — fsync
 
@@ -273,10 +273,10 @@ Flush the data to disk on every batch write.
 #### 32 Partitions
 
 **v0.5.0** with `tokio`
-[![version 0.5.0 32 producers](/thread-per-core-io_uring/pp_32_0.5_fsync.png)](https://benchmarks.iggy.apache.org/benchmarks/6fc5936a-4134-45c4-b8d9-ba962bf47b98)
+[![version 0.5.0 32 producers](/thread-per-core-io_uring/pp_32_0.5_fsync.png)](https://benchmarks.iggy.apache.org/runs/6fc5936a-4134-45c4-b8d9-ba962bf47b98)
 
 **v0.7.0** with _shared *something*_
-[![version 0.7.0 32 producers](/thread-per-core-io_uring/pp_32_0.7_fsync.png)](https://benchmarks.iggy.apache.org/benchmarks/cf933d06-8119-4d14-b2ce-7c398dfa0dbf)
+[![version 0.7.0 32 producers](/thread-per-core-io_uring/pp_32_0.7_fsync.png)](https://benchmarks.iggy.apache.org/runs/cf933d06-8119-4d14-b2ce-7c398dfa0dbf)
 
 ##### 32 Producers × 32 Streams — 80 GB (80M msgs) — fsync
 
@@ -288,7 +288,7 @@ Flush the data to disk on every batch write.
 
 ### And what about reading the data?
 
-[![version 0.7.0 16 consumers](/thread-per-core-io_uring/pc_16_0.7.png)](https://benchmarks.iggy.apache.org/benchmarks/63607acc-5861-47c7-9673-5c1ce649ed0c)
+[![version 0.7.0 16 consumers](/thread-per-core-io_uring/pc_16_0.7.png)](https://benchmarks.iggy.apache.org/runs/63607acc-5861-47c7-9673-5c1ce649ed0c)
 
 ##### 16 Consumers × 16 Streams — 40 GB (40M msgs)
 
