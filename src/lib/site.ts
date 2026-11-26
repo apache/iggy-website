@@ -44,6 +44,7 @@ export const STATIC_ROUTES = [
   "/",
   "/blogs",
   "/downloads",
+  "/features",
   "/meetups",
   "/powered-by",
   "/presentations",

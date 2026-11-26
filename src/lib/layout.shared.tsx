@@ -72,6 +72,7 @@ const communityLinkItems: LinkItemType[] = [
 
 const sharedLinks: BaseLayoutProps["links"] = [
   { text: "Docs", url: "/docs" },
+  { text: "Features", url: "/features" },
   { text: "Blogs", url: "/blogs" },
   { text: "Downloads", url: "/downloads" },
   ...eventsLinkItems,
@@ -148,6 +149,7 @@ export function docsOptions(): BaseLayoutProps {
     githubUrl: "https://github.com/apache/iggy",
     links: [
       { text: "Home", url: "/" },
+      { text: "Features", url: "/features" },
       { text: "Blogs", url: "/blogs" },
       { text: "Downloads", url: "/downloads" },
       ...eventsLinkItems,
