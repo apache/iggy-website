@@ -18,6 +18,7 @@
  */
 
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import {
   CommunityHeader,
   CommunityLayout,
@@ -29,12 +30,19 @@ export const metadata: Metadata = {
   description: "Release guidance for Apache Iggy release managers.",
 };
 
-const releaseSteps = [
+const releaseSteps: ReactNode[] = [
   "Prepare the release candidate from a clean source state and update versioned metadata.",
   "Build source artifacts, checksums and OpenPGP signatures.",
   "Verify licenses, NOTICE files, dependency metadata and source-only release contents.",
   "Call a vote on the dev mailing list and allow the required voting period.",
   "After approval, publish artifacts to Apache distribution infrastructure and update the website.",
+  <>
+    After approval, freeze the docs of the release at /docs/&lt;minor&gt;, as{" "}
+    <ExternalLink href="https://github.com/apache/iggy-website/blob/main/CONTRIBUTING.md#archiving-the-docs-of-a-release">
+      Archiving the docs of a release
+    </ExternalLink>{" "}
+    describes.
+  </>,
   "Announce the release only after mirrors and public metadata have settled.",
 ];
 
@@ -50,8 +58,8 @@ export default function HowToReleasePage() {
         Release Checklist
       </h2>
       <ol className="list-decimal space-y-2 pl-6 text-base leading-relaxed text-fd-muted-foreground">
-        {releaseSteps.map((step) => (
-          <li key={step}>{step}</li>
+        {releaseSteps.map((step, index) => (
+          <li key={index}>{step}</li>
         ))}
       </ol>
 

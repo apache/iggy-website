@@ -16,18 +16,11 @@ npm run check:links  # Broken /docs links, pages missing from meta.json, missing
 npx serve out      # Preview the static build
 ```
 
-`npm start` (`next start`) does not work here: it is incompatible with `output: "export"`. `predev`/`prebuild` run `scripts/fetch-github-stars.mjs` (network call with a graceful offline fallback).
+`npm start` (`next start`) does not work here: it is incompatible with `output: "export"`. `predev`/`prebuild` run `scripts/fetch-github-stars.mjs` and `scripts/fetch-discord-members.mjs` (network calls with a graceful offline fallback).
 
 `check:links` reads the `/docs` links in the docs pages and blog posts, and the complete `/docs` string literals in `src/`. It accepts `https://iggy.apache.org/docs/...` and the `.md` URLs of the Markdown copies. CI runs it in the required `checks` job.
 
-`predev`, `prebuild`, `pretypecheck` and `precheck:links` first run `scripts/fetch-docs.mjs`. It previews docs from local checkouts of the docs repositories:
-
-- `IGGY_DOCS_DIR` replaces `content/docs`, except `connectors/`, with a copy of that directory, for example `../iggy/docs`.
-- `IGGY_CONNECTORS_DOCS_DIR` replaces `content/docs/connectors`, for example `../iggy-connectors/docs`.
-- Without a variable, its part stays as it is in Git.
-- `npm run docs:watch` with the same variables copies each saved file, so `npm run dev` in a second terminal reloads the page.
-
-The copies show up as changes to `content/docs` in Git, and they overwrite uncommitted edits there. Do not commit them. To remove them, run `git restore content/docs` and then `git clean -fd content/docs`. The second command also deletes new pages that you did not add to Git.
+`content/docs` is not in Git. `predev`, `prebuild`, `pretypecheck` and `precheck:links` first run `scripts/fetch-docs.mjs`, which builds it from `docs/` of apache/iggy and apache/iggy-connectors. Edit the docs pages in those repositories, not in `content/docs`, because the next run of the script overwrites it. [Where the site gets the docs](CONTRIBUTING.md#where-the-site-gets-the-docs) describes the refs, the local checkouts and `docs:watch`.
 
 No test framework is configured. No linter is configured beyond TypeScript strict mode.
 
@@ -43,7 +36,7 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 - `src/app/api/search/` -- Static search index (search UI enabled in the docs layout)
 
 **Content (MDX):**
-- `content/docs/` -- Documentation pages, structured via `meta.json` files for ordering/hierarchy
+- `content/docs/` -- Documentation pages, fetched from apache/iggy and apache/iggy-connectors (see "Commands"). `meta.json` files set the order and the hierarchy.
 - `content/blog/` -- Blog posts with frontmatter (title, author, date, tags, draft). Date-based URL routing: `/blogs/YYYY/MM/DD/[slug]`
 
 **Shared config:** `src/lib/layout.shared.tsx` defines navigation options (`homeOptions`, `siteOptions`, `docsOptions`) shared across all layouts.
@@ -67,7 +60,8 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 - Commits follow conventional commits: `type(scope): subject`, e.g. `fix(docs): ...`.
 - `scripts/generate-docs-markdown.mjs` writes a Markdown copy of every docs page and blog post (its URL plus `.md`) before each dev and build run. `src/app/llms.txt/route.ts`, `src/app/llms-full.txt/route.ts` and `src/app/llms-full/[section]/route.ts` (one file per docs section) build on those copies, through `src/lib/llms.ts`. The copies keep code fences as written, so give every fence a language. Site-relative links become absolute.
 - A diagram component used on its own line in MDX is replaced in the Markdown copy by its text in `scripts/diagram-text.mjs`. When you add or change a diagram, add or update its text there. The generator fails if a component has no text.
-- The docs version shown in llms.txt, llms-full.txt and the Markdown copies is set in `src/lib/docs-version.json`. Update it when the docs move to a new release.
+- The docs version shown in llms.txt, llms-full.txt and the Markdown copies is set in `src/lib/docs-version.json`.
+- The docs in apache/iggy and apache/iggy-connectors use the components in `src/mdx-components.tsx` and the images in `public/img`. Do not rename, break or remove one that they use. [Docs pages](CONTRIBUTING.md#docs-pages) gives the rule.
 
 ## Archived docs
 
@@ -75,13 +69,14 @@ No test framework is configured. No linter is configured beyond TypeScript stric
 - Do not edit an archive except to fix something broken. Its `/docs` links point at `/docs/<minor>` or at an older archive, and `npm run check:links` fails if an archived page links to the current docs.
 - Each archive uses its own copy of the diagrams in `src/components/archive-<minor>/`, shows a notice on every page, is marked `noindex`, and is left out of search, the sitemap and llms.txt. These use `source`, not the archive loaders.
 - The version switcher at the top of every docs sidebar lists `/docs` and the archives from `src/lib/docs-versions.tsx`.
-- To add an archive, copy `content/docs` to `content/docs-<minor>/` and point its `/docs` links at `/docs/<minor>`. Then add a collection in `source.config.ts`, a loader in `src/lib/source.ts`, an entry in `TREES` in `scripts/check-docs-links.mjs`, the route group, the component copies with their links changed the same way, and an entry in `src/lib/docs-versions.tsx`.
+- To add an archive after a release, follow [Archiving the docs of a release](CONTRIBUTING.md#archiving-the-docs-of-a-release).
 
 ## Deployment
 
 - Default branch is `main` (the code repo uses `master`; this one does not).
-- Push to `main` triggers `.github/workflows/deploy.yml` (also daily cron and manual dispatch), which builds and force-orphan-pushes `out/` to the `asf-site` branch -> iggy.apache.org.
-- Push to `staging` triggers `stage.yml`, same flow to `asf-staging` -> iggy.staged.apache.org. Use it to preview large changes.
+- `.github/workflows/deploy.yml` force-orphan-pushes `out/` to the `asf-site` branch -> iggy.apache.org, and `stage.yml` pushes to `asf-staging` -> iggy.staged.apache.org. [Publishing](CONTRIBUTING.md#publishing) describes their triggers, the `docs-source.json` deploy record, and what to do when the docs on the site look old.
+- The docs jobs of apache/iggy and apache/iggy-connectors read `docs-source.json`. Do not rename or remove its fields.
+- `ci.yml` builds each pull request with the docs from `master` of both docs repositories.
 - `asf-site` and `asf-staging` are generated artifacts. Never edit them by hand.
 - Both workflows copy `.asf.yaml` and `.htaccess` into `out/` before publishing. The `.htaccess` sets `ErrorDocument 404 /404.html`; without it the ASF web server answers unknown paths with its own bare "Not Found" body instead of the site's 404 page (the status code is 404 either way).
 - Branch-to-URL mapping is configured via `.asf.yaml` (Apache infrastructure).

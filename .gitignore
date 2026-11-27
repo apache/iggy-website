@@ -10,8 +10,12 @@ tsconfig.tsbuildinfo
 # Fumadocs generated
 .source/
 
+# Fetched from apache/iggy and apache/iggy-connectors by scripts/fetch-docs.mjs
+/content/docs/
+
 # Build-time generated
 src/github-stars.json
+src/discord-members.json
 public/docs.md
 public/docs/**/*.md
 public/blogs/**/*.md

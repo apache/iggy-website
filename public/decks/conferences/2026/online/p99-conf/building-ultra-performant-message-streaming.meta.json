@@ -1,0 +1,10 @@
+{
+  "title": "Building Ultra-Performant Message Streaming",
+  "shortDescription": "How tail latency at the streaming layer compounds across a distributed system, and the design choices that keep Apache Iggy's tail latency low and predictable at high throughput.",
+  "presenterName": "Piotr Gankiewicz",
+  "conferenceName": "P99 CONF",
+  "city": "Online",
+  "year": "2026",
+  "videoUrl": "https://www.youtube.com/watch?v=2j6BzKaODUk",
+  "order": 3
+}

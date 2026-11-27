@@ -22,12 +22,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { LATENCY_MS } from "@/lib/benchmark";
-
-const PRODUCER_BENCHMARK_URL =
-  "https://benchmarks.iggy.apache.org/benchmarks/4bc63b0e-f0fb-44b5-8c42-6159603a5653";
-const CONSUMER_BENCHMARK_URL =
-  "https://benchmarks.iggy.apache.org/benchmarks/6ed70d0a-de98-42da-84a9-16655152d4e8";
+import {
+  BENCHMARK_STATS as stats,
+  CONSUMER_BENCHMARK_URL,
+  LATENCY_MS,
+  PRODUCER_BENCHMARK_URL,
+} from "@/lib/benchmark";
 
 const Y_MAX_MS = 1;
 const Y_TOP_PAD = 20;
@@ -51,39 +51,6 @@ const latencyRows = [
   producer: ms(LATENCY_MS.producer[key as keyof typeof LATENCY_MS.producer]),
   consumer: ms(LATENCY_MS.consumer[key as keyof typeof LATENCY_MS.consumer]),
 }));
-
-const stats = [
-  {
-    value: "2M+",
-    unit: "msg/s",
-    label: "Throughput",
-    detail: "Single node",
-  },
-  {
-    value: "1",
-    unit: "GB/s",
-    label: "Producer throughput",
-    detail: "Persisted writes",
-  },
-  {
-    value: "2",
-    unit: "GB/s",
-    label: "Consumer throughput",
-    detail: "Persistent log reads",
-  },
-  {
-    value: ms(LATENCY_MS.producer.p99),
-    unit: "ms",
-    label: "Producer P99",
-    detail: `${ms(LATENCY_MS.producer.avg)} ms average`,
-  },
-  {
-    value: ms(LATENCY_MS.consumer.p99),
-    unit: "ms",
-    label: "Consumer P99",
-    detail: `${ms(LATENCY_MS.consumer.avg)} ms average`,
-  },
-];
 
 const CY = (ms: number) =>
   Y_TOP_PAD +

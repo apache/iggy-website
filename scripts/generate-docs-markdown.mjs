@@ -34,11 +34,14 @@
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, statSync } from "fs";
 import { join, relative, dirname, basename } from "path";
 import { DIAGRAM_TEXT } from "./diagram-text.mjs";
+import { docsSourceUrl } from "../src/lib/docs-source.mjs";
 
 const CONTENT = "content/docs";
 const BLOG = "content/blog";
 const PUBLIC = "public";
 const SITE_URL = "https://iggy.apache.org";
+// The blog posts live in this repository. The docs pages come from the docs
+// repositories, so their Source line uses docsSourceUrl.
 const REPO_BLOB = "https://github.com/apache/iggy-website/blob/main";
 // The same file src/lib/site.ts reads for DOCS_VERSIONS.
 const DOCS_VERSIONS = JSON.parse(readFileSync("src/lib/docs-version.json", "utf8")).docsVersions;
@@ -103,13 +106,14 @@ function transformBody(source, body) {
 
 function render(source, raw, pageUrl) {
   const { meta, body } = splitFrontmatter(raw);
+  const isDocs = source.startsWith(CONTENT);
   const head = [
     `# ${meta.title ?? basename(source, ".mdx")}`,
     ...(meta.description ? [`> ${meta.description}`] : []),
     ...(meta.date ? [`Published: ${meta.date}`] : []),
     `Rendered page: ${pageUrl}`,
-    `Source: ${REPO_BLOB}/${source}`,
-    ...(source.startsWith(CONTENT) ? [`Docs version: ${DOCS_VERSIONS}`] : []),
+    `Source: ${isDocs ? docsSourceUrl(relative(CONTENT, source)) : `${REPO_BLOB}/${source}`}`,
+    ...(isDocs ? [`Docs version: ${DOCS_VERSIONS}`] : []),
   ].join("\n\n");
   // The rest of the body keeps its MDX as authored.
   return `${head}\n\n${transformBody(source, body).trimEnd()}\n`;
