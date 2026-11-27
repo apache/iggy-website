@@ -29,6 +29,8 @@ import { buttonVariants } from "fumadocs-ui/components/ui/button";
 import { FileCode, FileText } from "lucide-react";
 import { notFound } from "next/navigation";
 import { getMDXComponents } from "@/mdx-components";
+import { docsSourceUrl } from "@/lib/docs-source.mjs";
+import { UpcomingNotice } from "@/components/upcoming-notice";
 import type { Metadata } from "next";
 import { createRelativeLink } from "fumadocs-ui/mdx";
 import * as PageTree from "fumadocs-core/page-tree";
@@ -55,6 +57,7 @@ export default async function Page(props: {
         },
       }}
     >
+      <UpcomingNotice />
       <div className="flex items-start gap-3">
         <DocsTitle className="flex-1">{page.data.title}</DocsTitle>
         {/* Tool-neutral actions only: any AI tool can use the copied text or the Markdown URL. */}
@@ -77,7 +80,7 @@ export default async function Page(props: {
             <ActionTip>View page as Markdown</ActionTip>
           </a>
           <a
-            href={`https://github.com/apache/iggy-website/blob/main/content/docs/${page.path}`}
+            href={docsSourceUrl(page.path)}
             target="_blank"
             rel="noreferrer noopener"
             title="View page source on GitHub"

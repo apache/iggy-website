@@ -1,0 +1,9 @@
+{
+  "title": "Fast Isn't Enough",
+  "shortDescription": "Why predictable tail latency matters more than headline throughput when building modern streaming infrastructure.",
+  "presenterName": "Kranti Parisa",
+  "conferenceName": "Rust India",
+  "city": "Bengaluru",
+  "year": "2026",
+  "videoUrl": "https://www.youtube.com/watch?v=A7YTGAvAyHg"
+}

@@ -1,4 +1,0 @@
-{
-  "title": "Connectors",
-  "pages": ["introduction", "runtime", "sdk", "transforms", "observability", "sources", "sinks"]
-}

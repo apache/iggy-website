@@ -27,10 +27,9 @@ export const SITE_DESCRIPTION =
   "Apache Iggy is a persistent message streaming platform written in Rust, supporting QUIC, TCP and HTTP transport protocols, capable of processing millions of messages per second.";
 
 /**
- * The server and SDK versions content/docs describes, used by llms.txt,
- * llms-full.txt and the Markdown copies. Set in docs-version.json, which
- * scripts/generate-docs-markdown.mjs also reads. Update it when the docs move
- * to a new release.
+ * What content/docs describes, used by llms.txt, llms-full.txt and the Markdown
+ * copies. Set in docs-version.json, which scripts/generate-docs-markdown.mjs
+ * also reads.
  */
 export const DOCS_VERSIONS = docsVersion.docsVersions;
 
@@ -45,8 +44,10 @@ export const STATIC_ROUTES = [
   "/",
   "/blogs",
   "/downloads",
+  "/features",
   "/meetups",
   "/powered-by",
+  "/presentations",
   "/community",
   "/community/become-a-committer",
   "/community/brand-kit",
