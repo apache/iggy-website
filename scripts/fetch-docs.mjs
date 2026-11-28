@@ -18,22 +18,25 @@
  */
 
 /**
- * Builds content/docs from local checkouts of the docs repositories.
+ * Builds content/docs, which is not in Git, from the docs repositories.
  *
- * IGGY_DOCS_DIR replaces content/docs, except connectors/, with a copy of that
- * directory (docs/ of apache/iggy). IGGY_CONNECTORS_DOCS_DIR replaces
- * content/docs/connectors (docs/ of apache/iggy-connectors). A part without a
- * variable stays as it is in Git.
+ * docs/ of apache/iggy becomes content/docs, and docs/ of apache/iggy-connectors
+ * becomes content/docs/connectors. For each part, a directory variable copies a
+ * local checkout: IGGY_DOCS_DIR and IGGY_CONNECTORS_DOCS_DIR. A part without
+ * one is fetched from GitHub at IGGY_DOCS_REF or IGGY_CONNECTORS_DOCS_REF, a
+ * branch, tag or commit. An empty or unset ref means master.
  *
  * With --watch, the script copies each set directory once and then again after
  * each change, so that `next dev` reloads the changed pages. No dependencies:
- * plain Node.
+ * plain Node and git.
  */
 
+import { execFileSync } from "child_process";
 import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
@@ -41,6 +44,7 @@ import {
   statSync,
   watch,
 } from "fs";
+import { tmpdir } from "os";
 import { dirname, join, resolve, sep } from "path";
 
 const CONTENT = "content/docs";
@@ -49,21 +53,43 @@ const CONNECTORS = "connectors";
 const PARTS = [
   // The connectors docs live in apache/iggy-connectors, so the copy of
   // apache/iggy must leave them alone.
-  { variable: "IGGY_DOCS_DIR", target: CONTENT, keep: CONNECTORS },
-  { variable: "IGGY_CONNECTORS_DOCS_DIR", target: join(CONTENT, CONNECTORS) },
+  {
+    variable: "IGGY_DOCS_DIR",
+    refVariable: "IGGY_DOCS_REF",
+    repository: "apache/iggy",
+    target: CONTENT,
+    keep: CONNECTORS,
+  },
+  {
+    variable: "IGGY_CONNECTORS_DOCS_DIR",
+    refVariable: "IGGY_CONNECTORS_DOCS_REF",
+    repository: "apache/iggy-connectors",
+    target: join(CONTENT, CONNECTORS),
+  },
 ];
 
+// A branch, tag or commit. git reads an argument that starts with "-" as an
+// option, so the first character must not be one.
+const REF = /^[A-Za-z0-9_][A-Za-z0-9._/+-]*$/;
+
+class DocsError extends Error {}
+
 function fail(message) {
-  console.error(`Docs: ${message}`);
-  process.exit(1);
+  throw new DocsError(message);
 }
 
 function isInside(path, dir) {
   return path === dir || path.startsWith(dir + sep);
 }
 
-/** The parts whose variable is set, with their source checked. */
-function setParts() {
+function checkKeep(part, source) {
+  if (part.keep && existsSync(join(source, part.keep))) {
+    fail(`${source} contains ${part.keep}/. These docs live in apache/iggy-connectors.`);
+  }
+}
+
+/** The parts whose directory variable is set, with their source checked. */
+function localParts() {
   return PARTS.filter((part) => process.env[part.variable]).map((part) => {
     // npm runs scripts from the package root, so resolve a relative path
     // against the directory where npm was started.
@@ -78,9 +104,7 @@ function setParts() {
     if (existsSync(target) && (isInside(real, realpathSync(target)) || isInside(realpathSync(target), real))) {
       fail(`${part.variable} is ${source}, which overlaps ${part.target}.`);
     }
-    if (part.keep && existsSync(join(source, part.keep))) {
-      fail(`${source} contains ${part.keep}/. These docs live in apache/iggy-connectors.`);
-    }
+    checkKeep(part, source);
     return { ...part, source };
   });
 }
@@ -109,7 +133,7 @@ function entries(root, skip) {
  * Makes the target equal to the source, except keep. Unchanged files are not
  * written, because each write makes a running `next dev` rebuild the page.
  */
-function copyPart({ source, target, keep }) {
+function copyPart({ source, target, keep, label = source }) {
   if (keep && existsSync(join(source, keep))) {
     console.error(`Docs: ignored ${join(source, keep)}. These docs live in apache/iggy-connectors.`);
   }
@@ -133,9 +157,41 @@ function copyPart({ source, target, keep }) {
     copied += 1;
   }
   console.log(
-    `Docs: copied ${source} to ${target}: ${copied} changed, ${stale.length} removed` +
+    `Docs: copied ${label} to ${target}: ${copied} changed, ${stale.length} removed` +
       (keep ? `, ${keep}/ kept` : ""),
   );
+}
+
+/** Fetches docs/ of the repository of the part at its ref, then copies it. */
+function fetchPart(part) {
+  const ref = process.env[part.refVariable] || "master";
+  if (!REF.test(ref)) fail(`${part.refVariable} is "${ref}", which is not a branch, tag or commit.`);
+  const dir = mkdtempSync(join(tmpdir(), "iggy-docs-"));
+  const git = (...args) =>
+    execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
+  try {
+    git("init", "-q");
+    git("remote", "add", "origin", `https://github.com/${part.repository}.git`);
+    // Checks out docs/ and the few files at the root of the repository.
+    git("sparse-checkout", "set", "docs");
+    // Unlike `git clone --branch`, a fetch also accepts a commit SHA.
+    try {
+      git("fetch", "-q", "--depth=1", "--filter=blob:none", "origin", ref);
+    } catch {
+      fail(`could not fetch ${ref} of ${part.repository}. Set ${part.variable} to use a local checkout.`);
+    }
+    git("checkout", "-q", "FETCH_HEAD");
+    const source = join(dir, "docs");
+    if (!existsSync(source)) fail(`${part.repository} has no docs/ at ${ref}.`);
+    checkKeep(part, source);
+    console.log(
+      `Docs: fetched ${part.repository} at ${ref}: commit ${git("rev-parse", "FETCH_HEAD")}, ` +
+        `docs/ tree ${git("rev-parse", "FETCH_HEAD:docs")}`,
+    );
+    copyPart({ ...part, source, label: `docs/ of ${part.repository}` });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 function watchPart(part) {
@@ -158,14 +214,23 @@ function watchPart(part) {
 
 function main() {
   const watchMode = process.argv.includes("--watch");
-  const parts = setParts();
-  if (parts.length === 0) {
-    if (watchMode) fail("set IGGY_DOCS_DIR, IGGY_CONNECTORS_DOCS_DIR or both to watch them.");
-    console.log(`Docs: using ${CONTENT} from Git`);
-    return;
+  const local = localParts();
+  if (watchMode && local.length === 0) {
+    fail("set IGGY_DOCS_DIR, IGGY_CONNECTORS_DOCS_DIR or both to watch them.");
   }
-  for (const part of parts) copyPart(part);
-  if (watchMode) for (const part of parts) watchPart(part);
+  // In PARTS order: the copy of apache/iggy keeps connectors/ as it is.
+  for (const part of PARTS) {
+    const localPart = local.find((candidate) => candidate.variable === part.variable);
+    if (localPart) copyPart(localPart);
+    else fetchPart(part);
+  }
+  if (watchMode) for (const part of local) watchPart(part);
 }
 
-main();
+try {
+  main();
+} catch (e) {
+  if (!(e instanceof DocsError)) throw e;
+  console.error(`Docs: ${e.message}`);
+  process.exit(1);
+}
