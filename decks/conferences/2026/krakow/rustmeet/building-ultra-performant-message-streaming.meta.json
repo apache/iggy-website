@@ -1,0 +1,9 @@
+{
+  "title": "Building Ultra-Performant Message Streaming",
+  "shortDescription": "How thread-per-core, io_uring, and zero-copy give Apache Iggy sub-ms p99+ latency, plus Viewstamped Replication.",
+  "presenterName": "Piotr Gankiewicz",
+  "conferenceName": "Rustmeet",
+  "city": "Kraków",
+  "year": "2026",
+  "order": 2
+}

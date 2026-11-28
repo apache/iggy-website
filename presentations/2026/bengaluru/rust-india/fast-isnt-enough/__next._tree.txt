@@ -1,0 +1,6 @@
+:HL["/_next/static/chunks/1gxzpktzc2woz.css","style"]
+4:[["children",{"s":"__PAGE__","h":160}]]
+3:[["children",{"s":{"n":"slug","t":"c","k":"2026/bengaluru/rust-india/fast-isnt-enough","s":[]},"h":65632,"c":"$Q4"}]]
+2:[["children",{"s":"presentations","h":131168,"c":"$Q3"}]]
+1:[["children",{"s":"(deck)","h":131136,"c":"$Q2"}]]
+0:{"b":"WliTGE84CuEZaJKjEWN_2","t":{"t":{"s":"","h":131088,"c":"$Q1"}}}

@@ -1,0 +1,62 @@
+5:"$Sreact.fragment"
+6:"/_next/static/chunks/17h2u87b587ue.js"
+7:"/_next/static/chunks/2lawe380k5gxe.js"
+8:I[39756,["$6","$7"],"default"]
+9:I[37457,["$6","$7"],"default"]
+e:"/_next/static/chunks/0lro8hg0v1676.js"
+f:"/_next/static/chunks/14cmwlsva1uso.js"
+10:"/_next/static/chunks/3pe5kqjwb9q4b.js"
+11:"/_next/static/chunks/3e6aab2gpc17v.js"
+12:"/_next/static/chunks/20hf3kl_kpt7x.js"
+13:"/_next/static/chunks/1bwdz_8zfcww8.js"
+14:"/_next/static/chunks/3pgmqji_9im6z.js"
+15:"/_next/static/chunks/3vzh_1a3r6hy2.js"
+16:"/_next/static/chunks/29-phuz7hmie6.js"
+17:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsPage"]
+18:I[22016,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],""]
+19:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsTitle"]
+1a:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsDescription"]
+1b:I[98330,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"DocsBody"]
+1c:I[94157,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"Heading"]
+1d:I[35250,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"Mermaid"]
+1e:I[44324,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"CodeBlock"]
+2e:"ViewportBoundary"
+2f:I[97367,["$6","$7"],"$2e"]
+30:"MetadataBoundary"
+31:I[97367,["$6","$7"],"$30"]
+32:"$Sreact.suspense"
+33:I[27201,["$6","$7"],"IconMark"]
+b:X
+b:C
+c:X
+d:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$5","c",{"children":[["$","$L17",null,{"toc":[{"depth":2,"url":"#place-partition-primaries","title":"Place partition primaries"},{"depth":2,"url":"#select-copies-per-topic","title":"Select copies per topic"},{"depth":2,"url":"#route-clients","title":"Route clients"},{"depth":2,"url":"#operate-the-cluster","title":"Operate the cluster"}],"footer":{"items":{"previous":{"$id":"clustering/vsr.mdx","type":"page","name":[["$","span",null,{"className":"me-1 font-normal text-fd-muted-foreground","children":["Clustering",":"]}],"Viewstamped Replication"],"description":"How Apache Iggy replicates data across a cluster with VSR","url":"/docs/0.10/clustering/vsr","$ref":"clustering/vsr.mdx"},"next":{"$id":"clustering/durability.mdx","type":"page","name":[["$","span",null,{"className":"me-1 font-normal text-fd-muted-foreground","children":["Clustering",":"]}],"Cluster Durability"],"description":"Quorum completion, persisted prepare history, and the failures each topic policy covers.","url":"/docs/0.10/clustering/durability","$ref":"clustering/durability.mdx"}}},"children":[["$","div",null,{"className":"mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-fd-foreground","children":["These are the docs for Apache Iggy 0.10, kept for reference and no longer updated."," ",["$","$L18",null,{"href":"/docs","className":"font-medium text-fd-primary underline","children":"Read the current docs"}],"."]}],["$","$L19",null,{"children":"Multi-Leader Partitions"}],["$","$L1a",null,{"children":"How partition primaries, replication factors and client routing distribute work across Iggy nodes."}],["$","$L1b",null,{"children":[["$","p",null,{"children":"A primary orders writes for one consensus group. Iggy has one metadata group and a separate group for each partition. Multi-leader partitions let different nodes lead different partitions at the same time."}],"\n",["$","$L1c",null,{"as":"h2","id":"place-partition-primaries","children":"Place partition primaries"}],"\n",["$","p",null,{"children":"New partitions spread their primaries across eligible nodes. The metadata primary also rebalances existing primaries one at a time. This restores the distribution after changes such as a failed node returning. Each partition still has one primary at a time, and its messages retain a partition-local order."}],"\n",["$","$L1d",null,{"chart":"flowchart LR\n    C[Client] --> M[Metadata primary]\n    M --> R[Partition routes]\n    C --> A[Node A: partition 0 primary]\n    C --> B[Node B: partition 1 primary]\n    C --> D[Node C: partition 2 primary]"}],"\n",["$","p",null,{"children":"Metadata leadership does not tell a client where every message write belongs. Clients discover a partition's current primary and send partition requests there. A route also identifies the partition's history and ownership generation, so an old request cannot act on a replacement partition."}],"\n",["$","$L1c",null,{"as":"h2","id":"select-copies-per-topic","children":"Select copies per topic"}],"\n",["$","p",null,{"children":[["$","code",null,{"children":"replication_factor"}]," selects how many nodes store each partition of a topic. The value is fixed at topic creation. It must be from 1 through 32 and no greater than the cluster node count."]}],"\n",["$","p",null,{"children":["When the request omits it, ",["$","code",null,{"children":"cluster.default_replication_factor"}]," applies. Its default is ",["$","code",null,{"children":"all"}],". The metadata group always uses the full cluster roster. A topic with fewer copies does not reduce the metadata quorum requirement."]}],"\n",["$","$L1e",null,{"className":"shiki shiki-themes github-light github-dark","style":{"--shiki-light":"#24292e","--shiki-dark":"#e1e4e8","--shiki-light-bg":"#fff","--shiki-dark-bg":"#24292e"},"tabIndex":"0","icon":"<svg viewBox=\"0 0 24 24\"><path d=\"M 6,1 C 4.354992,1 3,2.354992 3,4 v 16 c 0,1.645008 1.354992,3 3,3 h 12 c 1.645008,0 3,-1.354992 3,-3 V 8 7 A 1.0001,1.0001 0 0 0 20.707031,6.2929687 l -5,-5 A 1.0001,1.0001 0 0 0 15,1 h -1 z m 0,2 h 7 v 3 c 0,1.645008 1.354992,3 3,3 h 3 v 11 c 0,0.564129 -0.435871,1 -1,1 H 6 C 5.4358712,21 5,20.564129 5,20 V 4 C 5,3.4358712 5.4358712,3 6,3 Z M 15,3.4140625 18.585937,7 H 16 C 15.435871,7 15,6.5641288 15,6 Z\" fill=\"currentColor\" /></svg>","children":"$L1f"}],"\n","$L20","\n","$L21","\n","$L22","\n","$L23","\n","$L24","\n","$L25","\n","$L26","\n","$L27"]}]]}],["$L28","$L29","$L2a","$L2b"],"$L2c"]}],"p":"$@2d","v":null,"s":"$c"}}]]
+4:[["children",{"s":{"n":"slug","t":"oc","k":"clustering/multi-leader","s":[]},"h":64,"d":{"r":["$","$5","c",{"children":[null,["$","$L8",null,{"parallelRouterKey":"children","template":["$","$L9",null,{}]}]]}],"p":"$@a","v":"$b","s":"$c"},"c":"$Qd"}]]
+3:[["children",{"s":"0.10","h":32,"c":"$Q4"}]]
+2:[["children",{"s":"docs","h":96,"c":"$Q3"}]]
+1:[["children",{"s":"(archive)","h":64,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":16,"c":"$Q1"},"h":{"r":["$","$5","h",{"children":[null,["$","$L2f",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L31",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$32",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"0.10 Clustering: Multi-Leader Partitions | Apache Iggy"}],["$","meta","1",{"name":"description","content":"How partition primaries, replication factors and client routing distribute work across Iggy nodes."}],["$","meta","2",{"name":"robots","content":"noindex, follow"}],["$","link","3",{"rel":"canonical","href":"https://iggy.apache.org/docs/0.10/clustering/multi-leader/"}],["$","meta","4",{"property":"og:title","content":"0.10 Clustering: Multi-Leader Partitions | Apache Iggy"}],["$","meta","5",{"property":"og:description","content":"How partition primaries, replication factors and client routing distribute work across Iggy nodes."}],["$","meta","6",{"property":"og:url","content":"https://iggy.apache.org/docs/0.10/clustering/multi-leader"}],["$","meta","7",{"property":"og:site_name","content":"Apache Iggy"}],["$","meta","8",{"property":"og:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","meta","9",{"property":"og:image:width","content":"1200"}],["$","meta","10",{"property":"og:image:height","content":"630"}],["$","meta","11",{"property":"og:image:alt","content":"Apache Iggy"}],["$","meta","12",{"property":"og:type","content":"website"}],["$","meta","13",{"name":"twitter:card","content":"summary_large_image"}],["$","meta","14",{"name":"twitter:title","content":"0.10 Clustering: Multi-Leader Partitions | Apache Iggy"}],["$","meta","15",{"name":"twitter:description","content":"How partition primaries, replication factors and client routing distribute work across Iggy nodes."}],["$","meta","16",{"name":"twitter:image","content":"https://iggy.apache.org/img/og-card.png"}],["$","link","17",{"rel":"icon","href":"/img/favicon.png"}],["$","$L33","18",{}]]}]}],null]}],null]}],"p":"$@34","v":null,"s":"$c"}},"a":"$@35","u":"$@36","b":"WliTGE84CuEZaJKjEWN_2"}
+37:I[44324,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"Pre"]
+38:I[32465,["$6","$7","$e","$f","$10","$11","$12","$13","$14","$15","$16"],"default"]
+39:I[97367,["$6","$7"],"OutletBoundary"]
+1f:["$","$L37",null,{"children":["$","code",null,{"children":[["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"["}],["$","span",null,{"style":{"--shiki-light":"#6F42C1","--shiki-dark":"#B392F0"},"children":"cluster"}],["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"]"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"default_replication_factor = "}],["$","span",null,{"style":{"--shiki-light":"#005CC5","--shiki-dark":"#79B8FF"},"children":"3"}]]}]]}]}]
+20:["$","p",null,{"children":"This configuration requires at least three cluster nodes. A topic can override it at creation. Increasing the number of partitions does not change the factor."}]
+21:["$","p",null,{"children":["A factor of one provides no replica redundancy. A factor of two stops writes when either copy is unavailable. With three copies, the partition can tolerate one unavailable replica. See ",["$","$L38",null,{"href":"/docs/0.10/clustering/durability","children":"Durability"}]," for the quorum rules and persistence policies."]}]
+22:["$","$L1c",null,{"as":"h2","id":"route-clients","children":"Route clients"}]
+23:["$","p",null,{"children":["Rust, Go, Java, C# and Node.js have native partition routing. Python, C++ and PHP use the Rust SDK through bindings. Swift has its own TCP client. Follow the individual ",["$","$L38",null,{"href":"/docs/0.10/sdk/introduction","children":"SDK guides"}]," for supported recovery operations."]}]
+24:["$","p",null,{"children":["HTTP can forward a request to the correct primary in one hop. It needs the cluster authentication and shared JWT configuration described in ",["$","$L38",null,{"href":"/docs/0.10/clustering/security","children":"Security"}],". Keep clocks synchronized because forwarding proofs expire after ten seconds."]}]
+25:["$","$L1c",null,{"as":"h2","id":"operate-the-cluster","children":"Operate the cluster"}]
+26:["$","p",null,{"children":["Every node must run the same server version and the same ",["$","code",null,{"children":"cluster.coordinator.replica_connections_per_peer"}],". There is no rolling upgrade between 0.9 and 0.10. The roster supports at most 32 nodes."]}]
+27:["$","p",null,{"children":"More replica connections per peer can spread replication traffic across shards. This does not change the replication factor or quorum. Retain separate data directories for nodes and advertise addresses reachable by clients."}]
+28:["$","script","script-0",{"src":"/_next/static/chunks/1bwdz_8zfcww8.js","async":true}]
+29:["$","script","script-1",{"src":"/_next/static/chunks/3pgmqji_9im6z.js","async":true}]
+2a:["$","script","script-2",{"src":"/_next/static/chunks/3vzh_1a3r6hy2.js","async":true}]
+2b:["$","script","script-3",{"src":"/_next/static/chunks/29-phuz7hmie6.js","async":true}]
+2c:["$","$L39",null,{"children":["$","$32",null,{"name":"Next.MetadataOutlet","children":"$@3a"}]}]
+36:true
+c:300
+3a:null
+c:C
+35:0
+a:"$undefined"
+34:"$undefined"
+2d:"$undefined"
