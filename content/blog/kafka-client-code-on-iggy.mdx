@@ -1,0 +1,255 @@
+---
+title: "Does your Kafka client code run on Apache Iggy?"
+description: Run Java code written against Kafka's Producer, Consumer and Admin interfaces on Apache Iggy by changing only the constructors.
+author: Justin Mclean
+tags: ["kafka", "java", "tutorial"]
+date: 2026-11-20
+---
+
+Apache Iggy's Kafka clients library implements Kafka's `Producer`, `Consumer` and `Admin` interfaces on top of Iggy. If your Java code is written against those interfaces, you change the constructor and the rest stays as it is. The library is not released yet. You build it from source in apache/iggy-demos, and we are looking for people to test it on their own code.
+
+That is the claim, so we tried it on seven real projects. This post walks through the simplest one, the Kafka examples that ship with Apache Kafka, so you can repeat it in about ten minutes. Then it covers the other six, and asks you to try it on your own code and tell us what breaks.
+
+## What the library is
+
+Three classes replace the three Kafka entry points:
+
+```java
+Producer<String, String> producer = new IggyKafkaProducer<>(props);   // was new KafkaProducer<>(props)
+Consumer<String, String> consumer = new IggyKafkaConsumer<>(props);   // was new KafkaConsumer<>(props)
+Admin admin = IggyAdminClient.create(props);                          // was AdminClient.create(props)
+```
+
+It is built for Java 17 against `kafka-clients` 4.3.0 and the Iggy Java SDK 0.10.0, for an Iggy 0.10.x server. It also runs with `kafka-clients` 3.9 on the classpath. It stores records the way the Iggy Kafka gateway does, so each can read what the other wrote. Consumer group offsets are stored differently, so a consumer group cannot move between the library and the gateway.
+
+## Try it: the Kafka examples on Iggy
+
+You need Docker, JDK 17 or later, Maven 3.8 or later and git.
+
+### 1. Start Iggy
+
+```bash
+docker run -d --name iggy -p 127.0.0.1:18090:18090 \
+  --cap-add SYS_NICE --security-opt seccomp=unconfined --ulimit memlock=-1:-1 \
+  -e IGGY_ROOT_USERNAME=iggy -e IGGY_ROOT_PASSWORD=iggy \
+  -e IGGY_TCP_ADDRESS=0.0.0.0:18090 -e IGGY_NODE_ADVERTISED_ADDRESS=localhost \
+  -e IGGY_SHARDING_CPU_ALLOCATION=2 \
+  apache/iggy:0.10.0
+```
+
+### 2. Build and install the library
+
+```bash
+git clone https://github.com/apache/iggy-demos.git
+cd iggy-demos/kafka-clients
+mvn -q install -DskipTests
+cd ../..
+```
+
+### 3. Get Kafka's examples
+
+The five classes that do not use transactions, from the 4.3.0 tag:
+
+```bash
+git clone -q --depth 1 --branch 4.3.0 --filter=blob:none --sparse https://github.com/apache/kafka.git
+git -C kafka sparse-checkout set examples
+mkdir -p kafka-on-iggy/src/main/java/kafka/examples
+for f in Consumer KafkaConsumerProducerDemo KafkaProperties Producer Utils; do
+  cp kafka/examples/src/main/java/kafka/examples/$f.java kafka-on-iggy/src/main/java/kafka/examples/
+done
+```
+
+Put this `pom.xml` in `kafka-on-iggy`:
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>example</groupId>
+  <artifactId>kafka-on-iggy</artifactId>
+  <version>1</version>
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka-clients</artifactId>
+      <version>4.3.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.iggy</groupId>
+      <artifactId>iggy-kafka-clients</artifactId>
+      <version>0.1.0-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>1.7.36</version>
+    </dependency>
+  </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+```
+
+The only new dependency is `iggy-kafka-clients`.
+
+### 4. Apply the change
+
+This is the whole change. Save it as `iggy.patch` in `kafka-on-iggy` and run `patch -p1 < iggy.patch`.
+
+```diff
+--- a/src/main/java/kafka/examples/Consumer.java
++++ b/src/main/java/kafka/examples/Consumer.java
+@@ -22,3 +22,3 @@
+ import org.apache.kafka.clients.consumer.ConsumerRecords;
+-import org.apache.kafka.clients.consumer.KafkaConsumer;
++import org.apache.iggy.kafka.IggyKafkaConsumer;
+ import org.apache.kafka.clients.consumer.NoOffsetForPartitionException;
+@@ -79,3 +79,3 @@
+         // the consumer instance is NOT thread safe
+-        try (KafkaConsumer<Integer, String> consumer = createKafkaConsumer()) {
++        try (org.apache.kafka.clients.consumer.Consumer<Integer, String> consumer = createKafkaConsumer()) {
+             // subscribes to a list of topics to get dynamically assigned partitions
+@@ -125,3 +125,3 @@
+ 
+-    public KafkaConsumer<Integer, String> createKafkaConsumer() {
++    public org.apache.kafka.clients.consumer.Consumer<Integer, String> createKafkaConsumer() {
+         Properties props = new Properties();
+@@ -147,3 +147,4 @@
+         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+-        return new KafkaConsumer<>(props);
++        props.put("iggy.password", "iggy");
++        return new IggyKafkaConsumer<>(props);
+     }
+--- a/src/main/java/kafka/examples/KafkaProperties.java
++++ b/src/main/java/kafka/examples/KafkaProperties.java
+@@ -19,3 +19,3 @@
+ public class KafkaProperties {
+-    public static final String BOOTSTRAP_SERVERS = "localhost:9092";
++    public static final String BOOTSTRAP_SERVERS = "localhost:18090";
+ 
+--- a/src/main/java/kafka/examples/Producer.java
++++ b/src/main/java/kafka/examples/Producer.java
+@@ -19,3 +19,3 @@
+ import org.apache.kafka.clients.producer.Callback;
+-import org.apache.kafka.clients.producer.KafkaProducer;
++import org.apache.iggy.kafka.IggyKafkaProducer;
+ import org.apache.kafka.clients.producer.ProducerConfig;
+@@ -80,3 +80,3 @@
+         // the producer instance is thread safe
+-        try (KafkaProducer<Integer, String> producer = createKafkaProducer()) {
++        try (org.apache.kafka.clients.producer.Producer<Integer, String> producer = createKafkaProducer()) {
+             while (!closed && sentRecords < numRecords) {
+@@ -105,3 +105,3 @@
+ 
+-    public KafkaProducer<Integer, String> createKafkaProducer() {
++    public org.apache.kafka.clients.producer.Producer<Integer, String> createKafkaProducer() {
+         Properties props = new Properties();
+@@ -126,6 +126,7 @@
+         props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, enableIdempotency);
+-        return new KafkaProducer<>(props);
++        props.put("iggy.password", "iggy");
++        return new IggyKafkaProducer<>(props);
+     }
+ 
+-    private void asyncSend(KafkaProducer<Integer, String> producer, int key, String value) {
++    private void asyncSend(org.apache.kafka.clients.producer.Producer<Integer, String> producer, int key, String value) {
+         // send the record asynchronously, setting a callback to be notified of the result
+@@ -136,3 +137,3 @@
+ 
+-    private RecordMetadata syncSend(KafkaProducer<Integer, String> producer, int key, String value)
++    private RecordMetadata syncSend(org.apache.kafka.clients.producer.Producer<Integer, String> producer, int key, String value)
+         throws ExecutionException, InterruptedException {
+--- a/src/main/java/kafka/examples/Utils.java
++++ b/src/main/java/kafka/examples/Utils.java
+@@ -18,2 +18,3 @@
+ 
++import org.apache.iggy.kafka.IggyAdminClient;
+ import org.apache.kafka.clients.admin.Admin;
+@@ -71,3 +72,4 @@
+         props.put(AdminClientConfig.CLIENT_ID_CONFIG, "client-" + UUID.randomUUID());
+-        try (Admin admin = Admin.create(props)) {
++        props.put("iggy.password", "iggy");
++        try (Admin admin = IggyAdminClient.create(props)) {
+             // delete topics if present
+```
+
+Three things changed, and each is small:
+
+- The three constructors. The example held its client in a `KafkaProducer` or `KafkaConsumer` variable, so those variables became the `Producer` and `Consumer` interfaces. Code that already uses the interfaces does not need this.
+- The Iggy password, which Kafka has no setting for. A password can also come from SASL/PLAIN.
+- The address, now Iggy's port.
+
+### 5. Run it
+
+```bash
+cd kafka-on-iggy
+mvn -q compile exec:java -Dexec.mainClass=kafka.examples.KafkaConsumerProducerDemo -Dexec.args="1000 sync"
+```
+
+It creates a topic, sends 1000 records and reads them back. The run ends with:
+
+```
+consumer - Revoked partitions: [my-topic-0]
+consumer - Fetched 1000 records
+producer - Sent 1000 records
+```
+
+Drop `sync` to send asynchronously instead. Both modes pass in our test.
+
+### 6. Clean up
+
+```bash
+docker rm -f iggy
+```
+
+## Producers and consumers in six other projects
+
+We made the same change to the Kafka producers and consumers in six open source projects:
+
+- Apache Camel's Kafka component: producer and consumer
+- Debezium Server's Kafka sink: producer
+- Apache NiFi's Kafka connection service: producer and consumer
+- The Flink Kafka connector's source: consumer
+- Apache Pinot's Kafka plugin: consumer
+- Zipkin's Kafka collector: consumer
+
+Each change was the same as in the Kafka examples above: `KafkaProducer`, `KafkaConsumer` and `AdminClient` swapped for the Iggy classes, and the variables that held them typed to the Kafka interfaces. Camel did not even need that, because it lets you supply your own clients. Most of their own tests passed against Iggy. The ones that failed need something Iggy does not do, such as transactions.
+
+These runs were on Iggy 0.10.0, and the changes to the projects are not published.
+
+## What does not work
+
+- Transactions and exactly-once. `initTransactions()` and the other transaction calls throw.
+- Anything that depends on Kafka's exact error messages or exception types.
+- Code that reads Kafka client internals by reflection.
+- Anything Iggy has no equivalent for, such as truncating a partition. The Admin client throws `UnsupportedOperationException` for ACLs, quotas, SCRAM credentials and similar calls.
+- Netty 4.1. The Iggy Java SDK 0.10.0 needs Netty 4.2, so if your project manages Netty at 4.1, import `netty-bom` 4.2.19.Final, the version the SDK uses.
+- More than one broker address. Only the first `bootstrap.servers` entry is used.
+- Kafka Streams and Kafka Connect, which we have not tried.
+
+The [library README](https://github.com/apache/iggy-demos/blob/main/kafka-clients/README.md) has the full list of limits.
+
+## Try it on your code
+
+If your Java code uses `Producer`, `Consumer` or `Admin`, and not transactions, Kafka Streams or Connect, change the constructors and run your own tests against Iggy. That is the test we cannot run for you.
+
+If something breaks, tell us. Open an issue at https://github.com/apache/iggy-demos/issues (the library is in `kafka-clients/`). Please include:
+
+- the library commit and the `kafka-clients` version on your classpath
+- the Iggy server version
+- the project you ran it in and its version
+- the failing call, with the stack trace
+- the client properties you set, with passwords removed
+
+A failure report is as useful to us as a pass.
+
+The Kafka gateway is the other way to use Kafka clients with Iggy. It speaks the Kafka protocol, so nothing in the client changes except the address. That suits code you cannot change, clients in languages other than Java, and Kafka's own command line tools. See [Use Kafka tools with Apache Iggy](/blogs/2026/11/10/kafka-tools-with-iggy).
